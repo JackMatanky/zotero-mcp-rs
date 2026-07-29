@@ -2,67 +2,38 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-/// Result of probing the Better Notes bridge for availability.
-pub(crate) struct BetterNotesStatus {
-    pub(crate) online: bool,
-    pub(crate) url: String,
-    pub(crate) version: Option<String>,
-    pub(crate) error: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 /// Response body of the Markdown-conversion endpoints.
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct MarkdownResponse {
+    /// Converted Markdown text content.
     pub(crate) markdown: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
 /// Response body of the note-creation endpoint.
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct NoteItemResponse {
+    /// Item key of the created note.
     #[serde(rename = "itemKey")]
     pub(crate) item_key: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
 /// Response body of the template-run endpoint.
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct TemplateResponse {
+    /// JSON value result produced by running the template.
     pub(crate) result: serde_json::Value,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
 /// Response body of the note-relations endpoint.
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct RelationsResponse {
+    /// JSON array or object containing note relation linkages.
     pub(crate) relations: serde_json::Value,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
 /// Response body of the note-tree endpoint.
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct NoteTreeResponse {
+    /// Hierarchical tree structure of notes as JSON.
     pub(crate) tree: serde_json::Value,
-}
-
-#[cfg(test)]
-mod tests {
-    use pretty_assertions::assert_eq;
-
-    use super::*;
-
-    #[test]
-    fn serializes_online_flag_and_version() {
-        // Arrange
-        let status = BetterNotesStatus {
-            online: true,
-            url: "http://127.0.0.1:23119/better-notes".to_owned(),
-            version: Some("1.0.0".to_owned()),
-            error: None,
-        };
-
-        // Act
-        let val = serde_json::to_value(&status).unwrap();
-
-        // Assert
-        assert_eq!(val.get("online"), Some(&serde_json::json!(true)));
-        assert_eq!(val.get("version"), Some(&serde_json::json!("1.0.0")));
-    }
 }

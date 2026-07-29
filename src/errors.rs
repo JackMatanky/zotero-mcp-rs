@@ -10,36 +10,50 @@ use thiserror::Error;
 /// Better `BibTeX`, Better Notes, or local file system.
 #[derive(Debug, Error)]
 pub(crate) enum ZoteroMcpError {
+    /// Network or HTTP transport failure from [`reqwest`].
     #[error("Network error: {0}")]
     Network(#[from] reqwest::Error),
 
+    /// Zotero Local HTTP API responded with non-2xx HTTP `status` code.
     #[error("Local API error: HTTP {status} - {message}")]
     LocalApi {
+        /// HTTP status code returned by Zotero Local API.
         status: u16,
+        /// Error message or body from Zotero Local API.
         message: String,
     },
 
+    /// Better `BibTeX` JSON-RPC endpoint returned an error or invalid response.
     #[error("Better BibTeX error: {0}")]
     BetterBibTeX(String),
 
+    /// Better Notes companion bridge endpoint returned an error or invalid response.
     #[error("Better Notes error: {0}")]
     BetterNotes(String),
 
+    /// PDF text extraction failed.
     #[error("PDF extraction error: {0}")]
     PdfExtract(String),
 
+    /// `SQLite` database query or connection failure from [`rusqlite`].
     #[error("SQLite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 
+    /// Input/output failure from [`std::io`].
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Write operation attempted when write permission is disabled in [`AppState`].
+    ///
+    /// [`AppState`]: crate::state::AppState
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
 
+    /// Requested Zotero library item, collection, or resource was not found.
     #[error("Item not found: {0}")]
     NotFound(String),
 
+    /// JSON serialization or deserialization failure from [`serde_json`].
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),
 }

@@ -6,6 +6,7 @@
 
 mod client;
 mod models;
+/// Read-only SQLite citekey cache helpers.
 pub(crate) mod sqlite;
 
 pub(crate) use client::BetterBibtexClient;

@@ -19,6 +19,15 @@ use rmcp::ServiceExt;
 use state::AppState;
 use tracing_subscriber::EnvFilter;
 
+/// Entry point for the Zotero MCP server binary.
+///
+/// Initializes `tracing` subscriber to output strictly to stderr, constructs
+/// the shared [`AppState`], builds the [`ZoteroMcpServer`], and connects to
+/// MCP clients over stdio.
+///
+/// # Errors
+///
+/// Returns an error if the server fails to serve the stdio transport.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Tracing MUST output strictly to stderr so stdio JSON-RPC stream is clean

@@ -8,6 +8,7 @@ pub(crate) struct ZoteroClient<'a> {
 }
 
 impl<'a> ZoteroClient<'a> {
+    /// Creates a Zotero Local API client borrowing shared [`AppState`].
     pub(crate) fn new(state: &'a AppState) -> Self {
         Self {
             state,
@@ -57,9 +58,11 @@ impl<'a> ZoteroClient<'a> {
 }
 
 #[cfg(test)]
+/// Test support shared by read and write client modules.
 pub(crate) mod tests {
     use super::*;
 
+    /// Fixture builders and raw HTTP mock helpers.
     pub(crate) mod fixtures {
         use std::{
             io::{Read, Write},
@@ -68,6 +71,7 @@ pub(crate) mod tests {
 
         use super::AppState;
 
+        /// Builds an [`AppState`] fixture for Zotero Local API client tests.
         pub(crate) fn test_state(
             zotero_api_url: String,
             write_enabled: bool,
@@ -81,6 +85,7 @@ pub(crate) mod tests {
             }
         }
 
+        /// Formats a minimal JSON HTTP response for fixture servers.
         pub(crate) fn http_response(status: &str, body: &str) -> String {
             format!(
                 "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
@@ -93,6 +98,7 @@ pub(crate) mod tests {
             clippy::excessive_nesting,
             reason = "mock HTTP server thread loop"
         )]
+        /// Runs a one-shot fixture HTTP server and returns its base URL.
         pub(crate) fn mock_server(responses: Vec<String>) -> String {
             let listener =
                 TcpListener::bind("127.0.0.1:0").expect("bind listener");

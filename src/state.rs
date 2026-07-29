@@ -23,12 +23,16 @@ const RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
 /// reference to every backend client for the lifetime of the server.
 #[derive(Clone, Debug)]
 pub(crate) struct AppState {
+    /// Shared [`Client`] connection pool.
     pub(crate) client: Client,
+    /// Base URL for the Zotero Local HTTP API.
     pub(crate) zotero_api_url: String,
+    /// Base URL for the Better `BibTeX` JSON-RPC endpoint.
     pub(crate) better_bibtex_url: String,
+    /// Base URL for the Better Notes companion bridge endpoint.
     pub(crate) better_notes_url: String,
-    // ponytail: write gate defaults to read-only; enabled via
-    // ZOTERO_WRITE_ENABLED
+    /// Whether write/mutation operations are allowed.
+    // ponytail: write gate defaults to read-only; enabled via ZOTERO_WRITE_ENABLED
     pub(crate) write_enabled: bool,
 }
 

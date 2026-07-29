@@ -5,8 +5,8 @@ use serde_json::Value;
 
 use crate::{
     better_notes::models::{
-        BetterNotesStatus, MarkdownResponse, NoteItemResponse,
-        NoteTreeResponse, RelationsResponse, TemplateResponse,
+        MarkdownResponse, NoteItemResponse, NoteTreeResponse,
+        RelationsResponse, TemplateResponse,
     },
     errors::ZoteroMcpError,
     state::AppState,
@@ -18,47 +18,10 @@ pub(crate) struct BetterNotesClient<'a> {
 }
 
 impl<'a> BetterNotesClient<'a> {
+    /// Creates a Better Notes client borrowing shared [`AppState`].
     pub(crate) fn new(state: &'a AppState) -> Self {
         Self {
             state,
-        }
-    }
-
-    /// Probes the Better Notes bridge for availability.
-    ///
-    /// Never returns an error: failures are captured in the returned
-    /// [`BetterNotesStatus::error`] field instead of being propagated.
-    pub(crate) async fn check_status(&self) -> BetterNotesStatus {
-        let url = format!("{}/status", self.state.better_notes_url);
-        match self.state.client.get(&url).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    let val: serde_json::Value =
-                        resp.json().await.unwrap_or_default();
-                    BetterNotesStatus {
-                        online: true,
-                        url: self.state.better_notes_url.clone(),
-                        version: val
-                            .get("version")
-                            .and_then(|v| v.as_str())
-                            .map(str::to_owned),
-                        error: None,
-                    }
-                } else {
-                    BetterNotesStatus {
-                        online: false,
-                        url: self.state.better_notes_url.clone(),
-                        version: None,
-                        error: Some(format!("HTTP {}", resp.status())),
-                    }
-                }
-            }
-            Err(e) => BetterNotesStatus {
-                online: false,
-                url: self.state.better_notes_url.clone(),
-                version: None,
-                error: Some(e.to_string()),
-            },
         }
     }
 
@@ -267,61 +230,6 @@ mod tests {
                 }
             });
             format!("http://{addr}")
-        }
-    }
-
-    mod check_status {
-        use pretty_assertions::assert_eq;
-
-        use super::{
-            super::*,
-            fixtures::{http_response, mock_server, test_state},
-        };
-
-        #[tokio::test]
-        async fn reports_online_with_version_when_bridge_responds_success() {
-            // Arrange
-            let base = mock_server(vec![http_response(
-                "200 OK",
-                r#"{"version":"1.0.0"}"#,
-            )]);
-            let state = test_state(base, false);
-
-            // Act
-            let status = BetterNotesClient::new(&state).check_status().await;
-
-            // Assert
-            assert!(status.online);
-            assert_eq!(status.version.as_deref(), Some("1.0.0"));
-            assert!(status.error.is_none());
-        }
-
-        #[tokio::test]
-        async fn reports_offline_with_error_when_bridge_returns_error_status() {
-            // Arrange
-            let base = mock_server(vec![http_response("404 Not Found", "")]);
-            let state = test_state(base, false);
-
-            // Act
-            let status = BetterNotesClient::new(&state).check_status().await;
-
-            // Assert
-            assert!(!status.online);
-            assert!(status.error.unwrap().contains("404"));
-        }
-
-        #[tokio::test]
-        async fn reports_offline_with_error_when_connection_fails() {
-            // Arrange: port 0 is never a live listener, so the connection
-            // is refused instantly.
-            let state = test_state("http://127.0.0.1:0".to_owned(), false);
-
-            // Act
-            let status = BetterNotesClient::new(&state).check_status().await;
-
-            // Assert
-            assert!(!status.online);
-            assert!(status.error.is_some());
         }
     }
 

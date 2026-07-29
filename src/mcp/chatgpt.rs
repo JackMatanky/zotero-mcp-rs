@@ -14,20 +14,26 @@ use crate::{
 /// Arguments for `search` (`ChatGPT` connector compatibility).
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchArgs {
-    /// Search query
+    /// Search query.
     pub(crate) query: String,
 }
 
 /// Arguments for `fetch` (`ChatGPT` connector compatibility).
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FetchArgs {
-    /// Zotero item key or ID to fetch
+    /// Zotero item key or ID to fetch.
     pub(crate) id: String,
 }
 
 // --- Handler Implementations ---
 
 impl ZoteroMcpServer {
+    /// Handles `ChatGPT` connector `search` compatibility calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn chatgpt_search_impl(
         &self,
         args: SearchArgs,
@@ -40,6 +46,12 @@ impl ZoteroMcpServer {
         .await
     }
 
+    /// Handles `ChatGPT` connector `fetch` compatibility calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn chatgpt_fetch_impl(
         &self,
         args: FetchArgs,

@@ -39,10 +39,12 @@ use crate::{
 /// The MCP tool router: holds the shared [`AppState`] and implements
 /// [`ServerHandler`], hosting every `#[tool]` method below.
 pub(crate) struct ZoteroMcpServer {
+    /// Shared configuration and HTTP client state.
     pub(crate) state: AppState,
 }
 
 impl ZoteroMcpServer {
+    /// Creates an MCP server using shared [`AppState`].
     pub(crate) fn new(state: AppState) -> Self {
         Self {
             state,
@@ -133,6 +135,12 @@ impl ZoteroMcpServer {
         name = "zotero_status",
         description = "Check Zotero Local API availability, version, and connectivity"
     )]
+    /// Routes `zotero_status` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_status(
         &self,
         Parameters(_args): Parameters<EmptyArgs>,
@@ -146,6 +154,12 @@ impl ZoteroMcpServer {
         name = "zotero_get_recent",
         description = "Fetch recently modified library items (notes excluded)"
     )]
+    /// Routes `zotero_get_recent` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_get_recent(
         &self,
         Parameters(args): Parameters<GetRecentArgs>,
@@ -157,6 +171,12 @@ impl ZoteroMcpServer {
         name = "zotero_search_items",
         description = "Search items by title, creator, year, or fulltext query"
     )]
+    /// Routes `zotero_search_items` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_search_items(
         &self,
         Parameters(args): Parameters<SearchItemsArgs>,
@@ -168,6 +188,12 @@ impl ZoteroMcpServer {
         name = "zotero_get_item",
         description = "Fetch a single Zotero item by its key"
     )]
+    /// Routes `zotero_get_item` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_get_item(
         &self,
         Parameters(args): Parameters<GetItemArgs>,
@@ -179,6 +205,12 @@ impl ZoteroMcpServer {
         name = "zotero_get_item_metadata",
         description = "Get metadata for an item as JSON or formatted BibTeX string"
     )]
+    /// Routes `zotero_get_item_metadata` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_get_item_metadata(
         &self,
         Parameters(args): Parameters<GetItemMetadataArgs>,
@@ -190,6 +222,12 @@ impl ZoteroMcpServer {
         name = "zotero_get_collection_items",
         description = "Fetch items inside a specific Zotero collection"
     )]
+    /// Routes `zotero_get_collection_items` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_get_collection_items(
         &self,
         Parameters(args): Parameters<GetCollectionItemsArgs>,
@@ -201,6 +239,12 @@ impl ZoteroMcpServer {
         name = "zotero_get_item_children",
         description = "Get child items (notes, attachments) for a given item key"
     )]
+    /// Routes `zotero_get_item_children` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_get_item_children(
         &self,
         Parameters(args): Parameters<GetItemChildrenArgs>,
@@ -212,6 +256,12 @@ impl ZoteroMcpServer {
         name = "zotero_get_item_fulltext",
         description = "Get Zotero's indexed fulltext for an item"
     )]
+    /// Routes `zotero_get_item_fulltext` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_get_item_fulltext(
         &self,
         Parameters(args): Parameters<GetItemFulltextArgs>,
@@ -223,6 +273,12 @@ impl ZoteroMcpServer {
         name = "zotero_get_pdf_path",
         description = "Locate the local PDF file path for an item or its attachment"
     )]
+    /// Routes `zotero_get_pdf_path` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_get_pdf_path(
         &self,
         Parameters(args): Parameters<GetPdfPathArgs>,
@@ -234,6 +290,12 @@ impl ZoteroMcpServer {
         name = "zotero_read_pdf_pages",
         description = "Extract raw text from specific 1-based pages of a PDF"
     )]
+    /// Routes `zotero_read_pdf_pages` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_read_pdf_pages(
         &self,
         Parameters(args): Parameters<ReadPdfPagesArgs>,
@@ -245,6 +307,12 @@ impl ZoteroMcpServer {
         name = "zotero_get_notes",
         description = "Fetch all note child items for a given item key"
     )]
+    /// Routes `zotero_get_notes` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_get_notes(
         &self,
         Parameters(args): Parameters<GetNotesArgs>,
@@ -258,6 +326,12 @@ impl ZoteroMcpServer {
         name = "zotero_create_note",
         description = "Attach a new note to an item (requires write permission)"
     )]
+    /// Routes `zotero_create_note` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_create_note(
         &self,
         Parameters(args): Parameters<CreateNoteArgs>,
@@ -269,6 +343,12 @@ impl ZoteroMcpServer {
         name = "zotero_create_collection",
         description = "Create a new Zotero collection (requires write permission)"
     )]
+    /// Routes `zotero_create_collection` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_create_collection(
         &self,
         Parameters(args): Parameters<CreateCollectionArgs>,
@@ -280,6 +360,12 @@ impl ZoteroMcpServer {
         name = "zotero_search_collections",
         description = "Search collections by collection name query"
     )]
+    /// Routes `zotero_search_collections` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_search_collections(
         &self,
         Parameters(args): Parameters<SearchCollectionsArgs>,
@@ -291,6 +377,12 @@ impl ZoteroMcpServer {
         name = "zotero_manage_collections",
         description = "Add or remove items to/from a collection (requires write permission)"
     )]
+    /// Routes `zotero_manage_collections` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_manage_collections(
         &self,
         Parameters(args): Parameters<ManageCollectionsArgs>,
@@ -302,6 +394,12 @@ impl ZoteroMcpServer {
         name = "zotero_update_item",
         description = "Update fields of an existing item using PATCH (requires write permission)"
     )]
+    /// Routes `zotero_update_item` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_update_item(
         &self,
         Parameters(args): Parameters<UpdateItemArgs>,
@@ -313,6 +411,12 @@ impl ZoteroMcpServer {
         name = "zotero_attach_file",
         description = "Attach a file link to a parent item (requires write permission)"
     )]
+    /// Routes `zotero_attach_file` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_attach_file(
         &self,
         Parameters(args): Parameters<AttachFileArgs>,
@@ -324,6 +428,12 @@ impl ZoteroMcpServer {
         name = "zotero_batch_update_tags",
         description = "Batch add/remove tags across items (requires write permission)"
     )]
+    /// Routes `zotero_batch_update_tags` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_batch_update_tags(
         &self,
         Parameters(args): Parameters<BatchUpdateTagsArgs>,
@@ -335,6 +445,12 @@ impl ZoteroMcpServer {
         name = "zotero_find_duplicates",
         description = "Finds potential duplicate items in library or collection by matching title or DOI"
     )]
+    /// Routes `zotero_find_duplicates` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_find_duplicates(
         &self,
         Parameters(args): Parameters<FindDuplicatesArgs>,
@@ -346,6 +462,12 @@ impl ZoteroMcpServer {
         name = "zotero_search_by_tag",
         description = "Search Zotero items by tag string"
     )]
+    /// Routes `zotero_search_by_tag` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_search_by_tag(
         &self,
         Parameters(args): Parameters<SearchByTagArgs>,
@@ -357,6 +479,12 @@ impl ZoteroMcpServer {
         name = "zotero_search_by_citation_key",
         description = "Search Zotero items by citation key string"
     )]
+    /// Routes `zotero_search_by_citation_key` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_search_by_citation_key(
         &self,
         Parameters(args): Parameters<SearchByCitationKeyArgs>,
@@ -368,6 +496,12 @@ impl ZoteroMcpServer {
         name = "zotero_advanced_search",
         description = "Advanced multi-condition structured search over item fields"
     )]
+    /// Routes `zotero_advanced_search` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_advanced_search(
         &self,
         Parameters(args): Parameters<AdvancedSearchArgs>,
@@ -379,6 +513,12 @@ impl ZoteroMcpServer {
         name = "zotero_library_coverage",
         description = "Analyze library or collection statistics for PDF, DOI, and note coverage"
     )]
+    /// Routes `zotero_library_coverage` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_library_coverage(
         &self,
         Parameters(args): Parameters<LibraryCoverageArgs>,
@@ -390,6 +530,12 @@ impl ZoteroMcpServer {
         name = "zotero_synthesize_annotations",
         description = "Extract and synthesize annotations and notes into structured Markdown"
     )]
+    /// Routes `zotero_synthesize_annotations` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn zotero_synthesize_annotations(
         &self,
         Parameters(args): Parameters<SynthesizeAnnotationsArgs>,
@@ -403,6 +549,12 @@ impl ZoteroMcpServer {
         name = "better_bibtex_get_citekeys",
         description = "Fetch citation keys for Zotero items via Better BibTeX"
     )]
+    /// Routes `better_bibtex_get_citekeys` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_bibtex_get_citekeys(
         &self,
         Parameters(args): Parameters<GetCitekeysArgs>,
@@ -414,6 +566,12 @@ impl ZoteroMcpServer {
         name = "better_bibtex_regenerate_citekeys",
         description = "Regenerate citation keys for items via Better BibTeX (requires write permission)"
     )]
+    /// Routes `better_bibtex_regenerate_citekeys` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_bibtex_regenerate_citekeys(
         &self,
         Parameters(args): Parameters<RegenerateKeysArgs>,
@@ -425,6 +583,12 @@ impl ZoteroMcpServer {
         name = "better_bibtex_export_items",
         description = "Export items using a Better BibTeX translator"
     )]
+    /// Routes `better_bibtex_export_items` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_bibtex_export_items(
         &self,
         Parameters(args): Parameters<ExportItemsArgs>,
@@ -436,6 +600,12 @@ impl ZoteroMcpServer {
         name = "better_bibtex_format_bibliography",
         description = "Format a bibliography for citekeys in a given CSL style"
     )]
+    /// Routes `better_bibtex_format_bibliography` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_bibtex_format_bibliography(
         &self,
         Parameters(args): Parameters<BibliographyArgs>,
@@ -447,6 +617,12 @@ impl ZoteroMcpServer {
         name = "better_bibtex_scan_aux",
         description = "Extract citekeys from a LaTeX .aux file via Better BibTeX"
     )]
+    /// Routes `better_bibtex_scan_aux` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_bibtex_scan_aux(
         &self,
         Parameters(args): Parameters<ScanAuxArgs>,
@@ -458,6 +634,12 @@ impl ZoteroMcpServer {
         name = "better_bibtex_pandoc_filter",
         description = "Process citekeys through Better BibTeX's Pandoc filter"
     )]
+    /// Routes `better_bibtex_pandoc_filter` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_bibtex_pandoc_filter(
         &self,
         Parameters(args): Parameters<PandocFilterArgs>,
@@ -469,6 +651,12 @@ impl ZoteroMcpServer {
         name = "better_bibtex_autoexport_add",
         description = "Configure auto-export for a collection/library (requires write permission)"
     )]
+    /// Routes `better_bibtex_autoexport_add` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_bibtex_autoexport_add(
         &self,
         Parameters(args): Parameters<AutoexportAddArgs>,
@@ -480,6 +668,12 @@ impl ZoteroMcpServer {
         name = "better_bibtex_search",
         description = "Search items using Better BibTeX's query engine"
     )]
+    /// Routes `better_bibtex_search` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_bibtex_search(
         &self,
         Parameters(args): Parameters<BetterBibtexSearchArgs>,
@@ -493,6 +687,12 @@ impl ZoteroMcpServer {
         name = "better_notes_to_markdown",
         description = "Convert a Zotero note item to Markdown via Better Notes"
     )]
+    /// Routes `better_notes_to_markdown` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_notes_to_markdown(
         &self,
         Parameters(args): Parameters<ToMarkdownArgs>,
@@ -504,6 +704,12 @@ impl ZoteroMcpServer {
         name = "better_notes_from_markdown",
         description = "Convert Markdown to HTML formatted for Zotero notes via Better Notes"
     )]
+    /// Routes `better_notes_from_markdown` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_notes_from_markdown(
         &self,
         Parameters(args): Parameters<FromMarkdownArgs>,
@@ -515,6 +721,12 @@ impl ZoteroMcpServer {
         name = "better_notes_run_template",
         description = "Execute a Better Notes template against an item"
     )]
+    /// Routes `better_notes_run_template` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_notes_run_template(
         &self,
         Parameters(args): Parameters<RunTemplateArgs>,
@@ -526,6 +738,12 @@ impl ZoteroMcpServer {
         name = "better_notes_get_relations",
         description = "Fetch linked items / note network for a note via Better Notes"
     )]
+    /// Routes `better_notes_get_relations` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_notes_get_relations(
         &self,
         Parameters(args): Parameters<NoteRelationsArgs>,
@@ -537,6 +755,12 @@ impl ZoteroMcpServer {
         name = "better_notes_get_tree",
         description = "Fetch the hierarchical note outline/tree for a note via Better Notes"
     )]
+    /// Routes `better_notes_get_tree` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_notes_get_tree(
         &self,
         Parameters(args): Parameters<NoteTreeArgs>,
@@ -550,6 +774,12 @@ impl ZoteroMcpServer {
         name = "search",
         description = "ChatGPT Connector search tool - search Zotero items by query"
     )]
+    /// Routes `chatgpt_search` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn chatgpt_search(
         &self,
         Parameters(args): Parameters<SearchArgs>,
@@ -561,6 +791,12 @@ impl ZoteroMcpServer {
         name = "fetch",
         description = "ChatGPT Connector fetch tool - get item metadata by item ID/key"
     )]
+    /// Routes `chatgpt_fetch` MCP tool calls to the domain handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn chatgpt_fetch(
         &self,
         Parameters(args): Parameters<FetchArgs>,
@@ -584,6 +820,7 @@ mod tests {
 
         use super::AppState;
 
+        /// Builds an [`AppState`] fixture for Zotero MCP handler tests.
         pub(super) fn zotero_state(zotero_api_url: String) -> AppState {
             AppState {
                 zotero_api_url,
@@ -594,6 +831,7 @@ mod tests {
             }
         }
 
+        /// Formats a minimal JSON HTTP response for fixture servers.
         pub(super) fn http_response(status: &str, body: &str) -> String {
             format!(
                 "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
@@ -606,6 +844,7 @@ mod tests {
             clippy::excessive_nesting,
             reason = "mock HTTP server thread loop"
         )]
+        /// Runs a one-shot fixture HTTP server and returns its base URL.
         pub(super) fn mock_server(responses: Vec<String>) -> String {
             let listener =
                 TcpListener::bind("127.0.0.1:0").expect("bind listener");

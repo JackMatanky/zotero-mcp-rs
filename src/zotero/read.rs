@@ -13,6 +13,12 @@ use crate::{
 impl ZoteroClient<'_> {
     /// Fetches the `limit` most recently modified library items (notes
     /// excluded).
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_recent_items(
         &self,
         limit: usize,
@@ -37,6 +43,12 @@ impl ZoteroClient<'_> {
     /// Searches library items by `query` (title, creator, year, or
     /// fulltext), optionally scoped to `collection_key`, returning at most
     /// `limit` results. Notes are excluded.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn search_items(
         &self,
         query: &str,
@@ -66,6 +78,12 @@ impl ZoteroClient<'_> {
     }
 
     /// Fetches the item identified by `item_key`.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_item(
         &self,
         item_key: &str,
@@ -88,6 +106,12 @@ impl ZoteroClient<'_> {
     }
 
     /// Fetches every collection in the library.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_collections(
         &self,
     ) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
@@ -106,6 +130,12 @@ impl ZoteroClient<'_> {
 
     /// Fetches every item inside the collection identified by
     /// `collection_key`.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_collection_items(
         &self,
         collection_key: &str,
@@ -127,6 +157,12 @@ impl ZoteroClient<'_> {
     }
 
     /// Fetches the child items (notes and attachments) of `item_key`.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_item_children(
         &self,
         item_key: &str,
@@ -149,6 +185,12 @@ impl ZoteroClient<'_> {
 
     /// Fetches Zotero's indexed fulltext content for `item_key`, or an
     /// empty string if none has been indexed.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_item_fulltext(
         &self,
         item_key: &str,
@@ -175,6 +217,12 @@ impl ZoteroClient<'_> {
     }
 
     /// Searches items by tag name.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn search_by_tag(
         &self,
         tag: &str,
@@ -198,6 +246,12 @@ impl ZoteroClient<'_> {
     }
 
     /// Searches items by citation key in `extra` field or query.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn search_by_citation_key(
         &self,
         citekey: &str,
@@ -219,6 +273,12 @@ impl ZoteroClient<'_> {
     }
 
     /// Advanced multi-condition structured search over item fields.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn advanced_search(
         &self,
         conditions: Vec<serde_json::Value>,
@@ -236,6 +296,12 @@ impl ZoteroClient<'_> {
     }
 
     /// Computes library or collection coverage statistics (PDF, DOI, Notes).
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_library_coverage(
         &self,
         collection_key: Option<&str>,
@@ -291,6 +357,12 @@ impl ZoteroClient<'_> {
     }
 
     /// Extracts and synthesizes annotations and notes into structured Markdown.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn synthesize_annotations(
         &self,
         item_key: &str,

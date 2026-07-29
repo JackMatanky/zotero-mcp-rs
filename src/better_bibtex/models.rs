@@ -7,34 +7,36 @@ use serde::{Deserialize, Serialize};
 /// A JSON-RPC 2.0 request envelope.
 #[derive(Debug, Serialize)]
 pub(crate) struct JsonRpcRequest<'a, T: Serialize> {
+    /// JSON-RPC version string (always `"2.0"`).
     pub(crate) jsonrpc: &'static str,
+    /// RPC method name to call.
     pub(crate) method: &'a str,
+    /// Parameter payload passed to the method.
     pub(crate) params: T,
+    /// Request identifier.
     pub(crate) id: u64,
 }
 
-#[derive(Debug, Deserialize)]
 /// A JSON-RPC 2.0 response envelope, carrying either `result` or `error`.
+#[derive(Debug, Deserialize)]
 pub(crate) struct JsonRpcResponse<T> {
+    /// JSON-RPC version string (expected `"2.0"`).
     pub(crate) jsonrpc: String,
+    /// Result payload if call succeeded.
     pub(crate) result: Option<T>,
+    /// Error object if call failed.
     pub(crate) error: Option<JsonRpcError>,
 }
 
 /// A JSON-RPC 2.0 error object.
 #[derive(Debug, Deserialize)]
 pub(crate) struct JsonRpcError {
+    /// Numeric error code.
     pub(crate) code: i64,
+    /// Human-readable error message.
     pub(crate) message: String,
+    /// Additional error detail.
     pub(crate) data: Option<serde_json::Value>,
-}
-
-/// Result of probing the Better `BibTeX` JSON-RPC endpoint for availability.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct BetterBibtexStatus {
-    pub(crate) ready: bool,
-    pub(crate) url: String,
-    pub(crate) error: Option<String>,
 }
 
 /// Maps a Zotero item key to its Better `BibTeX` citation key.

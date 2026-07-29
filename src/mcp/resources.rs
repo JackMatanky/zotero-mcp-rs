@@ -8,6 +8,12 @@ impl ZoteroMcpServer {
         clippy::unnecessary_wraps,
         reason = "instance method on ZoteroMcpServer required for ServerHandler trait dispatch"
     )]
+    /// Lists MCP resources exposed by the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) fn list_resources_impl(
         &self,
     ) -> Result<rmcp::model::ListResourcesResult, rmcp::ErrorData> {
@@ -28,6 +34,12 @@ impl ZoteroMcpServer {
         })
     }
 
+    /// Reads a single MCP resource by URI.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn read_resource_impl(
         &self,
         uri: &str,
@@ -82,6 +94,12 @@ impl ZoteroMcpServer {
         clippy::unnecessary_wraps,
         reason = "instance method on ZoteroMcpServer required for ServerHandler trait dispatch"
     )]
+    /// Lists MCP prompts exposed by the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) fn list_prompts_impl(
         &self,
     ) -> Result<rmcp::model::ListPromptsResult, rmcp::ErrorData> {
@@ -110,6 +128,12 @@ impl ZoteroMcpServer {
         clippy::unused_self,
         reason = "instance method on ZoteroMcpServer required for ServerHandler trait dispatch"
     )]
+    /// Builds an MCP prompt response by prompt name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) fn get_prompt_impl(
         &self,
         name: &str,

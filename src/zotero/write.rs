@@ -10,6 +10,13 @@ use crate::{
 
 impl ZoteroClient<'_> {
     /// Creates a note item attached to `parent_item_key` with body `note_content`.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn create_note(
         &self,
         parent_item_key: &str,
@@ -41,6 +48,13 @@ impl ZoteroClient<'_> {
     }
 
     /// Creates a new collection with name `name` and optional `parent_key`.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn create_collection(
         &self,
         name: &str,
@@ -75,6 +89,13 @@ impl ZoteroClient<'_> {
     }
 
     /// Searches collections by `query` matching collection names case-insensitively.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn search_collections(
         &self,
         query: &str,
@@ -89,6 +110,13 @@ impl ZoteroClient<'_> {
     }
 
     /// Adds or removes item keys to/from a collection.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn manage_collection_items(
         &self,
         collection_key: &str,
@@ -119,6 +147,13 @@ impl ZoteroClient<'_> {
     }
 
     /// Updates fields of an existing item using `PATCH`.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn update_item(
         &self,
         item_key: &str,
@@ -145,6 +180,13 @@ impl ZoteroClient<'_> {
     }
 
     /// Attaches a linked file to a parent item.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn attach_file_link(
         &self,
         parent_item_key: &str,
@@ -181,6 +223,13 @@ impl ZoteroClient<'_> {
     }
 
     /// Batch updates tags across multiple items by adding and/or removing tags.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn batch_update_tags(
         &self,
         item_keys: &[String],
@@ -214,6 +263,13 @@ impl ZoteroClient<'_> {
     }
 
     /// Finds potential duplicate items in library or collection by matching title or DOI.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn find_duplicates(
         &self,
         collection_key: Option<&str>,

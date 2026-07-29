@@ -9,9 +9,7 @@ use serde_json::Value;
 
 use crate::{
     better_bibtex::{
-        models::{
-            BetterBibtexStatus, CitekeyMap, JsonRpcRequest, JsonRpcResponse,
-        },
+        models::{CitekeyMap, JsonRpcRequest, JsonRpcResponse},
         sqlite::{get_default_bbt_db_path, read_bbt_citekeys_sqlite},
     },
     errors::ZoteroMcpError,
@@ -24,6 +22,7 @@ pub(crate) struct BetterBibtexClient<'a> {
 }
 
 impl<'a> BetterBibtexClient<'a> {
+    /// Creates a Better `BibTeX` client borrowing shared [`AppState`].
     pub(crate) fn new(state: &'a AppState) -> Self {
         Self {
             state,
@@ -92,25 +91,6 @@ impl<'a> BetterBibtexClient<'a> {
                 "JSON-RPC returned null result".to_owned(),
             )
         })
-    }
-
-    /// Probes the Better `BibTeX` JSON-RPC endpoint for availability.
-    ///
-    /// Never returns an error: failures are captured in the returned
-    /// [`BetterBibtexStatus::error`] field instead of being propagated.
-    pub(crate) async fn check_status(&self) -> BetterBibtexStatus {
-        match self.call_rpc::<Vec<&str>, Value>("api.ready", vec![]).await {
-            Ok(_) => BetterBibtexStatus {
-                ready: true,
-                url: self.state.better_bibtex_url.clone(),
-                error: None,
-            },
-            Err(e) => BetterBibtexStatus {
-                ready: false,
-                url: self.state.better_bibtex_url.clone(),
-                error: Some(e.to_string()),
-            },
-        }
     }
 
     /// Maps `item_keys` to their Better `BibTeX` citation keys.
@@ -339,49 +319,6 @@ mod tests {
                 }
             });
             format!("http://{addr}")
-        }
-    }
-
-    mod check_status {
-        use super::{
-            super::*,
-            fixtures::{http_response, mock_server, test_state},
-        };
-
-        #[tokio::test]
-        async fn reports_ready_when_rpc_succeeds() {
-            // Arrange
-            let base = mock_server(vec![http_response(
-                "200 OK",
-                r#"{"jsonrpc":"2.0","result":true}"#,
-            )]);
-            let state = test_state(base, false);
-
-            // Act
-            let status = BetterBibtexClient::new(&state).check_status().await;
-
-            // Assert
-            assert!(status.ready);
-            assert!(status.error.is_none());
-        }
-
-        #[tokio::test]
-        async fn reports_not_ready_when_http_error() {
-            // Arrange: 5xx is retried by AppState::send_with_retry (up to 3
-            // attempts total), so the mock must answer every attempt.
-            let base =
-                mock_server(vec![
-                    http_response("500 Internal Server Error", "");
-                    3
-                ]);
-            let state = test_state(base, false);
-
-            // Act
-            let status = BetterBibtexClient::new(&state).check_status().await;
-
-            // Assert
-            assert!(!status.ready);
-            assert!(status.error.unwrap().contains("500"));
         }
     }
 

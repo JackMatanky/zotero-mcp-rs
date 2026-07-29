@@ -11,47 +11,53 @@ use crate::{ZoteroMcpServer, better_notes::BetterNotesClient};
 /// Arguments for `better_notes_to_markdown`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ToMarkdownArgs {
-    /// Note item key
+    /// Note item key.
     pub(crate) item_key: String,
-    /// Format: `"html"` or `"markdown"` (default: `"markdown"`)
+    /// Format: `"html"` or `"markdown"` (default: `"markdown"`).
     pub(crate) format: Option<String>,
 }
 
 /// Arguments for `better_notes_from_markdown`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FromMarkdownArgs {
-    /// Parent item key to attach the converted note to
+    /// Parent item key to attach the converted note to.
     pub(crate) parent_key: String,
-    /// Markdown string to convert into HTML
+    /// Markdown string to convert into HTML.
     pub(crate) markdown: String,
 }
 
 /// Arguments for `better_notes_run_template`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RunTemplateArgs {
-    /// Template name to execute
+    /// Template name to execute.
     pub(crate) template_name: String,
-    /// Target Zotero item key
+    /// Target Zotero item key.
     pub(crate) item_key: String,
 }
 
 /// Arguments for `better_notes_get_relations`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct NoteRelationsArgs {
-    /// Note item key
+    /// Note item key.
     pub(crate) item_key: String,
 }
 
 /// Arguments for `better_notes_get_tree`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct NoteTreeArgs {
-    /// Note item key
+    /// Note item key.
     pub(crate) item_key: String,
 }
 
 // --- Handler Implementations ---
 
 impl ZoteroMcpServer {
+    /// Handles Better Notes Markdown export tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_notes_to_markdown_impl(
         &self,
         args: ToMarkdownArgs,
@@ -72,6 +78,12 @@ impl ZoteroMcpServer {
         }
     }
 
+    /// Handles Better Notes Markdown import tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_notes_from_markdown_impl(
         &self,
         args: FromMarkdownArgs,
@@ -94,6 +106,12 @@ impl ZoteroMcpServer {
         }
     }
 
+    /// Handles Better Notes template execution tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_notes_run_template_impl(
         &self,
         args: RunTemplateArgs,
@@ -113,6 +131,12 @@ impl ZoteroMcpServer {
         }
     }
 
+    /// Handles Better Notes relation lookup tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_notes_get_relations_impl(
         &self,
         args: NoteRelationsArgs,
@@ -133,6 +157,12 @@ impl ZoteroMcpServer {
         }
     }
 
+    /// Handles Better Notes tree lookup tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
     pub(crate) async fn better_notes_get_tree_impl(
         &self,
         args: NoteTreeArgs,
