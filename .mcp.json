@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "adrs": {
+      "command": "adrs",
+      "args": [
+        "mcp",
+        "serve"
+      ],
+      "cwd": "/Users/jack/Documents/41_personal/traces-pkm/",
+      "env": {
+        "ADR_DIRECTORY": "docs/adr/"
+      }
+    },
+    "rust-docs": {
+      "command": "rust-docs-mcp",
+      "env": {
+        "RUST_DOCS_MCP_CACHE_DIR": ".rust-docs/cache/"
+      }
+    }
+  }
+}
