@@ -1,2 +1,3 @@
 /target
 *digest.txt
+.rust-docs/
