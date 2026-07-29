@@ -4,19 +4,21 @@
 //! wraps the JSON-RPC request/response envelope and maps failures to
 //! [`ZoteroMcpError::BetterBibTeX`].
 
-use crate::better_bibtex::models::{
-    BetterBibtexStatus, CitekeyMap, JsonRpcRequest, JsonRpcResponse,
-};
-use crate::better_bibtex::sqlite::{
-    get_default_bbt_db_path, read_bbt_citekeys_sqlite,
-};
-use crate::errors::ZoteroMcpError;
-use crate::state::AppState;
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::{
+    better_bibtex::{
+        models::{
+            BetterBibtexStatus, CitekeyMap, JsonRpcRequest, JsonRpcResponse,
+        },
+        sqlite::{get_default_bbt_db_path, read_bbt_citekeys_sqlite},
+    },
+    errors::ZoteroMcpError,
+    state::AppState,
+};
+
 /// Client for the Better `BibTeX` JSON-RPC API, scoped to a single tool call.
-#[expect(dead_code, reason = "Client invoked by MCP tool handlers")]
 pub(crate) struct BetterBibtexClient<'a> {
     state: &'a AppState,
 }
@@ -79,7 +81,7 @@ impl<'a> BetterBibtexClient<'a> {
 
         rpc_resp.result.ok_or_else(|| {
             ZoteroMcpError::BetterBibTeX(
-                "JSON-RPC returned null result".to_string(),
+                "JSON-RPC returned null result".to_owned(),
             )
         })
     }
@@ -118,7 +120,8 @@ impl<'a> BetterBibtexClient<'a> {
         &self,
         item_keys: &[&str],
     ) -> Result<CitekeyMap, ZoteroMcpError> {
-        // Fast path: Try reading from ~/Zotero/better-bibtex.migrated SQLite DB (~0.01ms)
+        // Fast path: Try reading from ~/Zotero/better-bibtex.migrated SQLite DB
+        // (~0.01ms)
         let db_path = get_default_bbt_db_path();
         if let Ok(map) = read_bbt_citekeys_sqlite(&db_path, item_keys) {
             if !map.is_empty() {

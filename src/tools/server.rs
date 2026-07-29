@@ -6,6 +6,8 @@
 //! intentionally carry no separate `///` rustdoc — adding one would just
 //! duplicate the `description` string.
 
+use std::path::Path;
+
 use rmcp::{
     ServerHandler,
     handler::server::wrapper::Parameters,
@@ -16,14 +18,23 @@ use rmcp::{
     tool, tool_router,
 };
 use serde_json::json;
-use std::path::Path;
 
-use crate::better_bibtex::BetterBibtexClient;
-use crate::better_notes::BetterNotesClient;
-use crate::pdf::extract_pdf_pages;
-use crate::state::AppState;
-use crate::tools::models::*;
-use crate::zotero::ZoteroClient;
+use crate::{
+    better_bibtex::BetterBibtexClient,
+    better_notes::BetterNotesClient,
+    pdf::extract_pdf_pages,
+    state::AppState,
+    tools::models::{
+        AutoexportAddArgs, BetterBibtexSearchArgs, BibliographyArgs,
+        CreateNoteArgs, EmptyArgs, ExportItemsArgs, FromMarkdownArgs,
+        GetCitekeysArgs, GetCollectionItemsArgs, GetItemArgs,
+        GetItemChildrenArgs, GetItemFulltextArgs, GetItemMetadataArgs,
+        GetNotesArgs, GetPdfPathArgs, GetRecentArgs, NoteRelationsArgs,
+        NoteTreeArgs, PandocFilterArgs, ReadPdfPagesArgs, RegenerateKeysArgs,
+        RunTemplateArgs, ScanAuxArgs, SearchItemsArgs, ToMarkdownArgs,
+    },
+    zotero::ZoteroClient,
+};
 
 /// The MCP tool router: holds the shared [`AppState`] and implements
 /// [`ServerHandler`], hosting every `#[tool]` method below.
@@ -50,8 +61,8 @@ impl ServerHandler for ZoteroMcpServer {
             protocol_version: ProtocolVersion::V_2024_11_05,
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             server_info: Implementation {
-                name: "zotero-mcp-rs".to_string(),
-                version: "0.1.0".to_string(),
+                name: "zotero-mcp-rs".to_owned(),
+                version: "0.1.0".to_owned(),
                 title: None,
                 icons: None,
                 website_url: None,
@@ -67,7 +78,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_status",
-        description = "Check diagnostic status of Zotero Local API, Better BibTeX, and Better Notes bridge"
+        description = "Check diagnostic status of Zotero Local API, Better \
+                       BibTeX, and Better Notes bridge"
     )]
     async fn zotero_status(
         &self,
@@ -117,7 +129,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_search_items",
-        description = "Search Zotero items by query across title, creators, year, or collection"
+        description = "Search Zotero items by query across title, creators, \
+                       year, or collection"
     )]
     async fn zotero_search_items(
         &self,
@@ -159,7 +172,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_item_metadata",
-        description = "Get metadata for an item as JSON or formatted BibTeX string"
+        description = "Get metadata for an item as JSON or formatted BibTeX \
+                       string"
     )]
     async fn zotero_get_item_metadata(
         &self,
@@ -234,7 +248,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_item_children",
-        description = "Get child items (notes, attachments) for a given item key"
+        description = "Get child items (notes, attachments) for a given item \
+                       key"
     )]
     async fn zotero_get_item_children(
         &self,
@@ -270,7 +285,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_pdf_path",
-        description = "Resolve absolute local PDF file path for an attachment item or parent item"
+        description = "Resolve absolute local PDF file path for an attachment \
+                       item or parent item"
     )]
     async fn zotero_get_pdf_path(
         &self,
@@ -320,7 +336,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_read_pdf_pages",
-        description = "Extract exact page ranges from a PDF file path using local PDF reader"
+        description = "Extract exact page ranges from a PDF file path using \
+                       local PDF reader"
     )]
     async fn zotero_read_pdf_pages(
         &self,
@@ -332,10 +349,14 @@ impl ZoteroMcpServer {
             let client = ZoteroClient::new(&self.state);
             match client.get_item(&args.item_key_or_path).await {
                 Ok(item) => {
-                    if item.data.item_type == "attachment"
-                        && item.data.path.is_some()
+                    let attachment_path = if item.data.item_type == "attachment"
                     {
-                        item.data.path.unwrap()
+                        item.data.path
+                    } else {
+                        None
+                    };
+                    if let Some(path) = attachment_path {
+                        path
                     } else {
                         match client
                             .get_item_children(&args.item_key_or_path)
@@ -358,11 +379,12 @@ impl ZoteroMcpServer {
                                 match pdf_p {
                                     Some(p) => p,
                                     None => {
-                                        return Ok(CallToolResult::error(vec![
-                                            Content::text(
-                                                "PDF attachment path not found for item",
-                                            ),
-                                        ]));
+                                        return Ok(CallToolResult::error(
+                                            vec![Content::text(
+                                                "PDF attachment path not \
+                                                 found for item",
+                                            )],
+                                        ));
                                     }
                                 }
                             }
@@ -404,7 +426,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_notes",
-        description = "Fetch notes for an item key (formatted via Better Notes if bridge available)"
+        description = "Fetch notes for an item key (formatted via Better \
+                       Notes if bridge available)"
     )]
     async fn zotero_get_notes(
         &self,
@@ -449,7 +472,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_create_note",
-        description = "Create a note attached to a parent item (requires write permission)"
+        description = "Create a note attached to a parent item (requires \
+                       write permission)"
     )]
     async fn zotero_create_note(
         &self,
@@ -496,7 +520,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let bbt_client = BetterBibtexClient::new(&self.state);
         let keys_ref: Vec<&str> =
-            args.item_keys.iter().map(|s| s.as_str()).collect();
+            args.item_keys.iter().map(String::as_str).collect();
         match bbt_client.get_citekeys(&keys_ref).await {
             Ok(map) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&map).unwrap_or_default(),
@@ -509,7 +533,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_export_items",
-        description = "Export items by keys/citekeys using format: Better BibTeX, Better BibLaTeX, or CSL JSON"
+        description = "Export items by keys/citekeys using format: Better \
+                       BibTeX, Better BibLaTeX, or CSL JSON"
     )]
     async fn better_bibtex_export_items(
         &self,
@@ -517,7 +542,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let bbt_client = BetterBibtexClient::new(&self.state);
         let keys_ref: Vec<&str> =
-            args.item_keys.iter().map(|s| s.as_str()).collect();
+            args.item_keys.iter().map(String::as_str).collect();
         let translator = args.translator.as_deref().unwrap_or("Better BibTeX");
         match bbt_client.export_items(&keys_ref, translator).await {
             Ok(exported) => {
@@ -539,7 +564,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let bbt_client = BetterBibtexClient::new(&self.state);
         let keys_ref: Vec<&str> =
-            args.item_keys.iter().map(|s| s.as_str()).collect();
+            args.item_keys.iter().map(String::as_str).collect();
         match bbt_client
             .bibliography(
                 &keys_ref,
@@ -584,7 +609,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let bbt_client = BetterBibtexClient::new(&self.state);
         let keys_ref: Vec<&str> =
-            args.item_keys.iter().map(|s| s.as_str()).collect();
+            args.item_keys.iter().map(String::as_str).collect();
         let as_csl = args.as_csl.unwrap_or(true);
         match bbt_client.pandoc_filter(&keys_ref, as_csl).await {
             Ok(res) => Ok(CallToolResult::success(vec![Content::text(
@@ -598,7 +623,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_regenerate_keys",
-        description = "Regenerate citekeys for items (requires write permission)"
+        description = "Regenerate citekeys for items (requires write \
+                       permission)"
     )]
     async fn better_bibtex_regenerate_keys(
         &self,
@@ -606,7 +632,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let bbt_client = BetterBibtexClient::new(&self.state);
         let keys_ref: Vec<&str> =
-            args.item_keys.iter().map(|s| s.as_str()).collect();
+            args.item_keys.iter().map(String::as_str).collect();
         match bbt_client.regenerate_keys(&keys_ref).await {
             Ok(res) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&res).unwrap_or_default(),
@@ -619,7 +645,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_autoexport_add",
-        description = "Add an auto-export job for a collection (requires write permission)"
+        description = "Add an auto-export job for a collection (requires \
+                       write permission)"
     )]
     async fn better_bibtex_autoexport_add(
         &self,
@@ -641,7 +668,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_scan_aux",
-        description = "Scan LaTeX .aux file to import citations into a collection (requires write permission)"
+        description = "Scan LaTeX .aux file to import citations into a \
+                       collection (requires write permission)"
     )]
     async fn better_bibtex_scan_aux(
         &self,
@@ -677,7 +705,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_notes_to_markdown",
-        description = "Convert Zotero note HTML into clean Better Notes Markdown format"
+        description = "Convert Zotero note HTML into clean Better Notes \
+                       Markdown format"
     )]
     async fn better_notes_to_markdown(
         &self,
@@ -697,7 +726,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_notes_from_markdown",
-        description = "Create a Zotero note from Markdown content via Better Notes parser (requires write permission)"
+        description = "Create a Zotero note from Markdown content via Better \
+                       Notes parser (requires write permission)"
     )]
     async fn better_notes_from_markdown(
         &self,
@@ -736,7 +766,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_notes_get_relations",
-        description = "Fetch outlinks, backlinks, and graph relations for a note"
+        description = "Fetch outlinks, backlinks, and graph relations for a \
+                       note"
     )]
     async fn better_notes_get_relations(
         &self,
@@ -755,7 +786,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_notes_get_tree",
-        description = "Retrieve the full Better Notes hierarchy tree for a note"
+        description = "Retrieve the full Better Notes hierarchy tree for a \
+                       note"
     )]
     async fn better_notes_get_tree(
         &self,

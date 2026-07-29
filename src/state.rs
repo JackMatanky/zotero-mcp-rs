@@ -6,10 +6,11 @@
 //! provides [`AppState::send_with_retry`], the single retry policy used by
 //! all three backend clients.
 
-use crate::errors::ZoteroMcpError;
+use std::{env, time::Duration};
+
 use reqwest::{Client, RequestBuilder, Response, StatusCode};
-use std::env;
-use std::time::Duration;
+
+use crate::errors::ZoteroMcpError;
 
 const RETRY_MAX_ATTEMPTS: u32 = 3;
 const RETRY_BASE_DELAY: Duration = Duration::from_millis(200);
@@ -26,7 +27,8 @@ pub(crate) struct AppState {
     pub(crate) zotero_api_url: String,
     pub(crate) better_bibtex_url: String,
     pub(crate) better_notes_url: String,
-    // ponytail: write gate defaults to read-only; enabled via ZOTERO_WRITE_ENABLED
+    // ponytail: write gate defaults to read-only; enabled via
+    // ZOTERO_WRITE_ENABLED
     pub(crate) write_enabled: bool,
 }
 
@@ -45,16 +47,16 @@ impl AppState {
             .unwrap_or_else(|_| Client::new());
 
         let zotero_api_url = env::var("ZOTERO_API_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:23119/api".to_string());
+            .unwrap_or_else(|_| "http://127.0.0.1:23119/api".to_owned());
 
         let better_bibtex_url =
             env::var("BETTER_BIBTEX_URL").unwrap_or_else(|_| {
-                "http://127.0.0.1:23119/better-bibtex/json-rpc".to_string()
+                "http://127.0.0.1:23119/better-bibtex/json-rpc".to_owned()
             });
 
         let better_notes_url =
             env::var("BETTER_NOTES_URL").unwrap_or_else(|_| {
-                "http://127.0.0.1:23119/better-notes".to_string()
+                "http://127.0.0.1:23119/better-notes".to_owned()
             });
 
         let write_enabled = env::var("ZOTERO_WRITE_ENABLED")
@@ -81,12 +83,14 @@ impl AppState {
     ///
     /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
     pub(crate) fn check_write_permission(&self) -> Result<(), ZoteroMcpError> {
-        if !self.write_enabled {
-            Err(ZoteroMcpError::PermissionDenied(
-                "Write operation rejected: set ZOTERO_WRITE_ENABLED=1 to enable modifying Zotero library".to_string()
-            ))
-        } else {
+        if self.write_enabled {
             Ok(())
+        } else {
+            Err(ZoteroMcpError::PermissionDenied(
+                "Write operation rejected: set ZOTERO_WRITE_ENABLED=1 to \
+                 enable modifying Zotero library"
+                    .to_owned(),
+            ))
         }
     }
 
@@ -116,12 +120,11 @@ impl AppState {
                 Ok(resp) if !is_transient_status(resp.status()) => {
                     return Ok(resp);
                 }
-                Ok(_) => {}
                 Err(e) if !is_transient_error(&e) => return Err(e.into()),
-                Err(_) => {}
+                Ok(_) | Err(_) => {}
             }
             tokio::time::sleep(delay).await;
-            delay = (delay * 2).min(RETRY_MAX_DELAY);
+            delay = delay.saturating_mul(2).min(RETRY_MAX_DELAY);
         }
         req.send().await.map_err(Into::into)
     }
@@ -137,10 +140,14 @@ fn is_transient_error(err: &reqwest::Error) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+    };
+
     use pretty_assertions::assert_eq;
-    use std::io::{Read, Write};
-    use std::net::TcpListener;
+
+    use super::*;
 
     #[test]
     fn test_is_transient_status() {
@@ -150,6 +157,16 @@ mod tests {
         assert!(!is_transient_status(StatusCode::OK));
         assert!(!is_transient_status(StatusCode::NOT_FOUND));
         assert!(!is_transient_status(StatusCode::BAD_REQUEST));
+    }
+
+    fn mock_response_body(attempt: u32) -> &'static str {
+        if attempt < 2 {
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: \
+             0\r\nConnection: close\r\n\r\n"
+        } else {
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: \
+             close\r\n\r\nok"
+        }
     }
 
     #[tokio::test]
@@ -162,11 +179,7 @@ mod tests {
                 let (mut stream, _) = listener.accept().unwrap();
                 let mut buf = [0u8; 1024];
                 let _ = stream.read(&mut buf);
-                let body = if i < 2 {
-                    "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                } else {
-                    "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
-                };
+                let body = mock_response_body(i);
                 let _ = stream.write_all(body.as_bytes());
             }
         });

@@ -6,6 +6,8 @@ rust-version = "1.84"
 license = "MIT OR Apache-2.0"
 description = "Model Context Protocol server for Zotero"
 repository = "https://github.com/jack/zotero-mcp-rs"
+keywords = ["zotero", "mcp", "bibliography", "bibtex"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 rmcp = { version = "0.8.1", features = ["server", "transport-io"] }

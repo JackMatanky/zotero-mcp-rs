@@ -6,7 +6,8 @@
 
 #![expect(
     dead_code,
-    reason = "MCP tool argument structs deserialized dynamically by rmcp router"
+    reason = "MCP tool argument structs deserialized dynamically by rmcp \
+              router"
 )]
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -138,7 +139,8 @@ pub(crate) struct GetCitekeysArgs {
 pub(crate) struct ExportItemsArgs {
     /// Zotero item keys or citation keys
     pub(crate) item_keys: Vec<String>,
-    /// Translator format: `"Better BibTeX"`, `"Better BibLaTeX"`, or `"CSL JSON"`
+    /// Translator format: `"Better BibTeX"`, `"Better BibLaTeX"`, or `"CSL
+    /// JSON"`
     pub(crate) translator: Option<String>,
 }
 

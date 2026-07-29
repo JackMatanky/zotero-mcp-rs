@@ -1,7 +1,8 @@
 //! JSON-RPC 2.0 envelopes and response shapes for the Better `BibTeX` API.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 /// A JSON-RPC 2.0 request envelope.
 #[derive(Debug, Serialize)]
@@ -12,9 +13,12 @@ pub(crate) struct JsonRpcRequest<'a, T: Serialize> {
     pub(crate) id: u64,
 }
 
-#[expect(
-    dead_code,
-    reason = "Deserialized from Better BibTeX JSON-RPC response"
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Deserialized from Better BibTeX JSON-RPC response"
+    )
 )]
 #[derive(Debug, Deserialize)]
 /// A JSON-RPC 2.0 response envelope, carrying either `result` or `error`.
@@ -25,7 +29,13 @@ pub(crate) struct JsonRpcResponse<T> {
     pub(crate) id: Option<u64>,
 }
 
-#[expect(dead_code, reason = "Deserialized from Better BibTeX JSON-RPC error")]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Deserialized from Better BibTeX JSON-RPC error"
+    )
+)]
 /// A JSON-RPC 2.0 error object.
 #[derive(Debug, Deserialize)]
 pub(crate) struct JsonRpcError {
@@ -47,8 +57,9 @@ pub(crate) type CitekeyMap = HashMap<String, String>;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use pretty_assertions::assert_eq;
+
+    use super::*;
 
     #[test]
     fn test_json_rpc_request_and_response() {
@@ -59,8 +70,11 @@ mod tests {
             id: 1,
         };
         let val = serde_json::to_value(&req).unwrap();
-        assert_eq!(val["method"], "item.citationkey");
-        assert_eq!(val["id"], 1);
+        assert_eq!(
+            val.get("method"),
+            Some(&serde_json::json!("item.citationkey"))
+        );
+        assert_eq!(val.get("id"), Some(&serde_json::json!(1)));
 
         let resp_json = serde_json::json!({
             "jsonrpc": "2.0",

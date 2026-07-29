@@ -3,8 +3,9 @@
 //! Wraps the [`pdf_extract`] crate to pull plain text out of a PDF file on
 //! disk, with optional page-range filtering.
 
-use crate::errors::ZoteroMcpError;
 use std::path::Path;
+
+use crate::errors::ZoteroMcpError;
 #[cfg_attr(
     not(test),
     expect(
@@ -42,7 +43,8 @@ pub(crate) fn extract_pdf_pages(
     let full_text = pdf_extract::extract_text(file_path)
         .map_err(|e| ZoteroMcpError::PdfExtract(e.to_string()))?;
 
-    // Pages extracted by pdf-extract are typically delimited by form-feed '\x0C'
+    // Pages extracted by pdf-extract are typically delimited by form-feed
+    // '\x0C'
     if let Some(pages) = page_numbers {
         if pages.is_empty() {
             return Ok(String::new());
@@ -50,7 +52,7 @@ pub(crate) fn extract_pdf_pages(
 
         let mut output = String::new();
         for (idx, page_content) in full_text.split('\x0C').enumerate() {
-            let page_num = idx + 1;
+            let page_num = idx.saturating_add(1);
             if pages.contains(&page_num) {
                 if !output.is_empty() {
                     output.push('\x0C');
@@ -66,8 +68,9 @@ pub(crate) fn extract_pdf_pages(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Write;
+
+    use super::*;
     #[test]
     fn test_missing_pdf_file() {
         let path = Path::new("/nonexistent/file.pdf");

@@ -25,13 +25,6 @@ pub(crate) enum ZoteroMcpError {
     #[error("Better Notes error: {0}")]
     BetterNotes(String),
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Constructed when pdf-extract returns error"
-        )
-    )]
     #[error("PDF extraction error: {0}")]
     PdfExtract(String),
 

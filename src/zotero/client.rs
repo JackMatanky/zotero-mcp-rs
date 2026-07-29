@@ -3,13 +3,15 @@
 //! Thin wrapper around [`reqwest`] calls to the local Zotero library server,
 //! using [`AppState::send_with_retry`] for transient-failure retries.
 
-use crate::errors::ZoteroMcpError;
-use crate::state::AppState;
-use crate::zotero::models::{LocalApiStatus, ZoteroCollection, ZoteroItem};
 use reqwest::StatusCode;
 
+use crate::{
+    errors::ZoteroMcpError,
+    state::AppState,
+    zotero::models::{LocalApiStatus, ZoteroCollection, ZoteroItem},
+};
+
 /// Client for the Zotero Local HTTP API, scoped to a single tool call.
-#[expect(dead_code, reason = "Client invoked by MCP tool handlers")]
 pub(crate) struct ZoteroClient<'a> {
     state: &'a AppState,
 }
@@ -42,7 +44,7 @@ impl<'a> ZoteroClient<'a> {
                             .headers()
                             .get("zotero-api-version")
                             .and_then(|v| v.to_str().ok())
-                            .map(|s| s.to_string()),
+                            .map(str::to_owned),
                         error: None,
                     }
                 } else {
@@ -50,7 +52,7 @@ impl<'a> ZoteroClient<'a> {
                         online: false,
                         url: self.state.zotero_api_url.clone(),
                         version: None,
-                        error: Some(format!("HTTP status {}", status)),
+                        error: Some(format!("HTTP status {status}")),
                     }
                 }
             }
@@ -78,7 +80,8 @@ impl<'a> ZoteroClient<'a> {
         limit: usize,
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
         let url = format!(
-            "{}/users/0/items?limit={}&sort=dateModified&direction=desc&itemType=-note",
+            "{}/users/0/items?limit={}&sort=dateModified&direction=desc&\
+             itemType=-note",
             self.state.zotero_api_url, limit
         );
         let resp =
@@ -152,7 +155,7 @@ impl<'a> ZoteroClient<'a> {
         let resp =
             self.state.send_with_retry(self.state.client.get(&url)).await?;
         if resp.status() == StatusCode::NOT_FOUND {
-            return Err(ZoteroMcpError::NotFound(format!("Item {}", item_key)));
+            return Err(ZoteroMcpError::NotFound(format!("Item {item_key}")));
         }
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
@@ -279,7 +282,7 @@ impl<'a> ZoteroClient<'a> {
             .get("content")
             .and_then(|v| v.as_str())
             .unwrap_or("")
-            .to_string();
+            .to_owned();
         Ok(content)
     }
 
@@ -326,7 +329,7 @@ impl<'a> ZoteroClient<'a> {
         let created: Vec<ZoteroItem> = resp.json().await?;
         created.into_iter().next().ok_or_else(|| ZoteroMcpError::LocalApi {
             status: 500,
-            message: "Created note array was empty".to_string(),
+            message: "Created note array was empty".to_owned(),
         })
     }
 }

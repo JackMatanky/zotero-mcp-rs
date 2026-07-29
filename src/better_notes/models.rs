@@ -44,19 +44,20 @@ pub(crate) struct NoteTreeResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use pretty_assertions::assert_eq;
+
+    use super::*;
 
     #[test]
     fn test_better_notes_status_serde() {
         let status = BetterNotesStatus {
             online: true,
-            url: "http://127.0.0.1:23119/better-notes".to_string(),
-            version: Some("1.0.0".to_string()),
+            url: "http://127.0.0.1:23119/better-notes".to_owned(),
+            version: Some("1.0.0".to_owned()),
             error: None,
         };
         let val = serde_json::to_value(&status).unwrap();
-        assert_eq!(val["online"], true);
-        assert_eq!(val["version"], "1.0.0");
+        assert_eq!(val.get("online"), Some(&serde_json::json!(true)));
+        assert_eq!(val.get("version"), Some(&serde_json::json!("1.0.0")));
     }
 }

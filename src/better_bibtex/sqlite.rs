@@ -3,11 +3,11 @@
 //! Used as a fast, offline fallback for citekey lookups that avoids a
 //! round trip through the JSON-RPC API.
 
-use crate::better_bibtex::models::CitekeyMap;
-use crate::errors::ZoteroMcpError;
+use std::{collections::HashMap, path::Path};
+
 use rusqlite::{Connection, OpenFlags};
-use std::collections::HashMap;
-use std::path::Path;
+
+use crate::{better_bibtex::models::CitekeyMap, errors::ZoteroMcpError};
 
 /// Reads citation keys for `item_keys` from the Better `BibTeX` `SQLite`
 /// database at `db_path`.
@@ -44,7 +44,8 @@ pub(crate) fn read_bbt_citekeys_sqlite(
     if item_keys.is_empty() {
         // Fetch all citekeys
         let mut stmt = conn.prepare_cached(
-            "SELECT itemKey, citationKey FROM citationkey WHERE citationKey IS NOT NULL",
+            "SELECT itemKey, citationKey FROM citationkey WHERE citationKey \
+             IS NOT NULL",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
@@ -55,11 +56,12 @@ pub(crate) fn read_bbt_citekeys_sqlite(
         }
     } else {
         let mut stmt = conn.prepare_cached(
-            "SELECT citationKey FROM citationkey WHERE itemKey = ?1 AND citationKey IS NOT NULL",
+            "SELECT citationKey FROM citationkey WHERE itemKey = ?1 AND \
+             citationKey IS NOT NULL",
         )?;
         for &k in item_keys {
             if let Ok(ck) = stmt.query_row([k], |row| row.get::<_, String>(0)) {
-                map.insert(k.to_string(), ck);
+                map.insert(k.to_owned(), ck);
             }
         }
     }
@@ -94,8 +96,9 @@ pub(crate) fn get_default_bbt_db_path() -> std::path::PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use pretty_assertions::assert_eq;
+
+    use super::*;
 
     #[test]
     fn test_sqlite_bbt_reader() {
@@ -104,13 +107,17 @@ mod tests {
 
         let conn = Connection::open(&db_path).unwrap();
         conn.execute(
-            "CREATE TABLE citationkey (itemID INTEGER, itemKey TEXT, libraryID INTEGER, citationKey TEXT, pinned INTEGER)",
+            "CREATE TABLE citationkey (itemID INTEGER, itemKey TEXT, \
+             libraryID INTEGER, citationKey TEXT, pinned INTEGER)",
             [],
-        ).unwrap();
+        )
+        .unwrap();
         conn.execute(
-            "INSERT INTO citationkey (itemID, itemKey, libraryID, citationKey, pinned) VALUES (1, 'ITEMKEY1', 1, 'citekey1', 0)",
+            "INSERT INTO citationkey (itemID, itemKey, libraryID, \
+             citationKey, pinned) VALUES (1, 'ITEMKEY1', 1, 'citekey1', 0)",
             [],
-        ).unwrap();
+        )
+        .unwrap();
 
         let map = read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1"]).unwrap();
         assert_eq!(map.get("ITEMKEY1").unwrap(), "citekey1");

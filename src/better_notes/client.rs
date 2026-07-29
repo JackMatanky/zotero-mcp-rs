@@ -1,16 +1,18 @@
 //! Async client for the Better Notes bridge's HTTP companion API.
 
-use crate::better_notes::models::{
-    BetterNotesStatus, MarkdownResponse, NoteItemResponse, NoteTreeResponse,
-    RelationsResponse, TemplateResponse,
-};
-use crate::errors::ZoteroMcpError;
-use crate::state::AppState;
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::{
+    better_notes::models::{
+        BetterNotesStatus, MarkdownResponse, NoteItemResponse,
+        NoteTreeResponse, RelationsResponse, TemplateResponse,
+    },
+    errors::ZoteroMcpError,
+    state::AppState,
+};
+
 /// Client for the Better Notes bridge, scoped to a single tool call.
-#[expect(dead_code, reason = "Client invoked by MCP tool handlers")]
 pub(crate) struct BetterNotesClient<'a> {
     state: &'a AppState,
 }
@@ -40,7 +42,7 @@ impl<'a> BetterNotesClient<'a> {
                         version: val
                             .get("version")
                             .and_then(|v| v.as_str())
-                            .map(|s| s.to_string()),
+                            .map(str::to_owned),
                         error: None,
                     }
                 } else {
