@@ -8,17 +8,17 @@ use serde::Serialize;
 use serde_json::Value;
 
 #[expect(dead_code, reason = "Client invoked by MCP tool handlers")]
-pub struct BetterNotesClient<'a> {
+pub(crate) struct BetterNotesClient<'a> {
     state: &'a AppState,
 }
 
 #[expect(dead_code, reason = "Client methods invoked by MCP tool handlers")]
 impl<'a> BetterNotesClient<'a> {
-    pub fn new(state: &'a AppState) -> Self {
+    pub(crate) fn new(state: &'a AppState) -> Self {
         Self { state }
     }
 
-    pub async fn check_status(&self) -> BetterNotesStatus {
+    pub(crate) async fn check_status(&self) -> BetterNotesStatus {
         let url = format!("{}/status", self.state.better_notes_url);
         match self.state.client.get(&url).send().await {
             Ok(resp) => {
@@ -71,7 +71,7 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res)
     }
 
-    pub async fn to_markdown(
+    pub(crate) async fn to_markdown(
         &self,
         item_key: Option<&str>,
         html: Option<&str>,
@@ -84,7 +84,7 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.markdown)
     }
 
-    pub async fn convert_from_markdown(
+    pub(crate) async fn convert_from_markdown(
         &self,
         parent_key: &str,
         markdown: &str,
@@ -98,7 +98,11 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.item_key)
     }
 
-    pub async fn run_template(&self, name: &str, item_key: &str) -> Result<Value, ZoteroMcpError> {
+    pub(crate) async fn run_template(
+        &self,
+        name: &str,
+        item_key: &str,
+    ) -> Result<Value, ZoteroMcpError> {
         let payload = serde_json::json!({
             "name": name,
             "itemKey": item_key,
@@ -107,7 +111,7 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.result)
     }
 
-    pub async fn get_relations(&self, item_key: &str) -> Result<Value, ZoteroMcpError> {
+    pub(crate) async fn get_relations(&self, item_key: &str) -> Result<Value, ZoteroMcpError> {
         let payload = serde_json::json!({
             "itemKey": item_key,
         });
@@ -115,7 +119,7 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.relations)
     }
 
-    pub async fn get_tree(&self, item_key: &str) -> Result<Value, ZoteroMcpError> {
+    pub(crate) async fn get_tree(&self, item_key: &str) -> Result<Value, ZoteroMcpError> {
         let payload = serde_json::json!({
             "itemKey": item_key,
         });

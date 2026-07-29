@@ -1,4 +1,4 @@
-pub mod models;
-pub mod server;
+mod models;
+mod server;
 
-pub use server::ZoteroMcpServer;
+pub(crate) use server::ZoteroMcpServer;

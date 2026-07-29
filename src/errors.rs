@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum ZoteroMcpError {
+pub(crate) enum ZoteroMcpError {
     #[error("Network error: {0}")]
     Network(#[from] reqwest::Error),
 

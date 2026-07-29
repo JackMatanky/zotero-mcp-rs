@@ -2,17 +2,17 @@ use reqwest::Client;
 use std::env;
 
 #[derive(Clone, Debug)]
-pub struct AppState {
-    pub client: Client,
-    pub zotero_api_url: String,
-    pub better_bibtex_url: String,
-    pub better_notes_url: String,
+pub(crate) struct AppState {
+    pub(crate) client: Client,
+    pub(crate) zotero_api_url: String,
+    pub(crate) better_bibtex_url: String,
+    pub(crate) better_notes_url: String,
     // ponytail: write gate defaults to read-only; enabled via ZOTERO_WRITE_ENABLED
-    pub write_enabled: bool,
+    pub(crate) write_enabled: bool,
 }
 
 impl AppState {
-    pub fn from_env() -> Self {
+    pub(crate) fn from_env() -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(15))
             .build()
@@ -40,7 +40,7 @@ impl AppState {
         }
     }
 
-    pub fn check_write_permission(&self) -> Result<(), crate::errors::ZoteroMcpError> {
+    pub(crate) fn check_write_permission(&self) -> Result<(), crate::errors::ZoteroMcpError> {
         if !self.write_enabled {
             Err(crate::errors::ZoteroMcpError::PermissionDenied(
                 "Write operation rejected: set ZOTERO_WRITE_ENABLED=1 to enable modifying Zotero library".to_string()

@@ -1,37 +1,37 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BetterNotesStatus {
-    pub online: bool,
-    pub url: String,
-    pub version: Option<String>,
-    pub error: Option<String>,
+pub(crate) struct BetterNotesStatus {
+    pub(crate) online: bool,
+    pub(crate) url: String,
+    pub(crate) version: Option<String>,
+    pub(crate) error: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct MarkdownResponse {
-    pub markdown: String,
+pub(crate) struct MarkdownResponse {
+    pub(crate) markdown: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct NoteItemResponse {
+pub(crate) struct NoteItemResponse {
     #[serde(rename = "itemKey")]
-    pub item_key: String,
+    pub(crate) item_key: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TemplateResponse {
-    pub result: serde_json::Value,
+pub(crate) struct TemplateResponse {
+    pub(crate) result: serde_json::Value,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct RelationsResponse {
-    pub relations: serde_json::Value,
+pub(crate) struct RelationsResponse {
+    pub(crate) relations: serde_json::Value,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct NoteTreeResponse {
-    pub tree: serde_json::Value,
+pub(crate) struct NoteTreeResponse {
+    pub(crate) tree: serde_json::Value,
 }
 
 #[cfg(test)]

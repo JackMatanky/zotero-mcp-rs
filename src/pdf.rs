@@ -7,7 +7,7 @@ use std::path::Path;
         reason = "Function called by spawn_blocking in MCP tool handler"
     )
 )]
-pub fn extract_pdf_pages(
+pub(crate) fn extract_pdf_pages(
     file_path: &Path,
     page_numbers: Option<&[usize]>,
 ) -> Result<String, ZoteroMcpError> {

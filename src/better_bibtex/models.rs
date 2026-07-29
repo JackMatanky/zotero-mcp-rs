@@ -2,11 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Serialize)]
-pub struct JsonRpcRequest<'a, T: Serialize> {
-    pub jsonrpc: &'static str,
-    pub method: &'a str,
-    pub params: T,
-    pub id: u64,
+pub(crate) struct JsonRpcRequest<'a, T: Serialize> {
+    pub(crate) jsonrpc: &'static str,
+    pub(crate) method: &'a str,
+    pub(crate) params: T,
+    pub(crate) id: u64,
 }
 
 #[expect(
@@ -14,29 +14,29 @@ pub struct JsonRpcRequest<'a, T: Serialize> {
     reason = "Deserialized from Better BibTeX JSON-RPC response"
 )]
 #[derive(Debug, Deserialize)]
-pub struct JsonRpcResponse<T> {
-    pub jsonrpc: String,
-    pub result: Option<T>,
-    pub error: Option<JsonRpcError>,
-    pub id: Option<u64>,
+pub(crate) struct JsonRpcResponse<T> {
+    pub(crate) jsonrpc: String,
+    pub(crate) result: Option<T>,
+    pub(crate) error: Option<JsonRpcError>,
+    pub(crate) id: Option<u64>,
 }
 
 #[expect(dead_code, reason = "Deserialized from Better BibTeX JSON-RPC error")]
 #[derive(Debug, Deserialize)]
-pub struct JsonRpcError {
-    pub code: i64,
-    pub message: String,
-    pub data: Option<serde_json::Value>,
+pub(crate) struct JsonRpcError {
+    pub(crate) code: i64,
+    pub(crate) message: String,
+    pub(crate) data: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BetterBibtexStatus {
-    pub ready: bool,
-    pub url: String,
-    pub error: Option<String>,
+pub(crate) struct BetterBibtexStatus {
+    pub(crate) ready: bool,
+    pub(crate) url: String,
+    pub(crate) error: Option<String>,
 }
 
-pub type CitekeyMap = HashMap<String, String>;
+pub(crate) type CitekeyMap = HashMap<String, String>;
 
 #[cfg(test)]
 mod tests {

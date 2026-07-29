@@ -4,17 +4,17 @@ use crate::zotero::models::{LocalApiStatus, ZoteroCollection, ZoteroItem};
 use reqwest::StatusCode;
 
 #[expect(dead_code, reason = "Client invoked by MCP tool handlers")]
-pub struct ZoteroClient<'a> {
+pub(crate) struct ZoteroClient<'a> {
     state: &'a AppState,
 }
 
 #[expect(dead_code, reason = "Client methods invoked by MCP tool handlers")]
 impl<'a> ZoteroClient<'a> {
-    pub fn new(state: &'a AppState) -> Self {
+    pub(crate) fn new(state: &'a AppState) -> Self {
         Self { state }
     }
 
-    pub async fn check_status(&self) -> LocalApiStatus {
+    pub(crate) async fn check_status(&self) -> LocalApiStatus {
         let url = format!("{}/users/0/items?limit=1", self.state.zotero_api_url);
         match self.state.client.get(&url).send().await {
             Ok(resp) => {
@@ -48,7 +48,10 @@ impl<'a> ZoteroClient<'a> {
         }
     }
 
-    pub async fn get_recent_items(&self, limit: usize) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
+    pub(crate) async fn get_recent_items(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/items?limit={}&sort=dateModified&direction=desc&itemType=-note",
             self.state.zotero_api_url, limit
@@ -64,7 +67,7 @@ impl<'a> ZoteroClient<'a> {
         Ok(items)
     }
 
-    pub async fn search_items(
+    pub(crate) async fn search_items(
         &self,
         query: &str,
         collection_key: Option<&str>,
@@ -91,7 +94,7 @@ impl<'a> ZoteroClient<'a> {
         Ok(items)
     }
 
-    pub async fn get_item(&self, item_key: &str) -> Result<ZoteroItem, ZoteroMcpError> {
+    pub(crate) async fn get_item(&self, item_key: &str) -> Result<ZoteroItem, ZoteroMcpError> {
         let url = format!("{}/users/0/items/{}", self.state.zotero_api_url, item_key);
         let resp = self.state.client.get(&url).send().await?;
         if resp.status() == StatusCode::NOT_FOUND {
@@ -107,7 +110,7 @@ impl<'a> ZoteroClient<'a> {
         Ok(item)
     }
 
-    pub async fn get_collections(&self) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
+    pub(crate) async fn get_collections(&self) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
         let url = format!("{}/users/0/collections", self.state.zotero_api_url);
         let resp = self.state.client.get(&url).send().await?;
         if !resp.status().is_success() {
@@ -120,7 +123,7 @@ impl<'a> ZoteroClient<'a> {
         Ok(collections)
     }
 
-    pub async fn get_collection_items(
+    pub(crate) async fn get_collection_items(
         &self,
         collection_key: &str,
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
@@ -139,7 +142,7 @@ impl<'a> ZoteroClient<'a> {
         Ok(items)
     }
 
-    pub async fn get_item_children(
+    pub(crate) async fn get_item_children(
         &self,
         item_key: &str,
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
@@ -158,7 +161,7 @@ impl<'a> ZoteroClient<'a> {
         Ok(items)
     }
 
-    pub async fn get_item_fulltext(&self, item_key: &str) -> Result<String, ZoteroMcpError> {
+    pub(crate) async fn get_item_fulltext(&self, item_key: &str) -> Result<String, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/items/{}/fulltext",
             self.state.zotero_api_url, item_key
@@ -179,7 +182,7 @@ impl<'a> ZoteroClient<'a> {
         Ok(content)
     }
 
-    pub async fn create_note(
+    pub(crate) async fn create_note(
         &self,
         parent_item_key: &str,
         note_content: &str,

@@ -1,4 +1,4 @@
-pub mod client;
-pub mod models;
+mod client;
+mod models;
 
-pub use client::BetterBibtexClient;
+pub(crate) use client::BetterBibtexClient;

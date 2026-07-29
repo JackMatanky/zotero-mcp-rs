@@ -16,16 +16,16 @@ use crate::state::AppState;
 use crate::tools::models::*;
 use crate::zotero::ZoteroClient;
 
-pub struct ZoteroMcpServer {
+pub(crate) struct ZoteroMcpServer {
     #[expect(
         dead_code,
         reason = "State accessed dynamically by tool router methods"
     )]
-    pub state: AppState,
+    pub(crate) state: AppState,
 }
 
 impl ZoteroMcpServer {
-    pub fn new(state: AppState) -> Self {
+    pub(crate) fn new(state: AppState) -> Self {
         Self { state }
     }
 }

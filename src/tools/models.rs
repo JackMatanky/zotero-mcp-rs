@@ -6,200 +6,200 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 #[derive(Deserialize, JsonSchema)]
-pub struct EmptyArgs {}
+pub(crate) struct EmptyArgs {}
 
 #[derive(Deserialize, JsonSchema)]
-pub struct GetRecentArgs {
+pub(crate) struct GetRecentArgs {
     /// Number of items to return (default: 10, max: 100)
-    pub limit: Option<usize>,
+    pub(crate) limit: Option<usize>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct SearchItemsArgs {
+pub(crate) struct SearchItemsArgs {
     /// Search query across title, creator, year, or fulltext
-    pub query: String,
+    pub(crate) query: String,
     /// Optional collection key to search within
-    pub collection_key: Option<String>,
+    pub(crate) collection_key: Option<String>,
     /// Maximum number of results to return (default: 20)
-    pub limit: Option<usize>,
+    pub(crate) limit: Option<usize>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct GetItemArgs {
+pub(crate) struct GetItemArgs {
     /// Zotero item key
-    pub item_key: String,
+    pub(crate) item_key: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct GetItemMetadataArgs {
+pub(crate) struct GetItemMetadataArgs {
     /// Zotero item key
-    pub item_key: String,
+    pub(crate) item_key: String,
     /// Format: "json" or "bibtex" (default: "json")
-    pub format: Option<String>,
+    pub(crate) format: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct GetCollectionItemsArgs {
+pub(crate) struct GetCollectionItemsArgs {
     /// Zotero collection key
-    pub collection_key: String,
+    pub(crate) collection_key: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct GetItemChildrenArgs {
+pub(crate) struct GetItemChildrenArgs {
     /// Zotero item key
-    pub item_key: String,
+    pub(crate) item_key: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct GetItemFulltextArgs {
+pub(crate) struct GetItemFulltextArgs {
     /// Zotero item key
-    pub item_key: String,
+    pub(crate) item_key: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct GetPdfPathArgs {
+pub(crate) struct GetPdfPathArgs {
     /// Zotero item key (parent item or attachment item)
-    pub item_key: String,
+    pub(crate) item_key: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct ReadPdfPagesArgs {
+pub(crate) struct ReadPdfPagesArgs {
     /// Zotero item key or direct file path to PDF
-    pub item_key_or_path: String,
+    pub(crate) item_key_or_path: String,
     /// 1-based page numbers to extract (e.g. [1, 2, 3])
-    pub pages: Option<Vec<usize>>,
+    pub(crate) pages: Option<Vec<usize>>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct GetNotesArgs {
+pub(crate) struct GetNotesArgs {
     /// Zotero item key
-    pub item_key: String,
+    pub(crate) item_key: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct CreateNoteArgs {
+pub(crate) struct CreateNoteArgs {
     /// Parent item key
-    pub parent_item_key: String,
+    pub(crate) parent_item_key: String,
     /// HTML or Markdown content for the note
-    pub note_content: String,
+    pub(crate) note_content: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct UpdateNoteArgs {
+pub(crate) struct UpdateNoteArgs {
     /// Note item key
-    pub note_item_key: String,
+    pub(crate) note_item_key: String,
     /// Updated HTML or Markdown content
-    pub note_content: String,
+    pub(crate) note_content: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct AddByDoiArgs {
+pub(crate) struct AddByDoiArgs {
     /// DOI identifier (e.g. "10.1038/s41586-020-2649-2")
-    pub doi: String,
+    pub(crate) doi: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct AddFromFileArgs {
+pub(crate) struct AddFromFileArgs {
     /// Absolute path to PDF, RIS, or BibTeX file
-    pub file_path: String,
+    pub(crate) file_path: String,
 }
 
 // --- Better BibTeX ---
 #[derive(Deserialize, JsonSchema)]
-pub struct GetCitekeysArgs {
+pub(crate) struct GetCitekeysArgs {
     /// Zotero item keys
-    pub item_keys: Vec<String>,
+    pub(crate) item_keys: Vec<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct ExportItemsArgs {
+pub(crate) struct ExportItemsArgs {
     /// Zotero item keys or citation keys
-    pub item_keys: Vec<String>,
+    pub(crate) item_keys: Vec<String>,
     /// Translator format: "Better BibTeX", "Better BibLaTeX", or "CSL JSON"
-    pub translator: Option<String>,
+    pub(crate) translator: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct BibliographyArgs {
+pub(crate) struct BibliographyArgs {
     /// Zotero item keys or citation keys
-    pub item_keys: Vec<String>,
+    pub(crate) item_keys: Vec<String>,
     /// Citation style (e.g. "apa", "chicago-author-date")
-    pub style: Option<String>,
+    pub(crate) style: Option<String>,
     /// Locale (e.g. "en-US")
-    pub locale: Option<String>,
+    pub(crate) locale: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct BetterBibtexSearchArgs {
+pub(crate) struct BetterBibtexSearchArgs {
     /// High-precision search query
-    pub query: String,
+    pub(crate) query: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct PandocFilterArgs {
+pub(crate) struct PandocFilterArgs {
     /// Zotero item keys or citation keys
-    pub item_keys: Vec<String>,
+    pub(crate) item_keys: Vec<String>,
     /// Whether to output CSL JSON metadata
-    pub as_csl: Option<bool>,
+    pub(crate) as_csl: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct RegenerateKeysArgs {
+pub(crate) struct RegenerateKeysArgs {
     /// Zotero item keys
-    pub item_keys: Vec<String>,
+    pub(crate) item_keys: Vec<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct AutoexportAddArgs {
+pub(crate) struct AutoexportAddArgs {
     /// Collection key
-    pub collection_key: String,
+    pub(crate) collection_key: String,
     /// Translator format
-    pub translator: String,
+    pub(crate) translator: String,
     /// Output file path
-    pub path: String,
+    pub(crate) path: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct ScanAuxArgs {
+pub(crate) struct ScanAuxArgs {
     /// Collection key
-    pub collection_key: String,
+    pub(crate) collection_key: String,
     /// Local .aux file path
-    pub aux_path: String,
+    pub(crate) aux_path: String,
 }
 
 // --- Better Notes ---
 #[derive(Deserialize, JsonSchema)]
-pub struct ToMarkdownArgs {
+pub(crate) struct ToMarkdownArgs {
     /// Note item key (optional if html provided)
-    pub item_key: Option<String>,
+    pub(crate) item_key: Option<String>,
     /// Note HTML content (optional if item_key provided)
-    pub html: Option<String>,
+    pub(crate) html: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct FromMarkdownArgs {
+pub(crate) struct FromMarkdownArgs {
     /// Parent item key
-    pub parent_key: String,
+    pub(crate) parent_key: String,
     /// Markdown string
-    pub markdown: String,
+    pub(crate) markdown: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct RunTemplateArgs {
+pub(crate) struct RunTemplateArgs {
     /// Template name or key
-    pub name: String,
+    pub(crate) name: String,
     /// Target Zotero item key
-    pub item_key: String,
+    pub(crate) item_key: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct NoteRelationsArgs {
+pub(crate) struct NoteRelationsArgs {
     /// Note item key
-    pub item_key: String,
+    pub(crate) item_key: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct NoteTreeArgs {
+pub(crate) struct NoteTreeArgs {
     /// Note item key
-    pub item_key: String,
+    pub(crate) item_key: String,
 }
