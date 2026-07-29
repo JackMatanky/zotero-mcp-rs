@@ -9,14 +9,14 @@
 mod better_bibtex;
 mod better_notes;
 mod errors;
+mod mcp;
 mod pdf;
 mod state;
-mod tools;
 mod zotero;
 
+use mcp::ZoteroMcpServer;
 use rmcp::ServiceExt;
 use state::AppState;
-use tools::ZoteroMcpServer;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
