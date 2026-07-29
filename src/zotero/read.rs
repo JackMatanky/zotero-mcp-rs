@@ -219,113 +219,19 @@ impl ZoteroClient<'_> {
     }
 
     /// Advanced multi-condition structured search over item fields.
-    #[allow(
-        clippy::cognitive_complexity,
-        clippy::excessive_nesting,
-        reason = "search matching logic"
-    )]
     pub(crate) async fn advanced_search(
         &self,
         conditions: Vec<serde_json::Value>,
         limit: usize,
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
         let items = self.get_recent_items(100).await?;
-        let mut results = Vec::new();
-
-        for item in items {
-            let mut matches_all = true;
-            for cond in &conditions {
-                let field =
-                    cond.get("field").and_then(|v| v.as_str()).unwrap_or("");
-                let op = cond
-                    .get("operator")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("contains");
-                let val = cond
-                    .get("value")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_lowercase();
-
-                let cond_pass = match field {
-                    "tag" => {
-                        let has_tag = item
-                            .data
-                            .tags
-                            .iter()
-                            .any(|t| t.tag.to_lowercase().contains(&val));
-                        if op == "is_not" {
-                            !has_tag
-                        } else {
-                            has_tag
-                        }
-                    }
-                    "creator" | "author" => {
-                        let has_creator = item.data.creators.iter().any(|c| {
-                            let first = c.first_name.as_deref().unwrap_or("");
-                            let last = c.last_name.as_deref().unwrap_or("");
-                            format!("{first} {last}")
-                                .to_lowercase()
-                                .contains(&val)
-                        });
-                        if op == "is_not" {
-                            !has_creator
-                        } else {
-                            has_creator
-                        }
-                    }
-                    _ => {
-                        let val_matched = match field {
-                            "itemType" | "item_type" => {
-                                item.data.item_type.to_lowercase()
-                            }
-                            "doi" => item
-                                .data
-                                .doi
-                                .as_deref()
-                                .unwrap_or("")
-                                .to_lowercase(),
-                            "year" | "date" => item
-                                .data
-                                .date
-                                .as_deref()
-                                .unwrap_or("")
-                                .to_lowercase(),
-                            "abstract" | "abstractNote" => item
-                                .data
-                                .abstract_note
-                                .as_deref()
-                                .unwrap_or("")
-                                .to_lowercase(),
-                            _ => item
-                                .data
-                                .title
-                                .as_deref()
-                                .unwrap_or("")
-                                .to_lowercase(),
-                        };
-                        match op {
-                            "equals" => val_matched == val,
-                            "is_not" => !val_matched.contains(&val),
-                            _ => val_matched.contains(&val),
-                        }
-                    }
-                };
-
-                if !cond_pass {
-                    matches_all = false;
-                    break;
-                }
-            }
-
-            if matches_all {
-                results.push(item);
-                if results.len() >= limit {
-                    break;
-                }
-            }
-        }
-
+        let results = items
+            .into_iter()
+            .filter(|item| {
+                conditions.iter().all(|cond| match_condition(item, cond))
+            })
+            .take(limit)
+            .collect();
         Ok(results)
     }
 
@@ -369,46 +275,9 @@ impl ZoteroClient<'_> {
             }
         }
 
-        #[allow(
-            clippy::as_conversions,
-            clippy::cast_precision_loss,
-            clippy::cast_lossless,
-            reason = "coverage percentage calculation"
-        )]
-        let total_f = total_items as f64;
-        #[allow(
-            clippy::as_conversions,
-            clippy::cast_precision_loss,
-            clippy::cast_lossless,
-            reason = "coverage percentage calculation"
-        )]
-        let doi_pct = if total_items > 0 {
-            (items_with_doi as f64 / total_f) * 100.0
-        } else {
-            0.0
-        };
-        #[allow(
-            clippy::as_conversions,
-            clippy::cast_precision_loss,
-            clippy::cast_lossless,
-            reason = "coverage percentage calculation"
-        )]
-        let pdf_pct = if total_items > 0 {
-            (items_with_pdf as f64 / total_f) * 100.0
-        } else {
-            0.0
-        };
-        #[allow(
-            clippy::as_conversions,
-            clippy::cast_precision_loss,
-            clippy::cast_lossless,
-            reason = "coverage percentage calculation"
-        )]
-        let notes_pct = if total_items > 0 {
-            (items_with_notes as f64 / total_f) * 100.0
-        } else {
-            0.0
-        };
+        let doi_pct = compute_percentage(items_with_doi, total_items);
+        let pdf_pct = compute_percentage(items_with_pdf, total_items);
+        let notes_pct = compute_percentage(items_with_notes, total_items);
 
         Ok(serde_json::json!({
             "total_items": total_items,
@@ -443,7 +312,6 @@ impl ZoteroClient<'_> {
             let _ = writeln!(md, "**Date:** {date}");
         }
         md.push('\n');
-
         let mut has_annotations = false;
         let _ = writeln!(md, "## Highlights & Annotations\n");
         for child in &children {
@@ -482,6 +350,75 @@ impl ZoteroClient<'_> {
         }
 
         Ok(md)
+    }
+}
+fn match_condition(item: &ZoteroItem, cond: &serde_json::Value) -> bool {
+    let field = cond.get("field").and_then(|v| v.as_str()).unwrap_or("");
+    let op =
+        cond.get("operator").and_then(|v| v.as_str()).unwrap_or("contains");
+    let val =
+        cond.get("value").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+
+    match field {
+        "tag" => {
+            let has_tag = item
+                .data
+                .tags
+                .iter()
+                .any(|t| t.tag.to_lowercase().contains(&val));
+            if op == "is_not" {
+                !has_tag
+            } else {
+                has_tag
+            }
+        }
+        "creator" | "author" => {
+            let has_creator = item.data.creators.iter().any(|c| {
+                let first = c.first_name.as_deref().unwrap_or("");
+                let last = c.last_name.as_deref().unwrap_or("");
+                format!("{first} {last}").to_lowercase().contains(&val)
+            });
+            if op == "is_not" {
+                !has_creator
+            } else {
+                has_creator
+            }
+        }
+        _ => {
+            let val_matched = match field {
+                "itemType" | "item_type" => item.data.item_type.to_lowercase(),
+                "doi" => item.data.doi.as_deref().unwrap_or("").to_lowercase(),
+                "year" | "date" => {
+                    item.data.date.as_deref().unwrap_or("").to_lowercase()
+                }
+                "abstract" | "abstractNote" => item
+                    .data
+                    .abstract_note
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_lowercase(),
+                _ => item.data.title.as_deref().unwrap_or("").to_lowercase(),
+            };
+            match op {
+                "equals" => val_matched == val,
+                "is_not" => !val_matched.contains(&val),
+                _ => val_matched.contains(&val),
+            }
+        }
+    }
+}
+
+fn compute_percentage(count: usize, total: usize) -> f64 {
+    if total == 0 {
+        return 0.0;
+    }
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        reason = "coverage percentage calculation requires float division"
+    )]
+    {
+        (count as f64 / total as f64) * 100.0
     }
 }
 

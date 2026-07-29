@@ -602,18 +602,22 @@ mod tests {
             )
         }
 
-        #[allow(clippy::excessive_nesting, reason = "mock server loop")]
+        #[expect(
+            clippy::excessive_nesting,
+            reason = "mock HTTP server thread loop"
+        )]
         pub(super) fn mock_server(responses: Vec<String>) -> String {
             let listener =
                 TcpListener::bind("127.0.0.1:0").expect("bind listener");
             let addr = listener.local_addr().expect("local addr");
             std::thread::spawn(move || {
                 for response in responses {
-                    if let Ok((mut stream, _)) = listener.accept() {
-                        let mut buf = [0u8; 1024];
-                        let _ = stream.read(&mut buf);
-                        let _ = stream.write_all(response.as_bytes());
-                    }
+                    let Ok((mut stream, _)) = listener.accept() else {
+                        continue;
+                    };
+                    let mut buf = [0u8; 1024];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(response.as_bytes());
                 }
             });
             format!("http://{addr}")

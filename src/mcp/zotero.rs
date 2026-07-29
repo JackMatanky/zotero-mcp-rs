@@ -4,7 +4,11 @@ use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::{ZoteroMcpServer, pdf::extract_pdf_pages, zotero::ZoteroClient};
+use crate::{
+    ZoteroMcpServer,
+    pdf::extract_pdf_pages,
+    zotero::{ZoteroClient, ZoteroItem},
+};
 
 // --- Argument Schemas ---
 
@@ -373,69 +377,58 @@ impl ZoteroMcpServer {
         }
     }
 
-    #[allow(
-        clippy::cognitive_complexity,
-        clippy::excessive_nesting,
-        reason = "pdf locator logic"
-    )]
     pub(crate) async fn zotero_get_pdf_path_impl(
         &self,
         args: GetPdfPathArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.get_item(&args.item_key).await {
-            Ok(item) => {
-                if item.data.item_type == "attachment" {
-                    if let Some(path) = item.data.path {
-                        return Ok(CallToolResult::success(vec![
-                            rmcp::model::Content::text(path),
-                        ]));
-                    }
-                }
-                match client.get_item_children(&args.item_key).await {
-                    Ok(children) => {
-                        for child in children {
-                            if child.data.item_type == "attachment" {
-                                if let Some(ct) = child.data.content_type {
-                                    if ct.contains("pdf") {
-                                        if let Some(path) = child.data.path {
-                                            return Ok(
-                                                CallToolResult::success(vec![
-                                                    rmcp::model::Content::text(
-                                                        path,
-                                                    ),
-                                                ]),
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Ok(CallToolResult::error(vec![
-                            rmcp::model::Content::text(
-                                "No PDF attachment found for item".to_owned(),
-                            ),
-                        ]))
-                    }
-                    Err(e) => Ok(CallToolResult::error(vec![
-                        rmcp::model::Content::text(e.to_string()),
-                    ])),
-                }
-            }
+        let item = match client.get_item(&args.item_key).await {
+            Ok(item) => item,
             Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
+                return Ok(CallToolResult::error(vec![
+                    rmcp::model::Content::text(e.to_string()),
+                ]));
+            }
+        };
+
+        if item.data.item_type == "attachment" {
+            if let Some(path) = item.data.path {
+                return Ok(CallToolResult::success(vec![
+                    rmcp::model::Content::text(path),
+                ]));
             }
         }
+
+        let children = match client.get_item_children(&args.item_key).await {
+            Ok(children) => children,
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![
+                    rmcp::model::Content::text(e.to_string()),
+                ]));
+            }
+        };
+
+        for child in children {
+            let is_pdf = child.data.item_type == "attachment"
+                && child
+                    .data
+                    .content_type
+                    .as_deref()
+                    .is_some_and(|ct| ct.contains("pdf"));
+            if is_pdf {
+                if let Some(path) = child.data.path {
+                    return Ok(CallToolResult::success(vec![
+                        rmcp::model::Content::text(path),
+                    ]));
+                }
+            }
+        }
+
+        Ok(CallToolResult::error(vec![rmcp::model::Content::text(
+            "No PDF attachment found for item".to_owned(),
+        )]))
     }
 
-    #[allow(
-        clippy::cognitive_complexity,
-        clippy::excessive_nesting,
-        clippy::else_if_without_else,
-        reason = "pdf reader logic"
-    )]
     pub(crate) async fn zotero_read_pdf_pages_impl(
         &self,
         args: ReadPdfPagesArgs,
@@ -446,42 +439,33 @@ impl ZoteroMcpServer {
         } else {
             let client = ZoteroClient::new(&self.state);
             let item_key = &args.item_key_or_path;
-            match client.get_item(item_key).await {
-                Ok(item) => {
-                    let mut found_path = None;
-                    if item.data.item_type == "attachment" {
-                        found_path = item.data.path;
-                    } else if let Ok(children) =
-                        client.get_item_children(item_key).await
-                    {
-                        for child in children {
-                            if child.data.item_type == "attachment" {
-                                if let Some(ct) = child.data.content_type {
-                                    if ct.contains("pdf") {
-                                        if let Some(p) = child.data.path {
-                                            found_path = Some(p);
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    match found_path {
-                        Some(p) => p,
-                        None => {
-                            return Ok(CallToolResult::error(vec![
-                                rmcp::model::Content::text(format!(
-                                    "No PDF file path found for key: {item_key}"
-                                )),
-                            ]));
-                        }
-                    }
-                }
+            let item = match client.get_item(item_key).await {
+                Ok(item) => item,
                 Err(e) => {
                     return Ok(CallToolResult::error(vec![
                         rmcp::model::Content::text(format!(
                             "Failed to locate PDF for key '{item_key}': {e}"
+                        )),
+                    ]));
+                }
+            };
+
+            let found_path = if item.data.item_type == "attachment" {
+                item.data.path
+            } else {
+                client
+                    .get_item_children(item_key)
+                    .await
+                    .ok()
+                    .and_then(|children| find_pdf_path(&children))
+            };
+
+            match found_path {
+                Some(p) => p,
+                None => {
+                    return Ok(CallToolResult::error(vec![
+                        rmcp::model::Content::text(format!(
+                            "No PDF file path found for key: {item_key}"
                         )),
                     ]));
                 }
@@ -801,4 +785,19 @@ impl ZoteroMcpServer {
             }
         }
     }
+}
+fn find_pdf_path(children: &[ZoteroItem]) -> Option<String> {
+    children.iter().find_map(|child| {
+        let is_pdf = child.data.item_type == "attachment"
+            && child
+                .data
+                .content_type
+                .as_deref()
+                .is_some_and(|ct| ct.contains("pdf"));
+        if is_pdf {
+            child.data.path.clone()
+        } else {
+            None
+        }
+    })
 }

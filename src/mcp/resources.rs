@@ -3,10 +3,10 @@
 use crate::{ZoteroMcpServer, zotero::ZoteroClient};
 
 impl ZoteroMcpServer {
-    #[allow(
+    #[expect(
         clippy::unused_self,
         clippy::unnecessary_wraps,
-        reason = "instance method on ZoteroMcpServer"
+        reason = "instance method on ZoteroMcpServer required for ServerHandler trait dispatch"
     )]
     pub(crate) fn list_resources_impl(
         &self,
@@ -77,10 +77,10 @@ impl ZoteroMcpServer {
         }
     }
 
-    #[allow(
+    #[expect(
         clippy::unused_self,
         clippy::unnecessary_wraps,
-        reason = "instance method on ZoteroMcpServer"
+        reason = "instance method on ZoteroMcpServer required for ServerHandler trait dispatch"
     )]
     pub(crate) fn list_prompts_impl(
         &self,
@@ -106,10 +106,9 @@ impl ZoteroMcpServer {
         })
     }
 
-    #[allow(
+    #[expect(
         clippy::unused_self,
-        clippy::unnecessary_wraps,
-        reason = "instance method on ZoteroMcpServer"
+        reason = "instance method on ZoteroMcpServer required for ServerHandler trait dispatch"
     )]
     pub(crate) fn get_prompt_impl(
         &self,
