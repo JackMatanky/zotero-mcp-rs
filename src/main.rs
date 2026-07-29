@@ -15,7 +15,10 @@ use tracing_subscriber::EnvFilter;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Tracing MUST output strictly to stderr so stdio JSON-RPC stream is clean
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive(tracing::Level::INFO.into()),
+        )
         .with_writer(std::io::stderr)
         .init();
 

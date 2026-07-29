@@ -1,6 +1,6 @@
 use crate::better_notes::models::{
-    BetterNotesStatus, MarkdownResponse, NoteItemResponse, NoteTreeResponse, RelationsResponse,
-    TemplateResponse,
+    BetterNotesStatus, MarkdownResponse, NoteItemResponse, NoteTreeResponse,
+    RelationsResponse, TemplateResponse,
 };
 use crate::errors::ZoteroMcpError;
 use crate::state::AppState;
@@ -15,7 +15,9 @@ pub(crate) struct BetterNotesClient<'a> {
 #[expect(dead_code, reason = "Client methods invoked by MCP tool handlers")]
 impl<'a> BetterNotesClient<'a> {
     pub(crate) fn new(state: &'a AppState) -> Self {
-        Self { state }
+        Self {
+            state,
+        }
     }
 
     pub(crate) async fn check_status(&self) -> BetterNotesStatus {
@@ -23,7 +25,8 @@ impl<'a> BetterNotesClient<'a> {
         match self.state.client.get(&url).send().await {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let val: serde_json::Value = resp.json().await.unwrap_or_default();
+                    let val: serde_json::Value =
+                        resp.json().await.unwrap_or_default();
                     BetterNotesStatus {
                         online: true,
                         url: self.state.better_notes_url.clone(),
@@ -83,7 +86,8 @@ impl<'a> BetterNotesClient<'a> {
             "itemKey": item_key,
             "html": html,
         });
-        let res: MarkdownResponse = self.post_json("/notes/to-markdown", payload).await?;
+        let res: MarkdownResponse =
+            self.post_json("/notes/to-markdown", payload).await?;
         Ok(res.markdown)
     }
 
@@ -97,7 +101,8 @@ impl<'a> BetterNotesClient<'a> {
             "parentKey": parent_key,
             "markdown": markdown,
         });
-        let res: NoteItemResponse = self.post_json("/notes/from-markdown", payload).await?;
+        let res: NoteItemResponse =
+            self.post_json("/notes/from-markdown", payload).await?;
         Ok(res.item_key)
     }
 
@@ -110,23 +115,32 @@ impl<'a> BetterNotesClient<'a> {
             "name": name,
             "itemKey": item_key,
         });
-        let res: TemplateResponse = self.post_json("/templates/run", payload).await?;
+        let res: TemplateResponse =
+            self.post_json("/templates/run", payload).await?;
         Ok(res.result)
     }
 
-    pub(crate) async fn get_relations(&self, item_key: &str) -> Result<Value, ZoteroMcpError> {
+    pub(crate) async fn get_relations(
+        &self,
+        item_key: &str,
+    ) -> Result<Value, ZoteroMcpError> {
         let payload = serde_json::json!({
             "itemKey": item_key,
         });
-        let res: RelationsResponse = self.post_json("/relations/get", payload).await?;
+        let res: RelationsResponse =
+            self.post_json("/relations/get", payload).await?;
         Ok(res.relations)
     }
 
-    pub(crate) async fn get_tree(&self, item_key: &str) -> Result<Value, ZoteroMcpError> {
+    pub(crate) async fn get_tree(
+        &self,
+        item_key: &str,
+    ) -> Result<Value, ZoteroMcpError> {
         let payload = serde_json::json!({
             "itemKey": item_key,
         });
-        let res: NoteTreeResponse = self.post_json("/notes/tree", payload).await?;
+        let res: NoteTreeResponse =
+            self.post_json("/notes/tree", payload).await?;
         Ok(res.tree)
     }
 }

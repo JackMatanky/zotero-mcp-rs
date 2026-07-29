@@ -50,11 +50,13 @@ pub(crate) fn read_bbt_citekeys_sqlite(
 
 pub(crate) fn get_default_bbt_db_path() -> std::path::PathBuf {
     if let Some(home) = std::env::var_os("HOME") {
-        let path = std::path::Path::new(&home).join("Zotero/better-bibtex.migrated");
+        let path =
+            std::path::Path::new(&home).join("Zotero/better-bibtex.migrated");
         if path.exists() {
             return path;
         }
-        let profile_path = std::path::Path::new(&home).join("Zotero/zotero/better-bibtex.migrated");
+        let profile_path = std::path::Path::new(&home)
+            .join("Zotero/zotero/better-bibtex.migrated");
         if profile_path.exists() {
             return profile_path;
         }

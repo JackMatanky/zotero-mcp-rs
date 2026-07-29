@@ -11,11 +11,14 @@ pub(crate) struct ZoteroClient<'a> {
 #[expect(dead_code, reason = "Client methods invoked by MCP tool handlers")]
 impl<'a> ZoteroClient<'a> {
     pub(crate) fn new(state: &'a AppState) -> Self {
-        Self { state }
+        Self {
+            state,
+        }
     }
 
     pub(crate) async fn check_status(&self) -> LocalApiStatus {
-        let url = format!("{}/users/0/items?limit=1", self.state.zotero_api_url);
+        let url =
+            format!("{}/users/0/items?limit=1", self.state.zotero_api_url);
         match self.state.client.get(&url).send().await {
             Ok(resp) => {
                 let status = resp.status();
@@ -56,10 +59,8 @@ impl<'a> ZoteroClient<'a> {
             "{}/users/0/items?limit={}&sort=dateModified&direction=desc&itemType=-note",
             self.state.zotero_api_url, limit
         );
-        let resp = self
-            .state
-            .send_with_retry(self.state.client.get(&url))
-            .await?;
+        let resp =
+            self.state.send_with_retry(self.state.client.get(&url)).await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -86,10 +87,8 @@ impl<'a> ZoteroClient<'a> {
         let encoded_q = urlencoding::encode(query);
         let url = format!("{base}?q={encoded_q}&limit={limit}&itemType=-note");
 
-        let resp = self
-            .state
-            .send_with_retry(self.state.client.get(&url))
-            .await?;
+        let resp =
+            self.state.send_with_retry(self.state.client.get(&url)).await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -100,12 +99,14 @@ impl<'a> ZoteroClient<'a> {
         Ok(items)
     }
 
-    pub(crate) async fn get_item(&self, item_key: &str) -> Result<ZoteroItem, ZoteroMcpError> {
-        let url = format!("{}/users/0/items/{}", self.state.zotero_api_url, item_key);
-        let resp = self
-            .state
-            .send_with_retry(self.state.client.get(&url))
-            .await?;
+    pub(crate) async fn get_item(
+        &self,
+        item_key: &str,
+    ) -> Result<ZoteroItem, ZoteroMcpError> {
+        let url =
+            format!("{}/users/0/items/{}", self.state.zotero_api_url, item_key);
+        let resp =
+            self.state.send_with_retry(self.state.client.get(&url)).await?;
         if resp.status() == StatusCode::NOT_FOUND {
             return Err(ZoteroMcpError::NotFound(format!("Item {}", item_key)));
         }
@@ -119,12 +120,12 @@ impl<'a> ZoteroClient<'a> {
         Ok(item)
     }
 
-    pub(crate) async fn get_collections(&self) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
+    pub(crate) async fn get_collections(
+        &self,
+    ) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
         let url = format!("{}/users/0/collections", self.state.zotero_api_url);
-        let resp = self
-            .state
-            .send_with_retry(self.state.client.get(&url))
-            .await?;
+        let resp =
+            self.state.send_with_retry(self.state.client.get(&url)).await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -143,10 +144,8 @@ impl<'a> ZoteroClient<'a> {
             "{}/users/0/collections/{}/items",
             self.state.zotero_api_url, collection_key
         );
-        let resp = self
-            .state
-            .send_with_retry(self.state.client.get(&url))
-            .await?;
+        let resp =
+            self.state.send_with_retry(self.state.client.get(&url)).await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -165,10 +164,8 @@ impl<'a> ZoteroClient<'a> {
             "{}/users/0/items/{}/children",
             self.state.zotero_api_url, item_key
         );
-        let resp = self
-            .state
-            .send_with_retry(self.state.client.get(&url))
-            .await?;
+        let resp =
+            self.state.send_with_retry(self.state.client.get(&url)).await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -179,15 +176,16 @@ impl<'a> ZoteroClient<'a> {
         Ok(items)
     }
 
-    pub(crate) async fn get_item_fulltext(&self, item_key: &str) -> Result<String, ZoteroMcpError> {
+    pub(crate) async fn get_item_fulltext(
+        &self,
+        item_key: &str,
+    ) -> Result<String, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/items/{}/fulltext",
             self.state.zotero_api_url, item_key
         );
-        let resp = self
-            .state
-            .send_with_retry(self.state.client.get(&url))
-            .await?;
+        let resp =
+            self.state.send_with_retry(self.state.client.get(&url)).await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -227,12 +225,9 @@ impl<'a> ZoteroClient<'a> {
             });
         }
         let created: Vec<ZoteroItem> = resp.json().await?;
-        created
-            .into_iter()
-            .next()
-            .ok_or_else(|| ZoteroMcpError::LocalApi {
-                status: 500,
-                message: "Created note array was empty".to_string(),
-            })
+        created.into_iter().next().ok_or_else(|| ZoteroMcpError::LocalApi {
+            status: 500,
+            message: "Created note array was empty".to_string(),
+        })
     }
 }

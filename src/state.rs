@@ -24,14 +24,18 @@ impl AppState {
             .build()
             .unwrap_or_else(|_| Client::new());
 
-        let zotero_api_url =
-            env::var("ZOTERO_API_URL").unwrap_or_else(|_| "http://127.0.0.1:23119/api".to_string());
+        let zotero_api_url = env::var("ZOTERO_API_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:23119/api".to_string());
 
-        let better_bibtex_url = env::var("BETTER_BIBTEX_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:23119/better-bibtex/json-rpc".to_string());
+        let better_bibtex_url =
+            env::var("BETTER_BIBTEX_URL").unwrap_or_else(|_| {
+                "http://127.0.0.1:23119/better-bibtex/json-rpc".to_string()
+            });
 
-        let better_notes_url = env::var("BETTER_NOTES_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:23119/better-notes".to_string());
+        let better_notes_url =
+            env::var("BETTER_NOTES_URL").unwrap_or_else(|_| {
+                "http://127.0.0.1:23119/better-notes".to_string()
+            });
 
         let write_enabled = env::var("ZOTERO_WRITE_ENABLED")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -68,7 +72,9 @@ impl AppState {
                 return req.send().await.map_err(Into::into);
             };
             match attempt_req.send().await {
-                Ok(resp) if !is_transient_status(resp.status()) => return Ok(resp),
+                Ok(resp) if !is_transient_status(resp.status()) => {
+                    return Ok(resp);
+                }
                 Ok(_) => {}
                 Err(e) if !is_transient_error(&e) => return Err(e.into()),
                 Err(_) => {}

@@ -1,10 +1,11 @@
 use rmcp::{
+    ServerHandler,
     handler::server::wrapper::Parameters,
     model::{
-        CallToolResult, Content, Implementation, InitializeResult, ProtocolVersion,
-        ServerCapabilities,
+        CallToolResult, Content, Implementation, InitializeResult,
+        ProtocolVersion, ServerCapabilities,
     },
-    tool, tool_router, ServerHandler,
+    tool, tool_router,
 };
 use serde_json::json;
 use std::path::Path;
@@ -26,7 +27,9 @@ pub(crate) struct ZoteroMcpServer {
 
 impl ZoteroMcpServer {
     pub(crate) fn new(state: AppState) -> Self {
-        Self { state }
+        Self {
+            state,
+        }
     }
 }
 
@@ -96,7 +99,9 @@ impl ZoteroMcpServer {
             Ok(items) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&items).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -117,7 +122,9 @@ impl ZoteroMcpServer {
             Ok(items) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&items).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -134,7 +141,9 @@ impl ZoteroMcpServer {
             Ok(item) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&item).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -151,16 +160,23 @@ impl ZoteroMcpServer {
             let bbt_client = BetterBibtexClient::new(&self.state);
             let item_keys = vec![args.item_key.as_str()];
             match bbt_client.export_items(&item_keys, "Better BibTeX").await {
-                Ok(bibtex) => Ok(CallToolResult::success(vec![Content::text(bibtex)])),
-                Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+                Ok(bibtex) => {
+                    Ok(CallToolResult::success(vec![Content::text(bibtex)]))
+                }
+                Err(e) => Ok(CallToolResult::error(vec![Content::text(
+                    e.to_string(),
+                )])),
             }
         } else {
             let client = ZoteroClient::new(&self.state);
             match client.get_item(&args.item_key).await {
                 Ok(item) => Ok(CallToolResult::success(vec![Content::text(
-                    serde_json::to_string_pretty(&item.data).unwrap_or_default(),
+                    serde_json::to_string_pretty(&item.data)
+                        .unwrap_or_default(),
                 )])),
-                Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+                Err(e) => Ok(CallToolResult::error(vec![Content::text(
+                    e.to_string(),
+                )])),
             }
         }
     }
@@ -175,10 +191,15 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
         match client.get_collections().await {
-            Ok(collections) => Ok(CallToolResult::success(vec![Content::text(
-                serde_json::to_string_pretty(&collections).unwrap_or_default(),
-            )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Ok(collections) => {
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&collections)
+                        .unwrap_or_default(),
+                )]))
+            }
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -195,7 +216,9 @@ impl ZoteroMcpServer {
             Ok(items) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&items).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -212,7 +235,9 @@ impl ZoteroMcpServer {
             Ok(children) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&children).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -227,7 +252,9 @@ impl ZoteroMcpServer {
         let client = ZoteroClient::new(&self.state);
         match client.get_item_fulltext(&args.item_key).await {
             Ok(text) => Ok(CallToolResult::success(vec![Content::text(text)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -242,7 +269,11 @@ impl ZoteroMcpServer {
         let client = ZoteroClient::new(&self.state);
         let item = match client.get_item(&args.item_key).await {
             Ok(it) => it,
-            Err(e) => return Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    e.to_string(),
+                )]));
+            }
         };
 
         if item.data.item_type == "attachment" {
@@ -259,7 +290,9 @@ impl ZoteroMcpServer {
                         if let Some(ct) = &child.data.content_type {
                             if ct.contains("pdf") {
                                 if let Some(p) = child.data.path {
-                                    return Ok(CallToolResult::success(vec![Content::text(p)]));
+                                    return Ok(CallToolResult::success(vec![
+                                        Content::text(p),
+                                    ]));
                                 }
                             }
                         }
@@ -269,7 +302,9 @@ impl ZoteroMcpServer {
                     "No local PDF path found for item",
                 )]))
             }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -287,16 +322,23 @@ impl ZoteroMcpServer {
             let client = ZoteroClient::new(&self.state);
             match client.get_item(&args.item_key_or_path).await {
                 Ok(item) => {
-                    if item.data.item_type == "attachment" && item.data.path.is_some() {
+                    if item.data.item_type == "attachment"
+                        && item.data.path.is_some()
+                    {
                         item.data.path.unwrap()
                     } else {
-                        match client.get_item_children(&args.item_key_or_path).await {
+                        match client
+                            .get_item_children(&args.item_key_or_path)
+                            .await
+                        {
                             Ok(children) => {
                                 let mut pdf_p = None;
                                 for c in children {
                                     if c.data.item_type == "attachment" {
                                         if let Some(p) = c.data.path {
-                                            if p.to_lowercase().ends_with(".pdf") {
+                                            if p.to_lowercase()
+                                                .ends_with(".pdf")
+                                            {
                                                 pdf_p = Some(p);
                                                 break;
                                             }
@@ -306,21 +348,27 @@ impl ZoteroMcpServer {
                                 match pdf_p {
                                     Some(p) => p,
                                     None => {
-                                        return Ok(CallToolResult::error(vec![Content::text(
-                                            "PDF attachment path not found for item",
-                                        )]))
+                                        return Ok(CallToolResult::error(vec![
+                                            Content::text(
+                                                "PDF attachment path not found for item",
+                                            ),
+                                        ]));
                                     }
                                 }
                             }
                             Err(e) => {
-                                return Ok(CallToolResult::error(vec![Content::text(
-                                    e.to_string(),
-                                )]))
+                                return Ok(CallToolResult::error(vec![
+                                    Content::text(e.to_string()),
+                                ]));
                             }
                         }
                     }
                 }
-                Err(e) => return Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+                Err(e) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        e.to_string(),
+                    )]));
+                }
             }
         };
 
@@ -332,8 +380,12 @@ impl ZoteroMcpServer {
         .await;
 
         match res {
-            Ok(Ok(text)) => Ok(CallToolResult::success(vec![Content::text(text)])),
-            Ok(Err(e)) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Ok(Ok(text)) => {
+                Ok(CallToolResult::success(vec![Content::text(text)]))
+            }
+            Ok(Err(e)) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
             Err(join_err) => Ok(CallToolResult::error(vec![Content::text(
                 join_err.to_string(),
             )])),
@@ -351,7 +403,11 @@ impl ZoteroMcpServer {
         let client = ZoteroClient::new(&self.state);
         let children = match client.get_item_children(&args.item_key).await {
             Ok(ch) => ch,
-            Err(e) => return Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    e.to_string(),
+                )]));
+            }
         };
 
         let notes: Vec<_> = children
@@ -364,10 +420,11 @@ impl ZoteroMcpServer {
         for note_item in notes {
             let note_key = note_item.key.clone();
             let note_html = note_item.data.note.unwrap_or_default();
-            let markdown = match bn_client.to_markdown(Some(&note_key), None).await {
-                Ok(md) => md,
-                Err(_) => note_html.clone(),
-            };
+            let markdown =
+                match bn_client.to_markdown(Some(&note_key), None).await {
+                    Ok(md) => md,
+                    Err(_) => note_html.clone(),
+                };
             output_notes.push(json!({
                 "key": note_key,
                 "html": note_html,
@@ -396,7 +453,9 @@ impl ZoteroMcpServer {
             Ok(item) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&item).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -426,12 +485,15 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<GetCitekeysArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let bbt_client = BetterBibtexClient::new(&self.state);
-        let keys_ref: Vec<&str> = args.item_keys.iter().map(|s| s.as_str()).collect();
+        let keys_ref: Vec<&str> =
+            args.item_keys.iter().map(|s| s.as_str()).collect();
         match bbt_client.get_citekeys(&keys_ref).await {
             Ok(map) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&map).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -444,11 +506,16 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<ExportItemsArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let bbt_client = BetterBibtexClient::new(&self.state);
-        let keys_ref: Vec<&str> = args.item_keys.iter().map(|s| s.as_str()).collect();
+        let keys_ref: Vec<&str> =
+            args.item_keys.iter().map(|s| s.as_str()).collect();
         let translator = args.translator.as_deref().unwrap_or("Better BibTeX");
         match bbt_client.export_items(&keys_ref, translator).await {
-            Ok(exported) => Ok(CallToolResult::success(vec![Content::text(exported)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Ok(exported) => {
+                Ok(CallToolResult::success(vec![Content::text(exported)]))
+            }
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -461,13 +528,20 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<BibliographyArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let bbt_client = BetterBibtexClient::new(&self.state);
-        let keys_ref: Vec<&str> = args.item_keys.iter().map(|s| s.as_str()).collect();
+        let keys_ref: Vec<&str> =
+            args.item_keys.iter().map(|s| s.as_str()).collect();
         match bbt_client
-            .bibliography(&keys_ref, args.style.as_deref(), args.locale.as_deref())
+            .bibliography(
+                &keys_ref,
+                args.style.as_deref(),
+                args.locale.as_deref(),
+            )
             .await
         {
             Ok(bib) => Ok(CallToolResult::success(vec![Content::text(bib)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -484,7 +558,9 @@ impl ZoteroMcpServer {
             Ok(res) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&res).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -497,13 +573,16 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<PandocFilterArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let bbt_client = BetterBibtexClient::new(&self.state);
-        let keys_ref: Vec<&str> = args.item_keys.iter().map(|s| s.as_str()).collect();
+        let keys_ref: Vec<&str> =
+            args.item_keys.iter().map(|s| s.as_str()).collect();
         let as_csl = args.as_csl.unwrap_or(true);
         match bbt_client.pandoc_filter(&keys_ref, as_csl).await {
             Ok(res) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&res).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -516,12 +595,15 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<RegenerateKeysArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let bbt_client = BetterBibtexClient::new(&self.state);
-        let keys_ref: Vec<&str> = args.item_keys.iter().map(|s| s.as_str()).collect();
+        let keys_ref: Vec<&str> =
+            args.item_keys.iter().map(|s| s.as_str()).collect();
         match bbt_client.regenerate_keys(&keys_ref).await {
             Ok(res) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&res).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -541,7 +623,9 @@ impl ZoteroMcpServer {
             Ok(res) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&res).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -554,14 +638,13 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<ScanAuxArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let bbt_client = BetterBibtexClient::new(&self.state);
-        match bbt_client
-            .scan_aux(&args.collection_key, &args.aux_path)
-            .await
-        {
+        match bbt_client.scan_aux(&args.collection_key, &args.aux_path).await {
             Ok(res) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&res).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -596,7 +679,9 @@ impl ZoteroMcpServer {
             .await
         {
             Ok(md) => Ok(CallToolResult::success(vec![Content::text(md)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -614,7 +699,9 @@ impl ZoteroMcpServer {
             .await
         {
             Ok(key) => Ok(CallToolResult::success(vec![Content::text(key)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -631,7 +718,9 @@ impl ZoteroMcpServer {
             Ok(res) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&res).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -648,7 +737,9 @@ impl ZoteroMcpServer {
             Ok(res) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&res).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 
@@ -665,7 +756,9 @@ impl ZoteroMcpServer {
             Ok(res) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&res).unwrap_or_default(),
             )])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
         }
     }
 }

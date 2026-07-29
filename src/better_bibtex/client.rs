@@ -1,7 +1,9 @@
 use crate::better_bibtex::models::{
     BetterBibtexStatus, CitekeyMap, JsonRpcRequest, JsonRpcResponse,
 };
-use crate::better_bibtex::sqlite::{get_default_bbt_db_path, read_bbt_citekeys_sqlite};
+use crate::better_bibtex::sqlite::{
+    get_default_bbt_db_path, read_bbt_citekeys_sqlite,
+};
 use crate::errors::ZoteroMcpError;
 use crate::state::AppState;
 use serde::Serialize;
@@ -15,7 +17,9 @@ pub(crate) struct BetterBibtexClient<'a> {
 #[expect(dead_code, reason = "Client methods invoked by MCP tool handlers")]
 impl<'a> BetterBibtexClient<'a> {
     pub(crate) fn new(state: &'a AppState) -> Self {
-        Self { state }
+        Self {
+            state,
+        }
     }
 
     async fn call_rpc<P: Serialize, R: serde::de::DeserializeOwned>(
@@ -56,7 +60,9 @@ impl<'a> BetterBibtexClient<'a> {
         }
 
         rpc_resp.result.ok_or_else(|| {
-            ZoteroMcpError::BetterBibTeX("JSON-RPC returned null result".to_string())
+            ZoteroMcpError::BetterBibTeX(
+                "JSON-RPC returned null result".to_string(),
+            )
         })
     }
 
@@ -111,12 +117,18 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("item.bibliography", params).await
     }
 
-    pub(crate) async fn search(&self, terms: &str) -> Result<Value, ZoteroMcpError> {
+    pub(crate) async fn search(
+        &self,
+        terms: &str,
+    ) -> Result<Value, ZoteroMcpError> {
         let params = vec![terms];
         self.call_rpc("item.search", params).await
     }
 
-    pub(crate) async fn get_notes(&self, item_keys: &[&str]) -> Result<Value, ZoteroMcpError> {
+    pub(crate) async fn get_notes(
+        &self,
+        item_keys: &[&str],
+    ) -> Result<Value, ZoteroMcpError> {
         let params = vec![item_keys];
         self.call_rpc("item.notes", params).await
     }

@@ -6,7 +6,10 @@ pub(crate) enum ZoteroMcpError {
     Network(#[from] reqwest::Error),
 
     #[error("Local API error: HTTP {status} - {message}")]
-    LocalApi { status: u16, message: String },
+    LocalApi {
+        status: u16,
+        message: String,
+    },
 
     #[error("Better BibTeX error: {0}")]
     BetterBibTeX(String),
@@ -16,7 +19,10 @@ pub(crate) enum ZoteroMcpError {
 
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "Constructed when pdf-extract returns error")
+        expect(
+            dead_code,
+            reason = "Constructed when pdf-extract returns error"
+        )
     )]
     #[error("PDF extraction error: {0}")]
     PdfExtract(String),

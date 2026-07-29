@@ -66,7 +66,8 @@ mod tests {
             "id": 1
         });
 
-        let resp: JsonRpcResponse<serde_json::Value> = serde_json::from_value(resp_json).unwrap();
+        let resp: JsonRpcResponse<serde_json::Value> =
+            serde_json::from_value(resp_json).unwrap();
         assert_eq!(resp.jsonrpc, "2.0");
         assert_eq!(resp.id, Some(1));
         let err = resp.error.unwrap();
