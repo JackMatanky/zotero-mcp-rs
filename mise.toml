@@ -1,5 +1,5 @@
 [tools]
-rust = "1.97.1"
+rust = { version = "nightly", components = ["rust-src", "rustfmt"] }
 hk = "1.53.0"
 "cargo:https://github.com/snowmead/rust-docs-mcp" = { version = "branch:main", crate = "rust-docs-mcp" }
 

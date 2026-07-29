@@ -7,10 +7,20 @@ local linters = new Mapping<String, Step> {
 }
 
 hooks {
+    ["commit-msg"] {
+        steps {
+            ["conventional_commit"] {
+                check = "hk util check-conventional-commit {{commit_msg_file}}"
+            }
+        }
+    }
     ["pre-commit"] {
         fix = true
         stash = "git"
-        steps = linters
+        steps {
+            ["cargo_fmt"] = Builtins.cargo_fmt
+            ["cargo_clippy"] = Builtins.cargo_clippy
+        }
     }
     ["pre-push"] {
         steps {
