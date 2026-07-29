@@ -23,7 +23,7 @@ schemars = "1.0"
 async-trait = "0.1"
 url = "2.5"
 urlencoding = "2.1"
-rusqlite = { version = "0.31", features = ["bundled"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "sqlite"] }
 
 [dev-dependencies]
 tempfile = "3"

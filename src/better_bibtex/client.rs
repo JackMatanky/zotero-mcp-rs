@@ -111,7 +111,7 @@ impl<'a> BetterBibtexClient<'a> {
         // Fast path: Try reading from ~/Zotero/better-bibtex.migrated SQLite DB
         // (~0.01ms)
         let db_path = get_default_bbt_db_path();
-        if let Ok(map) = read_bbt_citekeys_sqlite(&db_path, item_keys) {
+        if let Ok(map) = read_bbt_citekeys_sqlite(&db_path, item_keys).await {
             if !map.is_empty() {
                 return Ok(map);
             }

@@ -5,7 +5,10 @@
 
 use std::{collections::HashMap, path::Path};
 
-use rusqlite::{Connection, OpenFlags};
+use sqlx::{
+    Connection, Row,
+    sqlite::{SqliteConnectOptions, SqliteConnection},
+};
 
 use crate::{better_bibtex::models::CitekeyMap, errors::ZoteroMcpError};
 
@@ -23,7 +26,7 @@ use crate::{better_bibtex::models::CitekeyMap, errors::ZoteroMcpError};
 ///
 /// [`NotFound`]: ZoteroMcpError::NotFound
 /// [`Sqlite`]: ZoteroMcpError::Sqlite
-pub(crate) fn read_bbt_citekeys_sqlite(
+pub(crate) async fn read_bbt_citekeys_sqlite(
     db_path: &Path,
     item_keys: &[&str],
 ) -> Result<CitekeyMap, ZoteroMcpError> {
@@ -34,35 +37,38 @@ pub(crate) fn read_bbt_citekeys_sqlite(
         )));
     }
 
-    let uri = format!("file:{}?mode=ro", db_path.display());
-    let conn = Connection::open_with_flags(
-        &uri,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
-    )?;
+    let mut conn = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(db_path)
+            .read_only(true)
+            .create_if_missing(false),
+    )
+    .await?;
 
     let mut map = HashMap::new();
     if item_keys.is_empty() {
-        // Fetch all citekeys
-        let mut stmt = conn.prepare_cached(
+        let rows = sqlx::query(
             "SELECT itemKey, citationKey FROM citationkey WHERE citationKey \
              IS NOT NULL",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })?;
+        )
+        .fetch_all(&mut conn)
+        .await?;
 
-        for res in rows {
-            let (ik, ck) = res?;
-            map.insert(ik, ck);
+        for row in rows {
+            map.insert(row.try_get("itemKey")?, row.try_get("citationKey")?);
         }
     } else {
-        let mut stmt = conn.prepare_cached(
-            "SELECT citationKey FROM citationkey WHERE itemKey = ?1 AND \
-             citationKey IS NOT NULL",
-        )?;
-        for &k in item_keys {
-            if let Ok(ck) = stmt.query_row([k], |row| row.get::<_, String>(0)) {
-                map.insert(k.to_owned(), ck);
+        for &key in item_keys {
+            let row = sqlx::query(
+                "SELECT citationKey FROM citationkey WHERE itemKey = ?1 AND \
+                 citationKey IS NOT NULL",
+            )
+            .bind(key)
+            .fetch_optional(&mut conn)
+            .await?;
+
+            if let Some(row) = row {
+                map.insert(key.to_owned(), row.try_get("citationKey")?);
             }
         }
     }
@@ -100,24 +106,34 @@ mod tests {
     mod fixtures {
         use std::path::PathBuf;
 
-        use rusqlite::Connection;
+        use sqlx::{
+            Connection,
+            sqlite::{SqliteConnectOptions, SqliteConnection},
+        };
         use tempfile::TempDir;
 
         /// Creates a temp Better `BibTeX` `citationkey` table seeded with
-        /// `insert_sql` (a full `INSERT INTO citationkey (...) VALUES
-        /// (...)` statement). Returns the backing [`TempDir`] — keep it
-        /// alive for the test's duration — and the database path.
-        pub(super) fn seeded_db(insert_sql: &str) -> (TempDir, PathBuf) {
+        /// `insert_sql` (a full `INSERT INTO citationkey (...) VALUES (...)`
+        /// statement). Returns the backing [`TempDir`] — keep it alive for
+        /// the test's duration — and the database path.
+        pub(super) async fn seeded_db(insert_sql: &str) -> (TempDir, PathBuf) {
             let temp_dir = tempfile::tempdir().unwrap();
             let db_path = temp_dir.path().join("better-bibtex.migrated");
-            let conn = Connection::open(&db_path).unwrap();
-            conn.execute(
+            let mut conn = SqliteConnection::connect_with(
+                &SqliteConnectOptions::new()
+                    .filename(&db_path)
+                    .create_if_missing(true),
+            )
+            .await
+            .unwrap();
+            sqlx::query(
                 "CREATE TABLE citationkey (itemID INTEGER, itemKey TEXT, \
                  libraryID INTEGER, citationKey TEXT, pinned INTEGER)",
-                [],
             )
+            .execute(&mut conn)
+            .await
             .unwrap();
-            conn.execute(insert_sql, []).unwrap();
+            sqlx::query(insert_sql).execute(&mut conn).await.unwrap();
             (temp_dir, db_path)
         }
     }
@@ -127,49 +143,53 @@ mod tests {
 
         use super::{super::*, fixtures::seeded_db};
 
-        #[test]
-        fn returns_citekey_for_matching_item_key() {
+        #[tokio::test]
+        async fn returns_citekey_for_matching_item_key() {
             // Arrange
             let (_temp_dir, db_path) = seeded_db(
                 "INSERT INTO citationkey (itemID, itemKey, libraryID, \
                  citationKey, pinned) VALUES (1, 'ITEMKEY1', 1, 'citekey1', \
                  0)",
-            );
+            )
+            .await;
 
             // Act
-            let map =
-                read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1"]).unwrap();
+            let map = read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1"])
+                .await
+                .unwrap();
 
             // Assert
             assert_eq!(map.get("ITEMKEY1").unwrap(), "citekey1");
         }
 
-        #[test]
-        fn returns_not_found_error_when_database_is_missing() {
+        #[tokio::test]
+        async fn returns_not_found_error_when_database_is_missing() {
             // Arrange
             let temp_dir = tempfile::tempdir().unwrap();
             let db_path = temp_dir.path().join("does-not-exist.migrated");
 
             // Act
-            let err =
-                read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1"]).unwrap_err();
+            let err = read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1"])
+                .await
+                .unwrap_err();
 
             // Assert
             assert!(matches!(err, ZoteroMcpError::NotFound(_)));
         }
 
-        #[test]
-        fn returns_every_pinned_citekey_when_item_keys_is_empty() {
+        #[tokio::test]
+        async fn returns_every_pinned_citekey_when_item_keys_is_empty() {
             // Arrange
             let (_temp_dir, db_path) = seeded_db(
                 "INSERT INTO citationkey (itemID, itemKey, libraryID, \
                  citationKey, pinned) VALUES (1, 'ITEMKEY1', 1, 'citekey1', \
                  0), (2, 'ITEMKEY2', 1, 'citekey2', 0), (3, 'ITEMKEY3', 1, \
                  NULL, 0)",
-            );
+            )
+            .await;
 
             // Act
-            let map = read_bbt_citekeys_sqlite(&db_path, &[]).unwrap();
+            let map = read_bbt_citekeys_sqlite(&db_path, &[]).await.unwrap();
 
             // Assert
             assert_eq!(map.len(), 2);
@@ -178,17 +198,19 @@ mod tests {
             assert!(!map.contains_key("ITEMKEY3"));
         }
 
-        #[test]
-        fn omits_items_without_a_pinned_citekey_from_the_map() {
+        #[tokio::test]
+        async fn omits_items_without_a_pinned_citekey_from_the_map() {
             // Arrange
             let (_temp_dir, db_path) = seeded_db(
                 "INSERT INTO citationkey (itemID, itemKey, libraryID, \
                  citationKey, pinned) VALUES (1, 'ITEMKEY1', 1, NULL, 0)",
-            );
+            )
+            .await;
 
             // Act
             let map =
                 read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1", "MISSING"])
+                    .await
                     .unwrap();
 
             // Assert
