@@ -57,7 +57,10 @@ impl<'a> BetterNotesClient<'a> {
         payload: P,
     ) -> Result<R, ZoteroMcpError> {
         let url = format!("{}{}", self.state.better_notes_url, endpoint);
-        let resp = self.state.client.post(&url).json(&payload).send().await?;
+        let resp = self
+            .state
+            .send_with_retry(self.state.client.post(&url).json(&payload))
+            .await?;
 
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::BetterNotes(format!(

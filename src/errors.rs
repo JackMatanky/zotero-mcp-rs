@@ -21,6 +21,9 @@ pub(crate) enum ZoteroMcpError {
     #[error("PDF extraction error: {0}")]
     PdfExtract(String),
 
+    #[error("SQLite error: {0}")]
+    Sqlite(#[from] rusqlite::Error),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 

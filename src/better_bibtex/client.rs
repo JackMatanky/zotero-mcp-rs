@@ -1,6 +1,7 @@
 use crate::better_bibtex::models::{
     BetterBibtexStatus, CitekeyMap, JsonRpcRequest, JsonRpcResponse,
 };
+use crate::better_bibtex::sqlite::{get_default_bbt_db_path, read_bbt_citekeys_sqlite};
 use crate::errors::ZoteroMcpError;
 use crate::state::AppState;
 use serde::Serialize;
@@ -31,10 +32,12 @@ impl<'a> BetterBibtexClient<'a> {
 
         let resp = self
             .state
-            .client
-            .post(&self.state.better_bibtex_url)
-            .json(&req_body)
-            .send()
+            .send_with_retry(
+                self.state
+                    .client
+                    .post(&self.state.better_bibtex_url)
+                    .json(&req_body),
+            )
             .await?;
 
         if !resp.status().is_success() {
@@ -76,6 +79,15 @@ impl<'a> BetterBibtexClient<'a> {
         &self,
         item_keys: &[&str],
     ) -> Result<CitekeyMap, ZoteroMcpError> {
+        // Fast path: Try reading from ~/Zotero/better-bibtex.migrated SQLite DB (~0.01ms)
+        let db_path = get_default_bbt_db_path();
+        if let Ok(map) = read_bbt_citekeys_sqlite(&db_path, item_keys) {
+            if !map.is_empty() {
+                return Ok(map);
+            }
+        }
+
+        // Fallback: Query Better BibTeX JSON-RPC API
         let params = vec![item_keys];
         self.call_rpc("item.citationkey", params).await
     }

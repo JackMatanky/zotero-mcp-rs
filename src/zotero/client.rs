@@ -56,7 +56,10 @@ impl<'a> ZoteroClient<'a> {
             "{}/users/0/items?limit={}&sort=dateModified&direction=desc&itemType=-note",
             self.state.zotero_api_url, limit
         );
-        let resp = self.state.client.get(&url).send().await?;
+        let resp = self
+            .state
+            .send_with_retry(self.state.client.get(&url))
+            .await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -83,7 +86,10 @@ impl<'a> ZoteroClient<'a> {
         let encoded_q = urlencoding::encode(query);
         let url = format!("{base}?q={encoded_q}&limit={limit}&itemType=-note");
 
-        let resp = self.state.client.get(&url).send().await?;
+        let resp = self
+            .state
+            .send_with_retry(self.state.client.get(&url))
+            .await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -96,7 +102,10 @@ impl<'a> ZoteroClient<'a> {
 
     pub(crate) async fn get_item(&self, item_key: &str) -> Result<ZoteroItem, ZoteroMcpError> {
         let url = format!("{}/users/0/items/{}", self.state.zotero_api_url, item_key);
-        let resp = self.state.client.get(&url).send().await?;
+        let resp = self
+            .state
+            .send_with_retry(self.state.client.get(&url))
+            .await?;
         if resp.status() == StatusCode::NOT_FOUND {
             return Err(ZoteroMcpError::NotFound(format!("Item {}", item_key)));
         }
@@ -112,7 +121,10 @@ impl<'a> ZoteroClient<'a> {
 
     pub(crate) async fn get_collections(&self) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
         let url = format!("{}/users/0/collections", self.state.zotero_api_url);
-        let resp = self.state.client.get(&url).send().await?;
+        let resp = self
+            .state
+            .send_with_retry(self.state.client.get(&url))
+            .await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -131,7 +143,10 @@ impl<'a> ZoteroClient<'a> {
             "{}/users/0/collections/{}/items",
             self.state.zotero_api_url, collection_key
         );
-        let resp = self.state.client.get(&url).send().await?;
+        let resp = self
+            .state
+            .send_with_retry(self.state.client.get(&url))
+            .await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -150,7 +165,10 @@ impl<'a> ZoteroClient<'a> {
             "{}/users/0/items/{}/children",
             self.state.zotero_api_url, item_key
         );
-        let resp = self.state.client.get(&url).send().await?;
+        let resp = self
+            .state
+            .send_with_retry(self.state.client.get(&url))
+            .await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -166,7 +184,10 @@ impl<'a> ZoteroClient<'a> {
             "{}/users/0/items/{}/fulltext",
             self.state.zotero_api_url, item_key
         );
-        let resp = self.state.client.get(&url).send().await?;
+        let resp = self
+            .state
+            .send_with_retry(self.state.client.get(&url))
+            .await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
@@ -195,7 +216,10 @@ impl<'a> ZoteroClient<'a> {
             "note": note_content,
         }]);
 
-        let resp = self.state.client.post(&url).json(&payload).send().await?;
+        let resp = self
+            .state
+            .send_with_retry(self.state.client.post(&url).json(&payload))
+            .await?;
         if !resp.status().is_success() {
             return Err(ZoteroMcpError::LocalApi {
                 status: resp.status().as_u16(),
