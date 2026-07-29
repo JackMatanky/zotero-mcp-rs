@@ -28,8 +28,9 @@ pub(crate) struct ZoteroItem {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ZoteroItemData {
     pub(crate) key: String,
+    #[serde(default)]
     pub(crate) version: u64,
-    #[serde(rename = "itemType")]
+    #[serde(rename = "itemType", default)]
     pub(crate) item_type: String,
     pub(crate) title: Option<String>,
     #[serde(default)]
@@ -73,6 +74,17 @@ pub(crate) struct ZoteroItemData {
     pub(crate) path: Option<String>,
     // For notes
     pub(crate) note: Option<String>,
+    // For annotations
+    #[serde(rename = "annotationType")]
+    pub(crate) annotation_type: Option<String>,
+    #[serde(rename = "annotationText")]
+    pub(crate) annotation_text: Option<String>,
+    #[serde(rename = "annotationComment")]
+    pub(crate) annotation_comment: Option<String>,
+    #[serde(rename = "annotationColor")]
+    pub(crate) annotation_color: Option<String>,
+    #[serde(rename = "annotationPageLabel")]
+    pub(crate) annotation_page_label: Option<String>,
 }
 
 /// An author, editor, or other creator credited on an item.

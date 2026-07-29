@@ -211,3 +211,116 @@ pub(crate) struct NoteTreeArgs {
     /// Note item key
     pub(crate) item_key: String,
 }
+/// Arguments for `zotero_create_collection`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct CreateCollectionArgs {
+    /// Name of the collection to create
+    pub(crate) name: String,
+    /// Optional key of parent collection
+    pub(crate) parent_collection: Option<String>,
+}
+
+/// Arguments for `zotero_search_collections`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SearchCollectionsArgs {
+    /// Search query string matching collection names
+    pub(crate) query: String,
+}
+
+/// Arguments for `zotero_manage_collections`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct ManageCollectionsArgs {
+    /// Target collection key
+    pub(crate) collection_key: String,
+    /// List of item keys to add or remove
+    pub(crate) item_keys: Vec<String>,
+    /// Set to true to remove items instead of adding them
+    pub(crate) remove: Option<bool>,
+}
+/// Arguments for `zotero_update_item`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct UpdateItemArgs {
+    /// Item key to update
+    pub(crate) item_key: String,
+    /// JSON object containing fields to update (e.g. title, tags, abstractNote)
+    pub(crate) fields: serde_json::Value,
+}
+
+/// Arguments for `zotero_attach_file`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct AttachFileArgs {
+    /// Parent item key to attach the file to
+    pub(crate) parent_item_key: String,
+    /// Title of the attachment item
+    pub(crate) title: String,
+    /// Local file path or URL to link
+    pub(crate) path_or_url: String,
+    /// Optional MIME content type (defaults to application/pdf)
+    pub(crate) content_type: Option<String>,
+}
+
+/// Arguments for `zotero_batch_update_tags`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct BatchUpdateTagsArgs {
+    /// Item keys to update tags on
+    pub(crate) item_keys: Vec<String>,
+    /// Tags to add to every target item
+    pub(crate) add_tags: Option<Vec<String>>,
+    /// Tags to remove from every target item
+    pub(crate) remove_tags: Option<Vec<String>>,
+}
+/// Arguments for `zotero_find_duplicates`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct FindDuplicatesArgs {
+    /// Optional collection key to scope duplicate detection
+    pub(crate) collection_key: Option<String>,
+}
+/// Arguments for `zotero_search_by_tag`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SearchByTagArgs {
+    /// Tag string to search for
+    pub(crate) tag: String,
+    /// Maximum number of items to return (default: 50)
+    pub(crate) limit: Option<usize>,
+}
+
+/// Arguments for `zotero_search_by_citation_key`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SearchByCitationKeyArgs {
+    /// Citation key string to match
+    pub(crate) citekey: String,
+}
+/// Arguments for `zotero_advanced_search`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct AdvancedSearchArgs {
+    /// List of search conditions: `[{"field": "title"|"tag"|"doi"|"creator", "operator": "contains"|"equals"|"is_not", "value": "..."}]`
+    pub(crate) conditions: Vec<serde_json::Value>,
+    /// Maximum number of items to return (default: 50)
+    pub(crate) limit: Option<usize>,
+}
+
+/// Arguments for `zotero_library_coverage`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct LibraryCoverageArgs {
+    /// Optional collection key to scope coverage analysis
+    pub(crate) collection_key: Option<String>,
+}
+/// Arguments for `zotero_synthesize_annotations`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SynthesizeAnnotationsArgs {
+    /// Item key to extract annotations and notes from
+    pub(crate) item_key: String,
+}
+/// Arguments for `search` (`ChatGPT` connector compatibility).
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SearchArgs {
+    /// Search query string
+    pub(crate) query: String,
+}
+
+/// Arguments for `fetch` (`ChatGPT` connector compatibility).
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct FetchArgs {
+    /// Item key or ID to fetch
+    pub(crate) id: String,
+}

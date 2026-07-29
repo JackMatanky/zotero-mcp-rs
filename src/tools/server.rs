@@ -25,13 +25,18 @@ use crate::{
     pdf::extract_pdf_pages,
     state::AppState,
     tools::models::{
-        AutoexportAddArgs, BetterBibtexSearchArgs, BibliographyArgs,
-        CreateNoteArgs, EmptyArgs, ExportItemsArgs, FromMarkdownArgs,
-        GetCitekeysArgs, GetCollectionItemsArgs, GetItemArgs,
-        GetItemChildrenArgs, GetItemFulltextArgs, GetItemMetadataArgs,
-        GetNotesArgs, GetPdfPathArgs, GetRecentArgs, NoteRelationsArgs,
-        NoteTreeArgs, PandocFilterArgs, ReadPdfPagesArgs, RegenerateKeysArgs,
-        RunTemplateArgs, ScanAuxArgs, SearchItemsArgs, ToMarkdownArgs,
+        AdvancedSearchArgs, AttachFileArgs, AutoexportAddArgs,
+        BatchUpdateTagsArgs, BetterBibtexSearchArgs, BibliographyArgs,
+        CreateCollectionArgs, CreateNoteArgs, EmptyArgs, ExportItemsArgs,
+        FetchArgs, FindDuplicatesArgs, FromMarkdownArgs, GetCitekeysArgs,
+        GetCollectionItemsArgs, GetItemArgs, GetItemChildrenArgs,
+        GetItemFulltextArgs, GetItemMetadataArgs, GetNotesArgs, GetPdfPathArgs,
+        GetRecentArgs, LibraryCoverageArgs, ManageCollectionsArgs,
+        NoteRelationsArgs, NoteTreeArgs, PandocFilterArgs, ReadPdfPagesArgs,
+        RegenerateKeysArgs, RunTemplateArgs, ScanAuxArgs, SearchArgs,
+        SearchByCitationKeyArgs, SearchByTagArgs, SearchCollectionsArgs,
+        SearchItemsArgs, SynthesizeAnnotationsArgs, ToMarkdownArgs,
+        UpdateItemArgs,
     },
     zotero::ZoteroClient,
 };
@@ -48,13 +53,156 @@ impl ZoteroMcpServer {
             state,
         }
     }
+
+    #[allow(
+        clippy::unused_self,
+        clippy::unnecessary_wraps,
+        reason = "instance method on ZoteroMcpServer"
+    )]
+    pub(crate) fn list_resources_impl(
+        &self,
+    ) -> Result<rmcp::model::ListResourcesResult, rmcp::ErrorData> {
+        let raw_resource = rmcp::model::RawResource {
+            uri: "zotero://collections".to_owned(),
+            name: "Zotero Collections".to_owned(),
+            title: None,
+            description: Some(
+                "List of all collections in Zotero library".to_owned(),
+            ),
+            icons: None,
+            mime_type: Some("application/json".to_owned()),
+            size: None,
+        };
+        Ok(rmcp::model::ListResourcesResult {
+            resources: vec![rmcp::model::Annotated::new(raw_resource, None)],
+            next_cursor: None,
+        })
+    }
+
+    pub(crate) async fn read_resource_impl(
+        &self,
+        uri: &str,
+    ) -> Result<rmcp::model::ReadResourceResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        if uri == "zotero://collections" {
+            match client.get_collections().await {
+                Ok(collections) => {
+                    let json_str = serde_json::to_string_pretty(&collections)
+                        .unwrap_or_default();
+                    Ok(rmcp::model::ReadResourceResult {
+                        contents: vec![rmcp::model::ResourceContents::TextResourceContents {
+                            uri: uri.to_owned(),
+                            mime_type: Some("application/json".to_owned()),
+                            text: json_str,
+                            meta: None,
+                        }],
+                    })
+                }
+                Err(e) => {
+                    Err(rmcp::ErrorData::internal_error(e.to_string(), None))
+                }
+            }
+        } else if let Some(item_key) = uri.strip_prefix("zotero://items/") {
+            match client.get_item(item_key).await {
+                Ok(item) => {
+                    let json_str =
+                        serde_json::to_string_pretty(&item).unwrap_or_default();
+                    Ok(rmcp::model::ReadResourceResult {
+                        contents: vec![rmcp::model::ResourceContents::TextResourceContents {
+                            uri: uri.to_owned(),
+                            mime_type: Some("application/json".to_owned()),
+                            text: json_str,
+                            meta: None,
+                        }],
+                    })
+                }
+                Err(e) => {
+                    Err(rmcp::ErrorData::internal_error(e.to_string(), None))
+                }
+            }
+        } else {
+            Err(rmcp::ErrorData::invalid_params(
+                format!("Unknown resource URI: {uri}"),
+                None,
+            ))
+        }
+    }
+
+    #[allow(
+        clippy::unused_self,
+        clippy::unnecessary_wraps,
+        reason = "instance method on ZoteroMcpServer"
+    )]
+    pub(crate) fn list_prompts_impl(
+        &self,
+    ) -> Result<rmcp::model::ListPromptsResult, rmcp::ErrorData> {
+        let prompt = rmcp::model::Prompt {
+            name: "zotero_literature_review".to_owned(),
+            title: None,
+            description: Some(
+                "Generate a literature review prompt for a Zotero collection"
+                    .to_owned(),
+            ),
+            icons: None,
+            arguments: Some(vec![rmcp::model::PromptArgument {
+                name: "collection_key".to_owned(),
+                title: None,
+                description: Some("Key of the Zotero collection".to_owned()),
+                required: Some(true),
+            }]),
+        };
+        Ok(rmcp::model::ListPromptsResult {
+            prompts: vec![prompt],
+            next_cursor: None,
+        })
+    }
+
+    #[allow(
+        clippy::unused_self,
+        clippy::unnecessary_wraps,
+        reason = "instance method on ZoteroMcpServer"
+    )]
+    pub(crate) fn get_prompt_impl(
+        &self,
+        name: &str,
+        arguments: Option<&serde_json::Map<String, serde_json::Value>>,
+    ) -> Result<rmcp::model::GetPromptResult, rmcp::ErrorData> {
+        if name == "zotero_literature_review" {
+            let col_key = arguments
+                .and_then(|args| args.get("collection_key"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            Ok(rmcp::model::GetPromptResult {
+                description: Some(
+                    "Synthesize literature review from Zotero items".to_owned(),
+                ),
+                messages: vec![rmcp::model::PromptMessage {
+                    role: rmcp::model::PromptMessageRole::User,
+                    content: rmcp::model::PromptMessageContent::Text {
+                        text: format!(
+                            "Please analyze and synthesize a comprehensive literature review for Zotero collection '{col_key}'. Summarize key methodology, findings, and research gaps across all papers."
+                        ),
+                    },
+                }],
+            })
+        } else {
+            Err(rmcp::ErrorData::invalid_params(
+                format!("Unknown prompt: {name}"),
+                None,
+            ))
+        }
+    }
 }
 
 impl ServerHandler for ZoteroMcpServer {
     fn get_info(&self) -> InitializeResult {
         InitializeResult {
             protocol_version: ProtocolVersion::V_2024_11_05,
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
+            capabilities: ServerCapabilities::builder()
+                .enable_tools()
+                .enable_resources()
+                .enable_prompts()
+                .build(),
             server_info: Implementation {
                 name: "zotero-mcp-rs".to_owned(),
                 version: "0.1.0".to_owned(),
@@ -86,6 +234,37 @@ impl ServerHandler for ZoteroMcpServer {
             self, param, context,
         );
         Self::tool_router().call(ctx).await
+    }
+
+    async fn list_resources(
+        &self,
+        _param: Option<rmcp::model::PaginatedRequestParam>,
+        _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
+    ) -> Result<rmcp::model::ListResourcesResult, rmcp::ErrorData> {
+        self.list_resources_impl()
+    }
+    async fn read_resource(
+        &self,
+        param: rmcp::model::ReadResourceRequestParam,
+        _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
+    ) -> Result<rmcp::model::ReadResourceResult, rmcp::ErrorData> {
+        self.read_resource_impl(&param.uri).await
+    }
+
+    async fn list_prompts(
+        &self,
+        _param: Option<rmcp::model::PaginatedRequestParam>,
+        _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
+    ) -> Result<rmcp::model::ListPromptsResult, rmcp::ErrorData> {
+        self.list_prompts_impl()
+    }
+
+    async fn get_prompt(
+        &self,
+        param: rmcp::model::GetPromptRequestParam,
+        _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
+    ) -> Result<rmcp::model::GetPromptResult, rmcp::ErrorData> {
+        self.get_prompt_impl(&param.name, param.arguments.as_ref())
     }
 }
 
@@ -257,6 +436,288 @@ impl ZoteroMcpServer {
             Ok(items) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&items).unwrap_or_default(),
             )])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+    #[tool(
+        name = "zotero_create_collection",
+        description = "Create a new Zotero collection (requires write permission)"
+    )]
+    pub(crate) async fn zotero_create_collection(
+        &self,
+        Parameters(args): Parameters<CreateCollectionArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client
+            .create_collection(&args.name, args.parent_collection.as_deref())
+            .await
+        {
+            Ok(col) => Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&col).unwrap_or_default(),
+            )])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+
+    #[tool(
+        name = "zotero_search_collections",
+        description = "Search collections by name"
+    )]
+    pub(crate) async fn zotero_search_collections(
+        &self,
+        Parameters(args): Parameters<SearchCollectionsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.search_collections(&args.query).await {
+            Ok(cols) => Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&cols).unwrap_or_default(),
+            )])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+
+    #[tool(
+        name = "zotero_manage_collections",
+        description = "Add or remove items in a collection (requires write permission)"
+    )]
+    pub(crate) async fn zotero_manage_collections(
+        &self,
+        Parameters(args): Parameters<ManageCollectionsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        let remove = args.remove.unwrap_or(false);
+        match client
+            .manage_collection_items(
+                &args.collection_key,
+                &args.item_keys,
+                remove,
+            )
+            .await
+        {
+            Ok(()) => Ok(CallToolResult::success(vec![Content::text(
+                "Collection items updated successfully",
+            )])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+    #[tool(
+        name = "zotero_update_item",
+        description = "Update fields on an existing Zotero item (requires write permission)"
+    )]
+    pub(crate) async fn zotero_update_item(
+        &self,
+        Parameters(args): Parameters<UpdateItemArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.update_item(&args.item_key, args.fields).await {
+            Ok(item) => Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&item).unwrap_or_default(),
+            )])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+
+    #[tool(
+        name = "zotero_attach_file",
+        description = "Attach a file link to a Zotero parent item (requires write permission)"
+    )]
+    pub(crate) async fn zotero_attach_file(
+        &self,
+        Parameters(args): Parameters<AttachFileArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client
+            .attach_file_link(
+                &args.parent_item_key,
+                &args.title,
+                &args.path_or_url,
+                args.content_type.as_deref(),
+            )
+            .await
+        {
+            Ok(item) => Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&item).unwrap_or_default(),
+            )])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+
+    #[tool(
+        name = "search",
+        description = "ChatGPT Connector search tool - search Zotero items by query"
+    )]
+    pub(crate) async fn chatgpt_search(
+        &self,
+        Parameters(args): Parameters<SearchArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let search_args = SearchItemsArgs {
+            query: args.query,
+            collection_key: None,
+            limit: Some(20),
+        };
+        self.zotero_search_items(Parameters(search_args)).await
+    }
+
+    #[tool(
+        name = "fetch",
+        description = "ChatGPT Connector fetch tool - get item metadata by item ID/key"
+    )]
+    pub(crate) async fn chatgpt_fetch(
+        &self,
+        Parameters(args): Parameters<FetchArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let meta_args = GetItemMetadataArgs {
+            item_key: args.id,
+            format: Some("json".to_owned()),
+        };
+        self.zotero_get_item_metadata(Parameters(meta_args)).await
+    }
+
+    #[tool(
+        name = "zotero_batch_update_tags",
+        description = "Batch add/remove tags across items (requires write permission)"
+    )]
+    pub(crate) async fn zotero_batch_update_tags(
+        &self,
+        Parameters(args): Parameters<BatchUpdateTagsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        let add = args.add_tags.unwrap_or_default();
+        let rem = args.remove_tags.unwrap_or_default();
+        match client.batch_update_tags(&args.item_keys, &add, &rem).await {
+            Ok(count) => Ok(CallToolResult::success(vec![Content::text(
+                format!("Successfully updated tags across {count} items"),
+            )])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+
+    #[tool(
+        name = "zotero_find_duplicates",
+        description = "Find potential duplicate items by title and DOI matching"
+    )]
+    pub(crate) async fn zotero_find_duplicates(
+        &self,
+        Parameters(args): Parameters<FindDuplicatesArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.find_duplicates(args.collection_key.as_deref()).await {
+            Ok(dups) => Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&dups).unwrap_or_default(),
+            )])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+    #[tool(
+        name = "zotero_search_by_tag",
+        description = "Search items by a specific tag"
+    )]
+    pub(crate) async fn zotero_search_by_tag(
+        &self,
+        Parameters(args): Parameters<SearchByTagArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        let limit = args.limit.unwrap_or(50);
+        match client.search_by_tag(&args.tag, limit).await {
+            Ok(items) => Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&items).unwrap_or_default(),
+            )])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+
+    #[tool(
+        name = "zotero_search_by_citation_key",
+        description = "Search items by citation key"
+    )]
+    pub(crate) async fn zotero_search_by_citation_key(
+        &self,
+        Parameters(args): Parameters<SearchByCitationKeyArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.search_by_citation_key(&args.citekey).await {
+            Ok(Some(item)) => Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&item).unwrap_or_default(),
+            )])),
+            Ok(None) => {
+                Ok(CallToolResult::error(vec![Content::text(format!(
+                    "No item found matching citation key '{}'",
+                    args.citekey
+                ))]))
+            }
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+    #[tool(
+        name = "zotero_advanced_search",
+        description = "Perform structured search matching multiple field conditions"
+    )]
+    pub(crate) async fn zotero_advanced_search(
+        &self,
+        Parameters(args): Parameters<AdvancedSearchArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        let limit = args.limit.unwrap_or(50);
+        match client.advanced_search(args.conditions, limit).await {
+            Ok(items) => Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&items).unwrap_or_default(),
+            )])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+
+    #[tool(
+        name = "zotero_library_coverage",
+        description = "Analyze library or collection statistics for PDF, DOI, and note coverage"
+    )]
+    pub(crate) async fn zotero_library_coverage(
+        &self,
+        Parameters(args): Parameters<LibraryCoverageArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.get_library_coverage(args.collection_key.as_deref()).await
+        {
+            Ok(stats) => Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&stats).unwrap_or_default(),
+            )])),
+            Err(e) => {
+                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+            }
+        }
+    }
+    #[tool(
+        name = "zotero_synthesize_annotations",
+        description = "Extract and synthesize all annotations and notes for an item into Markdown"
+    )]
+    pub(crate) async fn zotero_synthesize_annotations(
+        &self,
+        Parameters(args): Parameters<SynthesizeAnnotationsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.synthesize_annotations(&args.item_key).await {
+            Ok(md) => Ok(CallToolResult::success(vec![Content::text(md)])),
             Err(e) => {
                 Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
             }
@@ -1380,6 +1841,94 @@ mod tests {
             let first = parsed.first().expect("parsed contains items");
             assert_eq!(first["markdown"], "**Hello**");
             assert_eq!(first["html"], "<p>Hello</p>");
+        }
+    }
+    mod resources_and_prompts {
+        use pretty_assertions::assert_eq;
+        use serde_json::json;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, zotero_state},
+        };
+
+        #[tokio::test]
+        async fn list_resources_returns_collections_uri() {
+            let server = ZoteroMcpServer::new(zotero_state(String::new()));
+            let res = server.list_resources_impl().unwrap();
+            assert_eq!(res.resources.len(), 1);
+            assert_eq!(
+                res.resources.first().expect("resource").raw.uri,
+                "zotero://collections"
+            );
+        }
+
+        #[tokio::test]
+        async fn read_resource_returns_item_json() {
+            let item = json!({
+                "key": "ITEM123",
+                "version": 1,
+                "data": { "key": "ITEM123", "itemType": "journalArticle", "title": "Resource Test Paper" }
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &item.to_string())]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            let res = server
+                .read_resource_impl("zotero://items/ITEM123")
+                .await
+                .unwrap();
+            assert_eq!(res.contents.len(), 1);
+            let content = res.contents.first().expect("resource content");
+            let is_text = matches!(content, rmcp::model::ResourceContents::TextResourceContents { text, .. } if text.contains("Resource Test Paper"));
+            assert!(is_text);
+        }
+
+        #[tokio::test]
+        async fn list_and_get_prompts_work() {
+            let server = ZoteroMcpServer::new(zotero_state(String::new()));
+            let list = server.list_prompts_impl().unwrap();
+            assert_eq!(list.prompts.len(), 1);
+            assert_eq!(
+                list.prompts.first().expect("prompt").name,
+                "zotero_literature_review"
+            );
+
+            let mut args = serde_json::Map::new();
+            args.insert("collection_key".to_owned(), json!("COL123"));
+            let prompt = server
+                .get_prompt_impl("zotero_literature_review", Some(&args))
+                .unwrap();
+            assert_eq!(prompt.messages.len(), 1);
+        }
+        #[tokio::test]
+        async fn chatgpt_connector_search_and_fetch_tools() {
+            let item = json!({
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Quantum Physics Paper" }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &json!([item]).to_string()),
+                http_response("200 OK", &item.to_string()),
+            ]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            let search_res = server
+                .chatgpt_search(Parameters(SearchArgs {
+                    query: "quantum".to_owned(),
+                }))
+                .await
+                .unwrap();
+            assert!(!search_res.is_error.unwrap_or(false));
+
+            let fetch_res = server
+                .chatgpt_fetch(Parameters(FetchArgs {
+                    id: "ITEM1".to_owned(),
+                }))
+                .await
+                .unwrap();
+            assert!(!fetch_res.is_error.unwrap_or(false));
         }
     }
 }
