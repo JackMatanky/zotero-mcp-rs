@@ -4,11 +4,6 @@
 //! them to build the JSON Schema `description` shown to MCP clients, so
 //! wording is user-facing, not just for maintainers.
 
-#![expect(
-    dead_code,
-    reason = "MCP tool argument structs deserialized dynamically by rmcp \
-              router"
-)]
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -101,29 +96,6 @@ pub(crate) struct CreateNoteArgs {
     pub(crate) parent_item_key: String,
     /// HTML or Markdown content for the note
     pub(crate) note_content: String,
-}
-
-/// Arguments for the note-update tool.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct UpdateNoteArgs {
-    /// Note item key
-    pub(crate) note_item_key: String,
-    /// Updated HTML or Markdown content
-    pub(crate) note_content: String,
-}
-
-/// Arguments for the add-by-DOI tool.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct AddByDoiArgs {
-    /// DOI identifier (e.g. "10.1038/s41586-020-2649-2")
-    pub(crate) doi: String,
-}
-
-/// Arguments for the add-from-file tool.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct AddFromFileArgs {
-    /// Absolute path to PDF, RIS, or `BibTeX` file
-    pub(crate) file_path: String,
 }
 
 // --- Better BibTeX ---

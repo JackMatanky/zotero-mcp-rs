@@ -6,13 +6,6 @@
 use std::path::Path;
 
 use crate::errors::ZoteroMcpError;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Function called by spawn_blocking in MCP tool handler"
-    )
-)]
 /// Extracts text from the PDF at `file_path`, optionally restricted to
 /// `page_numbers`.
 ///
@@ -154,12 +147,12 @@ mod tests {
             let text = "page one\x0Cpage two";
 
             // Act
-            let with_one_valid = filter_pages(text, Some(&[1, 99]));
-            let with_none_valid = filter_pages(text, Some(&[99]));
+            let one_valid_res = filter_pages(text, Some(&[1, 99]));
+            let none_valid_res = filter_pages(text, Some(&[99]));
 
             // Assert
-            assert_eq!(with_one_valid, "page one");
-            assert_eq!(with_none_valid, "");
+            assert_eq!(one_valid_res, "page one");
+            assert_eq!(none_valid_res, "");
         }
 
         #[test]
@@ -176,7 +169,7 @@ mod tests {
 
         #[test]
         fn returns_empty_string_for_out_of_range_page_of_an_undelimited_document()
-        {
+         {
             // Arrange
             let text = "only page";
 

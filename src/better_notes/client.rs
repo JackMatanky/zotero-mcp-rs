@@ -17,7 +17,6 @@ pub(crate) struct BetterNotesClient<'a> {
     state: &'a AppState,
 }
 
-#[expect(dead_code, reason = "Client methods invoked by MCP tool handlers")]
 impl<'a> BetterNotesClient<'a> {
     pub(crate) fn new(state: &'a AppState) -> Self {
         Self {
@@ -258,11 +257,11 @@ mod tests {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap();
             std::thread::spawn(move || {
-                for resp in responses {
-                    let Ok((mut stream, _)) = listener.accept() else {
-                        return;
-                    };
-                    let mut buf = [0_u8; 4096];
+                let mut it = responses.into_iter();
+                while let (Some(resp), Ok((mut stream, _))) =
+                    (it.next(), listener.accept())
+                {
+                    let mut buf = [0_u8; 1024];
                     let _ = stream.read(&mut buf);
                     let _ = stream.write_all(resp.as_bytes());
                 }
@@ -348,13 +347,10 @@ mod tests {
                 .unwrap_err();
 
             // Assert
-            match err {
-                ZoteroMcpError::BetterNotes(msg) => {
-                    assert!(msg.contains("400"));
-                    assert!(msg.contains("/notes/to-markdown"));
-                }
-                other => panic!("expected BetterNotes error, got {other:?}"),
-            }
+            assert!(matches!(
+                &err,
+                ZoteroMcpError::BetterNotes(msg) if msg.contains("400") && msg.contains("/notes/to-markdown")
+            ));
         }
     }
 

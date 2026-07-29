@@ -39,13 +39,6 @@ use crate::{
 /// The MCP tool router: holds the shared [`AppState`] and implements
 /// [`ServerHandler`], hosting every `#[tool]` method below.
 pub(crate) struct ZoteroMcpServer {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "State accessed dynamically by tool router methods"
-        )
-    )]
     pub(crate) state: AppState,
 }
 
@@ -57,7 +50,6 @@ impl ZoteroMcpServer {
     }
 }
 
-#[async_trait::async_trait]
 impl ServerHandler for ZoteroMcpServer {
     fn get_info(&self) -> InitializeResult {
         InitializeResult {
@@ -73,6 +65,28 @@ impl ServerHandler for ZoteroMcpServer {
             instructions: None,
         }
     }
+
+    async fn list_tools(
+        &self,
+        _param: Option<rmcp::model::PaginatedRequestParam>,
+        _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
+    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
+        Ok(rmcp::model::ListToolsResult {
+            tools: Self::tool_router().list_all(),
+            next_cursor: None,
+        })
+    }
+
+    async fn call_tool(
+        &self,
+        param: rmcp::model::CallToolRequestParam,
+        context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let ctx = rmcp::handler::server::tool::ToolCallContext::new(
+            self, param, context,
+        );
+        Self::tool_router().call(ctx).await
+    }
 }
 
 #[tool_router]
@@ -84,7 +98,7 @@ impl ZoteroMcpServer {
         description = "Check diagnostic status of Zotero Local API, Better \
                        BibTeX, and Better Notes bridge"
     )]
-    async fn zotero_status(
+    pub(crate) async fn zotero_status(
         &self,
         _params: Parameters<EmptyArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -114,7 +128,7 @@ impl ZoteroMcpServer {
         name = "zotero_get_recent",
         description = "Fetch most recently modified items from Zotero library"
     )]
-    async fn zotero_get_recent(
+    pub(crate) async fn zotero_get_recent(
         &self,
         Parameters(args): Parameters<GetRecentArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -135,7 +149,7 @@ impl ZoteroMcpServer {
         description = "Search Zotero items by query across title, creators, \
                        year, or collection"
     )]
-    async fn zotero_search_items(
+    pub(crate) async fn zotero_search_items(
         &self,
         Parameters(args): Parameters<SearchItemsArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -158,7 +172,7 @@ impl ZoteroMcpServer {
         name = "zotero_get_item",
         description = "Fetch item details by Zotero item key"
     )]
-    async fn zotero_get_item(
+    pub(crate) async fn zotero_get_item(
         &self,
         Parameters(args): Parameters<GetItemArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -178,7 +192,7 @@ impl ZoteroMcpServer {
         description = "Get metadata for an item as JSON or formatted BibTeX \
                        string"
     )]
-    async fn zotero_get_item_metadata(
+    pub(crate) async fn zotero_get_item_metadata(
         &self,
         Parameters(args): Parameters<GetItemMetadataArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -212,7 +226,7 @@ impl ZoteroMcpServer {
         name = "zotero_get_collections",
         description = "Get list of all Zotero collections in library"
     )]
-    async fn zotero_get_collections(
+    pub(crate) async fn zotero_get_collections(
         &self,
         _params: Parameters<EmptyArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -234,7 +248,7 @@ impl ZoteroMcpServer {
         name = "zotero_get_collection_items",
         description = "Fetch items inside a specific Zotero collection"
     )]
-    async fn zotero_get_collection_items(
+    pub(crate) async fn zotero_get_collection_items(
         &self,
         Parameters(args): Parameters<GetCollectionItemsArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -254,7 +268,7 @@ impl ZoteroMcpServer {
         description = "Get child items (notes, attachments) for a given item \
                        key"
     )]
-    async fn zotero_get_item_children(
+    pub(crate) async fn zotero_get_item_children(
         &self,
         Parameters(args): Parameters<GetItemChildrenArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -273,7 +287,7 @@ impl ZoteroMcpServer {
         name = "zotero_get_item_fulltext",
         description = "Fetch Zotero indexed attachment text for an item key"
     )]
-    async fn zotero_get_item_fulltext(
+    pub(crate) async fn zotero_get_item_fulltext(
         &self,
         Parameters(args): Parameters<GetItemFulltextArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -291,7 +305,7 @@ impl ZoteroMcpServer {
         description = "Resolve absolute local PDF file path for an attachment \
                        item or parent item"
     )]
-    async fn zotero_get_pdf_path(
+    pub(crate) async fn zotero_get_pdf_path(
         &self,
         Parameters(args): Parameters<GetPdfPathArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -342,7 +356,7 @@ impl ZoteroMcpServer {
         description = "Extract exact page ranges from a PDF file path using \
                        local PDF reader"
     )]
-    async fn zotero_read_pdf_pages(
+    pub(crate) async fn zotero_read_pdf_pages(
         &self,
         Parameters(args): Parameters<ReadPdfPagesArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -385,7 +399,7 @@ impl ZoteroMcpServer {
                                         return Ok(CallToolResult::error(
                                             vec![Content::text(
                                                 "PDF attachment path not \
-                                                 found for item",
+                                             found for item",
                                             )],
                                         ));
                                     }
@@ -432,7 +446,7 @@ impl ZoteroMcpServer {
         description = "Fetch notes for an item key (formatted via Better \
                        Notes if bridge available)"
     )]
-    async fn zotero_get_notes(
+    pub(crate) async fn zotero_get_notes(
         &self,
         Parameters(args): Parameters<GetNotesArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -478,7 +492,7 @@ impl ZoteroMcpServer {
         description = "Create a note attached to a parent item (requires \
                        write permission)"
     )]
-    async fn zotero_create_note(
+    pub(crate) async fn zotero_create_note(
         &self,
         Parameters(args): Parameters<CreateNoteArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -502,7 +516,7 @@ impl ZoteroMcpServer {
         name = "better_bibtex_status",
         description = "Check Better BibTeX JSON-RPC API readiness"
     )]
-    async fn better_bibtex_status(
+    pub(crate) async fn better_bibtex_status(
         &self,
         _params: Parameters<EmptyArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -517,7 +531,7 @@ impl ZoteroMcpServer {
         name = "better_bibtex_get_citekeys",
         description = "Map Zotero item keys to Better BibTeX citation keys"
     )]
-    async fn better_bibtex_get_citekeys(
+    pub(crate) async fn better_bibtex_get_citekeys(
         &self,
         Parameters(args): Parameters<GetCitekeysArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -539,7 +553,7 @@ impl ZoteroMcpServer {
         description = "Export items by keys/citekeys using format: Better \
                        BibTeX, Better BibLaTeX, or CSL JSON"
     )]
-    async fn better_bibtex_export_items(
+    pub(crate) async fn better_bibtex_export_items(
         &self,
         Parameters(args): Parameters<ExportItemsArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -561,7 +575,7 @@ impl ZoteroMcpServer {
         name = "better_bibtex_bibliography",
         description = "Generate formatted bibliography for citation keys"
     )]
-    async fn better_bibtex_bibliography(
+    pub(crate) async fn better_bibtex_bibliography(
         &self,
         Parameters(args): Parameters<BibliographyArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -587,7 +601,7 @@ impl ZoteroMcpServer {
         name = "better_bibtex_search",
         description = "High-precision search using Better BibTeX search engine"
     )]
-    async fn better_bibtex_search(
+    pub(crate) async fn better_bibtex_search(
         &self,
         Parameters(args): Parameters<BetterBibtexSearchArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -606,7 +620,7 @@ impl ZoteroMcpServer {
         name = "better_bibtex_pandoc_filter",
         description = "Get Pandoc citeproc filter metadata for items"
     )]
-    async fn better_bibtex_pandoc_filter(
+    pub(crate) async fn better_bibtex_pandoc_filter(
         &self,
         Parameters(args): Parameters<PandocFilterArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -629,7 +643,7 @@ impl ZoteroMcpServer {
         description = "Regenerate citekeys for items (requires write \
                        permission)"
     )]
-    async fn better_bibtex_regenerate_keys(
+    pub(crate) async fn better_bibtex_regenerate_keys(
         &self,
         Parameters(args): Parameters<RegenerateKeysArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -651,7 +665,7 @@ impl ZoteroMcpServer {
         description = "Add an auto-export job for a collection (requires \
                        write permission)"
     )]
-    async fn better_bibtex_autoexport_add(
+    pub(crate) async fn better_bibtex_autoexport_add(
         &self,
         Parameters(args): Parameters<AutoexportAddArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -674,7 +688,7 @@ impl ZoteroMcpServer {
         description = "Scan LaTeX .aux file to import citations into a \
                        collection (requires write permission)"
     )]
-    async fn better_bibtex_scan_aux(
+    pub(crate) async fn better_bibtex_scan_aux(
         &self,
         Parameters(args): Parameters<ScanAuxArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -695,7 +709,7 @@ impl ZoteroMcpServer {
         name = "better_notes_status",
         description = "Check Better Notes bridge plugin status"
     )]
-    async fn better_notes_status(
+    pub(crate) async fn better_notes_status(
         &self,
         _params: Parameters<EmptyArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -711,7 +725,7 @@ impl ZoteroMcpServer {
         description = "Convert Zotero note HTML into clean Better Notes \
                        Markdown format"
     )]
-    async fn better_notes_to_markdown(
+    pub(crate) async fn better_notes_to_markdown(
         &self,
         Parameters(args): Parameters<ToMarkdownArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -732,7 +746,7 @@ impl ZoteroMcpServer {
         description = "Create a Zotero note from Markdown content via Better \
                        Notes parser (requires write permission)"
     )]
-    async fn better_notes_from_markdown(
+    pub(crate) async fn better_notes_from_markdown(
         &self,
         Parameters(args): Parameters<FromMarkdownArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -752,7 +766,7 @@ impl ZoteroMcpServer {
         name = "better_notes_run_template",
         description = "Run a named Better Notes template on an item"
     )]
-    async fn better_notes_run_template(
+    pub(crate) async fn better_notes_run_template(
         &self,
         Parameters(args): Parameters<RunTemplateArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -772,7 +786,7 @@ impl ZoteroMcpServer {
         description = "Fetch outlinks, backlinks, and graph relations for a \
                        note"
     )]
-    async fn better_notes_get_relations(
+    pub(crate) async fn better_notes_get_relations(
         &self,
         Parameters(args): Parameters<NoteRelationsArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -792,7 +806,7 @@ impl ZoteroMcpServer {
         description = "Retrieve the full Better Notes hierarchy tree for a \
                        note"
     )]
-    async fn better_notes_get_tree(
+    pub(crate) async fn better_notes_get_tree(
         &self,
         Parameters(args): Parameters<NoteTreeArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -864,11 +878,11 @@ mod tests {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap();
             std::thread::spawn(move || {
-                for resp in responses {
-                    let Ok((mut stream, _)) = listener.accept() else {
-                        return;
-                    };
-                    let mut buf = [0_u8; 4096];
+                let mut it = responses.into_iter();
+                while let (Some(resp), Ok((mut stream, _))) =
+                    (it.next(), listener.accept())
+                {
+                    let mut buf = [0_u8; 1024];
                     let _ = stream.read(&mut buf);
                     let _ = stream.write_all(resp.as_bytes());
                 }
@@ -885,10 +899,12 @@ mod tests {
         /// text — acceptable in test-only code asserting a specific tool
         /// response shape.
         pub(super) fn result_text(result: &CallToolResult) -> &str {
-            match &result.content.first().expect("result has content").raw {
-                RawContent::Text(t) => &t.text,
-                other => panic!("expected text content, got {other:?}"),
+            if let Some(content) = result.content.first() {
+                if let RawContent::Text(ref t) = content.raw {
+                    return &t.text;
+                }
             }
+            ""
         }
     }
 
@@ -914,10 +930,8 @@ mod tests {
                     "path": "/tmp/file.pdf"
                 }
             });
-            let base = mock_server(vec![http_response(
-                "200 OK",
-                &item.to_string(),
-            )]);
+            let base =
+                mock_server(vec![http_response("200 OK", &item.to_string())]);
             let server = ZoteroMcpServer::new(zotero_state(base));
 
             // Act
@@ -1007,7 +1021,10 @@ mod tests {
 
             // Assert
             assert_eq!(result.is_error, Some(true));
-            assert_eq!(result_text(&result), "No local PDF path found for item");
+            assert_eq!(
+                result_text(&result),
+                "No local PDF path found for item"
+            );
         }
 
         #[tokio::test]
@@ -1072,10 +1089,8 @@ mod tests {
                     "path": "/nonexistent/att.pdf"
                 }
             });
-            let base = mock_server(vec![http_response(
-                "200 OK",
-                &item.to_string(),
-            )]);
+            let base =
+                mock_server(vec![http_response("200 OK", &item.to_string())]);
             let server = ZoteroMcpServer::new(zotero_state(base));
 
             // Act
@@ -1191,10 +1206,8 @@ mod tests {
                     "title": "My Book"
                 }
             });
-            let base = mock_server(vec![http_response(
-                "200 OK",
-                &item.to_string(),
-            )]);
+            let base =
+                mock_server(vec![http_response("200 OK", &item.to_string())]);
             let server = ZoteroMcpServer::new(test_state(
                 base,
                 String::new(),
@@ -1328,10 +1341,15 @@ mod tests {
             // Assert
             let parsed: Vec<Value> =
                 serde_json::from_str(result_text(&result)).unwrap();
-            assert_eq!(parsed.len(), 1, "attachment child must be filtered out");
-            assert_eq!(parsed[0]["key"], "NOTE1");
-            assert_eq!(parsed[0]["html"], "<p>Hello</p>");
-            assert_eq!(parsed[0]["markdown"], "<p>Hello</p>");
+            assert_eq!(
+                parsed.len(),
+                1,
+                "attachment child must be filtered out"
+            );
+            let first = parsed.first().expect("parsed has element");
+            assert_eq!(first["key"], "NOTE1");
+            assert_eq!(first["html"], "<p>Hello</p>");
+            assert_eq!(first["markdown"], "<p>Hello</p>");
         }
 
         #[tokio::test]
@@ -1359,8 +1377,9 @@ mod tests {
             // Assert
             let parsed: Vec<Value> =
                 serde_json::from_str(result_text(&result)).unwrap();
-            assert_eq!(parsed[0]["markdown"], "**Hello**");
-            assert_eq!(parsed[0]["html"], "<p>Hello</p>");
+            let first = parsed.first().expect("parsed contains items");
+            assert_eq!(first["markdown"], "**Hello**");
+            assert_eq!(first["html"], "<p>Hello</p>");
         }
     }
 }

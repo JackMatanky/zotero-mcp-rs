@@ -16,7 +16,6 @@ pub(crate) struct ZoteroClient<'a> {
     state: &'a AppState,
 }
 
-#[expect(dead_code, reason = "Client methods invoked by MCP tool handlers")]
 impl<'a> ZoteroClient<'a> {
     pub(crate) fn new(state: &'a AppState) -> Self {
         Self {
@@ -382,11 +381,11 @@ mod tests {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap();
             std::thread::spawn(move || {
-                for resp in responses {
-                    let Ok((mut stream, _)) = listener.accept() else {
-                        return;
-                    };
-                    let mut buf = [0_u8; 4096];
+                let mut it = responses.into_iter();
+                while let (Some(resp), Ok((mut stream, _))) =
+                    (it.next(), listener.accept())
+                {
+                    let mut buf = [0_u8; 1024];
                     let _ = stream.read(&mut buf);
                     let _ = stream.write_all(resp.as_bytes());
                 }
@@ -473,10 +472,8 @@ mod tests {
                 "version": 1,
                 "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle" }
             }]);
-            let base = mock_server(vec![http_response(
-                "200 OK",
-                &items.to_string(),
-            )]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
             let state = test_state(base, false);
 
             // Act
@@ -485,7 +482,7 @@ mod tests {
 
             // Assert
             assert_eq!(result.len(), 1);
-            assert_eq!(result[0].key, "ITEM1");
+            assert_eq!(result.first().map(|i| i.key.as_str()), Some("ITEM1"));
         }
 
         #[tokio::test]
@@ -498,17 +495,16 @@ mod tests {
             let state = test_state(base, false);
 
             // Act
-            let err =
-                ZoteroClient::new(&state).get_recent_items(5).await.unwrap_err();
+            let err = ZoteroClient::new(&state)
+                .get_recent_items(5)
+                .await
+                .unwrap_err();
 
             // Assert
-            match err {
-                ZoteroMcpError::LocalApi { status, message } => {
-                    assert_eq!(status, 400);
-                    assert_eq!(message, "invalid limit");
-                }
-                other => panic!("expected LocalApi error, got {other:?}"),
-            }
+            assert!(matches!(
+                &err,
+                ZoteroMcpError::LocalApi { status: 400, message } if message == "invalid limit"
+            ));
         }
     }
 
@@ -534,7 +530,8 @@ mod tests {
             let state = test_state(base, false);
 
             // Act
-            let result = ZoteroClient::new(&state).get_item("ITEM2").await.unwrap();
+            let result =
+                ZoteroClient::new(&state).get_item("ITEM2").await.unwrap();
 
             // Assert
             assert_eq!(result.key, "ITEM2");
@@ -547,8 +544,10 @@ mod tests {
             let state = test_state(base, false);
 
             // Act
-            let err =
-                ZoteroClient::new(&state).get_item("MISSING").await.unwrap_err();
+            let err = ZoteroClient::new(&state)
+                .get_item("MISSING")
+                .await
+                .unwrap_err();
 
             // Assert
             assert!(matches!(err, ZoteroMcpError::NotFound(_)));
@@ -660,10 +659,13 @@ mod tests {
                 .unwrap_err();
 
             // Assert
-            match err {
-                ZoteroMcpError::LocalApi { status, .. } => assert_eq!(status, 500),
-                other => panic!("expected LocalApi error, got {other:?}"),
-            }
+            assert!(matches!(
+                &err,
+                ZoteroMcpError::LocalApi {
+                    status: 500,
+                    ..
+                }
+            ));
         }
     }
 }

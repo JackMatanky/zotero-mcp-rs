@@ -13,29 +13,14 @@ pub(crate) struct JsonRpcRequest<'a, T: Serialize> {
     pub(crate) id: u64,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Deserialized from Better BibTeX JSON-RPC response"
-    )
-)]
 #[derive(Debug, Deserialize)]
 /// A JSON-RPC 2.0 response envelope, carrying either `result` or `error`.
 pub(crate) struct JsonRpcResponse<T> {
     pub(crate) jsonrpc: String,
     pub(crate) result: Option<T>,
     pub(crate) error: Option<JsonRpcError>,
-    pub(crate) id: Option<u64>,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Deserialized from Better BibTeX JSON-RPC error"
-    )
-)]
 /// A JSON-RPC 2.0 error object.
 #[derive(Debug, Deserialize)]
 pub(crate) struct JsonRpcError {
@@ -111,7 +96,6 @@ mod tests {
 
             // Assert
             assert_eq!(resp.jsonrpc, "2.0");
-            assert_eq!(resp.id, Some(1));
             let err = resp.error.unwrap();
             assert_eq!(err.code, -32600);
             assert_eq!(err.data, Some(serde_json::json!("extra detail")));

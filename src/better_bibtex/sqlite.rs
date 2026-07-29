@@ -51,7 +51,8 @@ pub(crate) fn read_bbt_citekeys_sqlite(
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
 
-        for (ik, ck) in rows.flatten() {
+        for res in rows {
+            let (ik, ck) = res?;
             map.insert(ik, ck);
         }
     } else {
@@ -186,8 +187,9 @@ mod tests {
             );
 
             // Act
-            let map = read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1", "MISSING"])
-                .unwrap();
+            let map =
+                read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1", "MISSING"])
+                    .unwrap();
 
             // Assert
             assert!(map.is_empty());

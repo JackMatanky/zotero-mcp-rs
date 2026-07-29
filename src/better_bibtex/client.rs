@@ -23,7 +23,6 @@ pub(crate) struct BetterBibtexClient<'a> {
     state: &'a AppState,
 }
 
-#[expect(dead_code, reason = "Client methods invoked by MCP tool handlers")]
 impl<'a> BetterBibtexClient<'a> {
     pub(crate) fn new(state: &'a AppState) -> Self {
         Self {
@@ -72,9 +71,18 @@ impl<'a> BetterBibtexClient<'a> {
         }
 
         let rpc_resp: JsonRpcResponse<R> = resp.json().await?;
-        if let Some(err) = rpc_resp.error {
+        if rpc_resp.jsonrpc != "2.0" {
             return Err(ZoteroMcpError::BetterBibTeX(format!(
-                "RPC error {}: {}",
+                "Unsupported JSON-RPC version {}",
+                rpc_resp.jsonrpc
+            )));
+        }
+
+        if let Some(err) = rpc_resp.error {
+            let detail =
+                err.data.map(|d| format!(" (data: {d})")).unwrap_or_default();
+            return Err(ZoteroMcpError::BetterBibTeX(format!(
+                "RPC error {}: {}{detail}",
                 err.code, err.message
             )));
         }
@@ -182,51 +190,6 @@ impl<'a> BetterBibtexClient<'a> {
     ) -> Result<Value, ZoteroMcpError> {
         let params = vec![terms];
         self.call_rpc("item.search", params).await
-    }
-
-    /// Fetches notes attached to `item_keys` via Better `BibTeX`.
-    ///
-    /// # Errors
-    ///
-    /// - [`BetterBibTeX`] if the JSON-RPC call fails
-    ///
-    /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
-    pub(crate) async fn get_notes(
-        &self,
-        item_keys: &[&str],
-    ) -> Result<Value, ZoteroMcpError> {
-        let params = vec![item_keys];
-        self.call_rpc("item.notes", params).await
-    }
-
-    /// Fetches attachments for `item_keys` via Better `BibTeX`.
-    ///
-    /// # Errors
-    ///
-    /// - [`BetterBibTeX`] if the JSON-RPC call fails
-    ///
-    /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
-    pub(crate) async fn get_attachments(
-        &self,
-        item_keys: &[&str],
-    ) -> Result<Value, ZoteroMcpError> {
-        let params = vec![item_keys];
-        self.call_rpc("item.attachments", params).await
-    }
-
-    /// Fetches the collections containing `item_keys` via Better `BibTeX`.
-    ///
-    /// # Errors
-    ///
-    /// - [`BetterBibTeX`] if the JSON-RPC call fails
-    ///
-    /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
-    pub(crate) async fn get_collections(
-        &self,
-        item_keys: &[&str],
-    ) -> Result<Value, ZoteroMcpError> {
-        let params = vec![item_keys];
-        self.call_rpc("item.collections", params).await
     }
 
     /// Fetches Pandoc citeproc filter metadata for `item_keys`, as CSL JSON
@@ -366,11 +329,11 @@ mod tests {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap();
             std::thread::spawn(move || {
-                for resp in responses {
-                    let Ok((mut stream, _)) = listener.accept() else {
-                        return;
-                    };
-                    let mut buf = [0_u8; 4096];
+                let mut it = responses.into_iter();
+                while let (Some(resp), Ok((mut stream, _))) =
+                    (it.next(), listener.accept())
+                {
+                    let mut buf = [0_u8; 1024];
                     let _ = stream.read(&mut buf);
                     let _ = stream.write_all(resp.as_bytes());
                 }
@@ -406,10 +369,11 @@ mod tests {
         async fn reports_not_ready_when_http_error() {
             // Arrange: 5xx is retried by AppState::send_with_retry (up to 3
             // attempts total), so the mock must answer every attempt.
-            let base = mock_server(vec![
-                http_response("500 Internal Server Error", "");
-                3
-            ]);
+            let base =
+                mock_server(vec![
+                    http_response("500 Internal Server Error", "");
+                    3
+                ]);
             let state = test_state(base, false);
 
             // Act
@@ -443,15 +407,15 @@ mod tests {
                 .unwrap_err();
 
             // Assert
-            match err {
-                ZoteroMcpError::BetterBibTeX(msg) => assert!(msg.contains("404")),
-                other => panic!("expected BetterBibTeX error, got {other:?}"),
-            }
+            assert!(matches!(
+                &err,
+                ZoteroMcpError::BetterBibTeX(msg) if msg.contains("404")
+            ));
         }
 
         #[tokio::test]
         async fn returns_better_bibtex_error_when_response_carries_an_rpc_error()
-        {
+         {
             // Arrange
             let base = mock_server(vec![http_response(
                 "200 OK",
@@ -466,13 +430,10 @@ mod tests {
                 .unwrap_err();
 
             // Assert
-            match err {
-                ZoteroMcpError::BetterBibTeX(msg) => {
-                    assert!(msg.contains("-32600"));
-                    assert!(msg.contains("boom"));
-                }
-                other => panic!("expected BetterBibTeX error, got {other:?}"),
-            }
+            assert!(matches!(
+                &err,
+                ZoteroMcpError::BetterBibTeX(msg) if msg.contains("-32600") && msg.contains("boom")
+            ));
         }
 
         #[tokio::test]
@@ -491,12 +452,10 @@ mod tests {
                 .unwrap_err();
 
             // Assert
-            match err {
-                ZoteroMcpError::BetterBibTeX(msg) => {
-                    assert!(msg.contains("null result"));
-                }
-                other => panic!("expected BetterBibTeX error, got {other:?}"),
-            }
+            assert!(matches!(
+                &err,
+                ZoteroMcpError::BetterBibTeX(msg) if msg.contains("null result")
+            ));
         }
     }
 

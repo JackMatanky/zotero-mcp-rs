@@ -171,10 +171,10 @@ mod tests {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap();
             std::thread::spawn(move || {
-                for resp in responses {
-                    let Ok((mut stream, _)) = listener.accept() else {
-                        return;
-                    };
+                let mut it = responses.into_iter();
+                while let (Some(resp), Ok((mut stream, _))) =
+                    (it.next(), listener.accept())
+                {
                     let mut buf = [0_u8; 1024];
                     let _ = stream.read(&mut buf);
                     let _ = stream.write_all(resp.as_bytes());
@@ -281,14 +281,15 @@ mod tests {
 
         #[tokio::test]
         async fn returns_last_response_after_exhausting_retries_on_persistent_5xx()
-        {
+         {
             // Arrange: every attempt (RETRY_MAX_ATTEMPTS of them) stays
             // transient, so the final attempt's response is still returned
             // rather than an error.
             let responses = vec![
                 "HTTP/1.1 503 Service Unavailable\r\nContent-Length: \
                  0\r\nConnection: close\r\n\r\n";
-                RETRY_MAX_ATTEMPTS as usize
+                usize::try_from(RETRY_MAX_ATTEMPTS)
+                    .unwrap_or(3)
             ];
             let base = mock_server(responses);
             let state = test_state(false);
@@ -304,7 +305,7 @@ mod tests {
 
         #[tokio::test]
         async fn returns_network_error_after_exhausting_retries_on_connection_refused()
-        {
+         {
             // Arrange: port 0 is never a live listener, so every attempt is
             // refused — exercises is_transient_error's connect-error branch.
             let state = test_state(false);
