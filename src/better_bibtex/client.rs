@@ -95,9 +95,9 @@ impl<'a> BetterBibtexClient<'a> {
 
     /// Maps `item_keys` to their Better `BibTeX` citation keys.
     ///
-    /// Tries the local `SQLite` citekey cache first (fast path, no HTTP
-    /// round trip); falls back to the JSON-RPC `item.citationkey` call if
-    /// the cache is missing, unreadable, or yields no matches.
+    /// Tries the local `SQLite` citekey cache first (fast path, no HTTP round
+    /// trip); falls back to the JSON-RPC `item.citationkey` call if the cache
+    /// is missing, unreadable, or yields no matches.
     ///
     /// # Errors
     ///
@@ -122,8 +122,8 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("item.citationkey", params).await
     }
 
-    /// Exports `item_keys` using the named `translator` (e.g. `Better
-    /// BibTeX`, `Better BibLaTeX`, `CSL JSON`).
+    /// Exports `item_keys` using the named `translator` (e.g. `Better BibTeX`,
+    /// `Better BibLaTeX`, `CSL JSON`).
     ///
     /// # Errors
     ///
@@ -215,8 +215,8 @@ impl<'a> BetterBibtexClient<'a> {
     /// using `translator` whenever the collection changes.
     ///
     /// Mutates Better `BibTeX`'s export configuration; assumes the caller has
-    /// already enforced [`AppState::check_write_permission`], and
-    /// re-checks it itself before issuing the call.
+    /// already enforced [`AppState::check_write_permission`], and re-checks it
+    /// itself before issuing the call.
     ///
     /// # Errors
     ///

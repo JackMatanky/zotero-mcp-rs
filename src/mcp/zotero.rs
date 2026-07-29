@@ -1,4 +1,5 @@
-//! MCP tool handlers, argument models, and unit tests for Zotero Local API tools.
+//! MCP tool handlers, argument models, and unit tests for Zotero Local API
+//! tools.
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -189,7 +190,8 @@ pub(crate) struct SearchByCitationKeyArgs {
 /// Arguments for `zotero_advanced_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AdvancedSearchArgs {
-    /// List of search conditions: [{"field": "title", "operator": "contains", "value": "..."}].
+    /// List of search conditions: [{"field": "title", "operator": "contains",
+    /// "value": "..."}].
     pub(crate) conditions: Vec<serde_json::Value>,
     /// Maximum number of items to return (default: 20).
     pub(crate) limit: Option<usize>,

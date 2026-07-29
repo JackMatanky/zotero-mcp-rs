@@ -60,8 +60,8 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res)
     }
 
-    /// Converts a note to Markdown, either by `item_key` (an existing
-    /// Zotero note) or raw `html`.
+    /// Converts a note to Markdown, either by `item_key` (an existing Zotero
+    /// note) or raw `html`.
     ///
     /// # Errors
     ///
@@ -82,12 +82,12 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.markdown)
     }
 
-    /// Creates a note attached to `parent_key` from `markdown`, returning
-    /// the created note's item key.
+    /// Creates a note attached to `parent_key` from `markdown`, returning the
+    /// created note's item key.
     ///
     /// Mutates the Zotero library; assumes the caller has already enforced
-    /// [`AppState::check_write_permission`], and re-checks it itself
-    /// before issuing the call.
+    /// [`AppState::check_write_permission`], and re-checks it itself before
+    /// issuing the call.
     ///
     /// # Errors
     ///
@@ -239,8 +239,8 @@ mod tests {
             fixtures::{http_response, mock_server, test_state},
         };
 
-        // Exercised indirectly through `to_markdown`, the simplest caller
-        // of the shared `post_json` envelope handling.
+        // Exercised indirectly through `to_markdown`, the simplest caller of
+        // the shared `post_json` envelope handling.
 
         #[tokio::test]
         async fn returns_better_notes_error_when_response_is_non_success() {

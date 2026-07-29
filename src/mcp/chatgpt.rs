@@ -1,4 +1,5 @@
-//! MCP tool handlers, argument models, and unit tests for `ChatGPT` connector compatibility tools.
+//! MCP tool handlers, argument models, and unit tests for `ChatGPT` connector
+//! compatibility tools.
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;

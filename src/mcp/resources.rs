@@ -6,7 +6,8 @@ impl ZoteroMcpServer {
     #[expect(
         clippy::unused_self,
         clippy::unnecessary_wraps,
-        reason = "instance method on ZoteroMcpServer required for ServerHandler trait dispatch"
+        reason = "instance method on ZoteroMcpServer required for \
+                  ServerHandler trait dispatch"
     )]
     /// Lists MCP resources exposed by the server.
     ///
@@ -92,7 +93,8 @@ impl ZoteroMcpServer {
     #[expect(
         clippy::unused_self,
         clippy::unnecessary_wraps,
-        reason = "instance method on ZoteroMcpServer required for ServerHandler trait dispatch"
+        reason = "instance method on ZoteroMcpServer required for \
+                  ServerHandler trait dispatch"
     )]
     /// Lists MCP prompts exposed by the server.
     ///
@@ -126,7 +128,8 @@ impl ZoteroMcpServer {
 
     #[expect(
         clippy::unused_self,
-        reason = "instance method on ZoteroMcpServer required for ServerHandler trait dispatch"
+        reason = "instance method on ZoteroMcpServer required for \
+                  ServerHandler trait dispatch"
     )]
     /// Builds an MCP prompt response by prompt name.
     ///
@@ -152,8 +155,9 @@ impl ZoteroMcpServer {
                     role: rmcp::model::PromptMessageRole::User,
                     content: rmcp::model::PromptMessageContent::Text {
                         text: format!(
-                            "Please perform a structured literature review of all paper items in \
-                             Zotero collection key '{col_key}'."
+                            "Please perform a structured literature review of \
+                             all paper items in Zotero collection key \
+                             '{col_key}'."
                         ),
                     },
                 }],

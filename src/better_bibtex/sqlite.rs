@@ -1,7 +1,7 @@
 //! Read-only `SQLite` access to Better `BibTeX`'s citekey cache database.
 //!
-//! Used as a fast, offline fallback for citekey lookups that avoids a
-//! round trip through the JSON-RPC API.
+//! Used as a fast, offline fallback for citekey lookups that avoids a round
+//! trip through the JSON-RPC API.
 
 use std::{collections::HashMap, path::Path};
 
@@ -16,8 +16,8 @@ use crate::{better_bibtex::models::CitekeyMap, errors::ZoteroMcpError};
 /// database at `db_path`.
 ///
 /// An empty `item_keys` slice fetches every citekey in the database.
-/// Returns a map from Zotero item key to citation key; items with no
-/// pinned citekey are simply absent from the result, not an error.
+/// Returns a map from Zotero item key to citation key; items with no pinned
+/// citekey are simply absent from the result, not an error.
 ///
 /// # Errors
 ///
@@ -148,8 +148,7 @@ mod tests {
             // Arrange
             let (_temp_dir, db_path) = seeded_db(
                 "INSERT INTO citationkey (itemID, itemKey, libraryID, \
-                 citationKey, pinned) VALUES (1, 'ITEMKEY1', 1, 'citekey1', \
-                 0)",
+                 citationKey, pinned) VALUES (1, 'ITEMKEY1', 1, 'citekey1', 0)",
             )
             .await;
 

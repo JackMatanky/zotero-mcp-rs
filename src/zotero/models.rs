@@ -25,11 +25,10 @@ pub(crate) struct ZoteroItem {
 
 /// Bibliographic and attachment fields carried by a Zotero item.
 ///
-/// Maps Zotero's `camelCase` JSON field names. Covers every item type the
-/// Local API can return; most fields only apply to specific item types
-/// (`itemType`). Notably, `parent_item`, `link_mode`, `content_type`,
-/// `charset`, `filename`, and `path` are populated only for attachments,
-/// and `note` only for notes.
+/// Maps Zotero's `camelCase` JSON field names. Covers every item type the Local
+/// API can return; most fields only apply to specific item types (`itemType`).
+/// Notably, `parent_item`, `link_mode`, `content_type`, `charset`, `filename`,
+/// and `path` are populated only for attachments, and `note` only for notes.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ZoteroItemData {

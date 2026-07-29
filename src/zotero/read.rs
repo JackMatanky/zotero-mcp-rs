@@ -17,7 +17,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_recent_items(
         &self,
@@ -47,7 +48,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn search_items(
         &self,
@@ -82,7 +84,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_item(
         &self,
@@ -110,7 +113,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_collections(
         &self,
@@ -134,7 +138,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_collection_items(
         &self,
@@ -161,7 +166,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_item_children(
         &self,
@@ -189,7 +195,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_item_fulltext(
         &self,
@@ -221,7 +228,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn search_by_tag(
         &self,
@@ -250,7 +258,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn search_by_citation_key(
         &self,
@@ -277,7 +286,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn advanced_search(
         &self,
@@ -300,7 +310,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_library_coverage(
         &self,
@@ -361,7 +372,8 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn synthesize_annotations(
         &self,

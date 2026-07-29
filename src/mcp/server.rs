@@ -1,4 +1,5 @@
-//! Wires every MCP tool to the Zotero, Better `BibTeX`, and Better Notes clients.
+//! Wires every MCP tool to the Zotero, Better `BibTeX`, and Better Notes
+//! clients.
 
 use rmcp::{
     ServerHandler,
@@ -133,7 +134,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_status",
-        description = "Check Zotero Local API availability, version, and connectivity"
+        description = "Check Zotero Local API availability, version, and \
+                       connectivity"
     )]
     /// Routes `zotero_status` MCP tool calls to the domain handler.
     ///
@@ -203,7 +205,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_item_metadata",
-        description = "Get metadata for an item as JSON or formatted BibTeX string"
+        description = "Get metadata for an item as JSON or formatted BibTeX \
+                       string"
     )]
     /// Routes `zotero_get_item_metadata` MCP tool calls to the domain handler.
     ///
@@ -222,7 +225,8 @@ impl ZoteroMcpServer {
         name = "zotero_get_collection_items",
         description = "Fetch items inside a specific Zotero collection"
     )]
-    /// Routes `zotero_get_collection_items` MCP tool calls to the domain handler.
+    /// Routes `zotero_get_collection_items` MCP tool calls to the domain
+    /// handler.
     ///
     /// # Errors
     ///
@@ -237,7 +241,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_item_children",
-        description = "Get child items (notes, attachments) for a given item key"
+        description = "Get child items (notes, attachments) for a given item \
+                       key"
     )]
     /// Routes `zotero_get_item_children` MCP tool calls to the domain handler.
     ///
@@ -271,7 +276,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_pdf_path",
-        description = "Locate the local PDF file path for an item or its attachment"
+        description = "Locate the local PDF file path for an item or its \
+                       attachment"
     )]
     /// Routes `zotero_get_pdf_path` MCP tool calls to the domain handler.
     ///
@@ -324,7 +330,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_create_note",
-        description = "Attach a new note to an item (requires write permission)"
+        description = "Attach a new note to an item (requires write \
+                       permission)"
     )]
     /// Routes `zotero_create_note` MCP tool calls to the domain handler.
     ///
@@ -341,7 +348,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_create_collection",
-        description = "Create a new Zotero collection (requires write permission)"
+        description = "Create a new Zotero collection (requires write \
+                       permission)"
     )]
     /// Routes `zotero_create_collection` MCP tool calls to the domain handler.
     ///
@@ -375,7 +383,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_manage_collections",
-        description = "Add or remove items to/from a collection (requires write permission)"
+        description = "Add or remove items to/from a collection (requires \
+                       write permission)"
     )]
     /// Routes `zotero_manage_collections` MCP tool calls to the domain handler.
     ///
@@ -392,7 +401,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_update_item",
-        description = "Update fields of an existing item using PATCH (requires write permission)"
+        description = "Update fields of an existing item using PATCH \
+                       (requires write permission)"
     )]
     /// Routes `zotero_update_item` MCP tool calls to the domain handler.
     ///
@@ -409,7 +419,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_attach_file",
-        description = "Attach a file link to a parent item (requires write permission)"
+        description = "Attach a file link to a parent item (requires write \
+                       permission)"
     )]
     /// Routes `zotero_attach_file` MCP tool calls to the domain handler.
     ///
@@ -426,7 +437,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_batch_update_tags",
-        description = "Batch add/remove tags across items (requires write permission)"
+        description = "Batch add/remove tags across items (requires write \
+                       permission)"
     )]
     /// Routes `zotero_batch_update_tags` MCP tool calls to the domain handler.
     ///
@@ -443,7 +455,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_find_duplicates",
-        description = "Finds potential duplicate items in library or collection by matching title or DOI"
+        description = "Finds potential duplicate items in library or \
+                       collection by matching title or DOI"
     )]
     /// Routes `zotero_find_duplicates` MCP tool calls to the domain handler.
     ///
@@ -479,7 +492,8 @@ impl ZoteroMcpServer {
         name = "zotero_search_by_citation_key",
         description = "Search Zotero items by citation key string"
     )]
-    /// Routes `zotero_search_by_citation_key` MCP tool calls to the domain handler.
+    /// Routes `zotero_search_by_citation_key` MCP tool calls to the domain
+    /// handler.
     ///
     /// # Errors
     ///
@@ -494,7 +508,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_advanced_search",
-        description = "Advanced multi-condition structured search over item fields"
+        description = "Advanced multi-condition structured search over item \
+                       fields"
     )]
     /// Routes `zotero_advanced_search` MCP tool calls to the domain handler.
     ///
@@ -511,7 +526,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_library_coverage",
-        description = "Analyze library or collection statistics for PDF, DOI, and note coverage"
+        description = "Analyze library or collection statistics for PDF, DOI, \
+                       and note coverage"
     )]
     /// Routes `zotero_library_coverage` MCP tool calls to the domain handler.
     ///
@@ -528,9 +544,11 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_synthesize_annotations",
-        description = "Extract and synthesize annotations and notes into structured Markdown"
+        description = "Extract and synthesize annotations and notes into \
+                       structured Markdown"
     )]
-    /// Routes `zotero_synthesize_annotations` MCP tool calls to the domain handler.
+    /// Routes `zotero_synthesize_annotations` MCP tool calls to the domain
+    /// handler.
     ///
     /// # Errors
     ///
@@ -549,7 +567,8 @@ impl ZoteroMcpServer {
         name = "better_bibtex_get_citekeys",
         description = "Fetch citation keys for Zotero items via Better BibTeX"
     )]
-    /// Routes `better_bibtex_get_citekeys` MCP tool calls to the domain handler.
+    /// Routes `better_bibtex_get_citekeys` MCP tool calls to the domain
+    /// handler.
     ///
     /// # Errors
     ///
@@ -564,9 +583,11 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_regenerate_citekeys",
-        description = "Regenerate citation keys for items via Better BibTeX (requires write permission)"
+        description = "Regenerate citation keys for items via Better BibTeX \
+                       (requires write permission)"
     )]
-    /// Routes `better_bibtex_regenerate_citekeys` MCP tool calls to the domain handler.
+    /// Routes `better_bibtex_regenerate_citekeys` MCP tool calls to the domain
+    /// handler.
     ///
     /// # Errors
     ///
@@ -583,7 +604,8 @@ impl ZoteroMcpServer {
         name = "better_bibtex_export_items",
         description = "Export items using a Better BibTeX translator"
     )]
-    /// Routes `better_bibtex_export_items` MCP tool calls to the domain handler.
+    /// Routes `better_bibtex_export_items` MCP tool calls to the domain
+    /// handler.
     ///
     /// # Errors
     ///
@@ -600,7 +622,8 @@ impl ZoteroMcpServer {
         name = "better_bibtex_format_bibliography",
         description = "Format a bibliography for citekeys in a given CSL style"
     )]
-    /// Routes `better_bibtex_format_bibliography` MCP tool calls to the domain handler.
+    /// Routes `better_bibtex_format_bibliography` MCP tool calls to the domain
+    /// handler.
     ///
     /// # Errors
     ///
@@ -615,7 +638,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_scan_aux",
-        description = "Extract citekeys from a LaTeX .aux file via Better BibTeX"
+        description = "Extract citekeys from a LaTeX .aux file via Better \
+                       BibTeX"
     )]
     /// Routes `better_bibtex_scan_aux` MCP tool calls to the domain handler.
     ///
@@ -634,7 +658,8 @@ impl ZoteroMcpServer {
         name = "better_bibtex_pandoc_filter",
         description = "Process citekeys through Better BibTeX's Pandoc filter"
     )]
-    /// Routes `better_bibtex_pandoc_filter` MCP tool calls to the domain handler.
+    /// Routes `better_bibtex_pandoc_filter` MCP tool calls to the domain
+    /// handler.
     ///
     /// # Errors
     ///
@@ -649,9 +674,11 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_autoexport_add",
-        description = "Configure auto-export for a collection/library (requires write permission)"
+        description = "Configure auto-export for a collection/library \
+                       (requires write permission)"
     )]
-    /// Routes `better_bibtex_autoexport_add` MCP tool calls to the domain handler.
+    /// Routes `better_bibtex_autoexport_add` MCP tool calls to the domain
+    /// handler.
     ///
     /// # Errors
     ///
@@ -702,9 +729,11 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_notes_from_markdown",
-        description = "Convert Markdown to HTML formatted for Zotero notes via Better Notes"
+        description = "Convert Markdown to HTML formatted for Zotero notes \
+                       via Better Notes"
     )]
-    /// Routes `better_notes_from_markdown` MCP tool calls to the domain handler.
+    /// Routes `better_notes_from_markdown` MCP tool calls to the domain
+    /// handler.
     ///
     /// # Errors
     ///
@@ -736,9 +765,11 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_notes_get_relations",
-        description = "Fetch linked items / note network for a note via Better Notes"
+        description = "Fetch linked items / note network for a note via \
+                       Better Notes"
     )]
-    /// Routes `better_notes_get_relations` MCP tool calls to the domain handler.
+    /// Routes `better_notes_get_relations` MCP tool calls to the domain
+    /// handler.
     ///
     /// # Errors
     ///
@@ -753,7 +784,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_notes_get_tree",
-        description = "Fetch the hierarchical note outline/tree for a note via Better Notes"
+        description = "Fetch the hierarchical note outline/tree for a note \
+                       via Better Notes"
     )]
     /// Routes `better_notes_get_tree` MCP tool calls to the domain handler.
     ///
@@ -772,7 +804,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "search",
-        description = "ChatGPT Connector search tool - search Zotero items by query"
+        description = "ChatGPT Connector search tool - search Zotero items by \
+                       query"
     )]
     /// Routes `chatgpt_search` MCP tool calls to the domain handler.
     ///
@@ -789,7 +822,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "fetch",
-        description = "ChatGPT Connector fetch tool - get item metadata by item ID/key"
+        description = "ChatGPT Connector fetch tool - get item metadata by \
+                       item ID/key"
     )]
     /// Routes `chatgpt_fetch` MCP tool calls to the domain handler.
     ///

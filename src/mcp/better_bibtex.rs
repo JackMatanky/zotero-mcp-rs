@@ -1,4 +1,5 @@
-//! MCP tool handlers, argument models, and unit tests for Better `BibTeX` tools.
+//! MCP tool handlers, argument models, and unit tests for Better `BibTeX`
+//! tools.
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;

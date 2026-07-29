@@ -27,7 +27,8 @@ pub(crate) enum ZoteroMcpError {
     #[error("Better BibTeX error: {0}")]
     BetterBibTeX(String),
 
-    /// Better Notes companion bridge endpoint returned an error or invalid response.
+    /// Better Notes companion bridge endpoint returned an error or invalid
+    /// response.
     #[error("Better Notes error: {0}")]
     BetterNotes(String),
 
@@ -43,7 +44,8 @@ pub(crate) enum ZoteroMcpError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    /// Write operation attempted when write permission is disabled in [`AppState`].
+    /// Write operation attempted when write permission is disabled in
+    /// [`AppState`].
     ///
     /// [`AppState`]: crate::state::AppState
     #[error("Permission denied: {0}")]
