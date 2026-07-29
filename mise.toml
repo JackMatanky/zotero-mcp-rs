@@ -1,6 +1,7 @@
 [tools]
 rust = "1.97.1"
 hk = "1.53.0"
+"cargo:rust-docs-mcp" = "0.1.1"
 
 [env]
 RUST_BACKTRACE = "1"
@@ -32,3 +33,4 @@ run = [
   "cargo clippy --all-targets --all-features -- -D warnings",
   "cargo test --all-features",
 ]
+
