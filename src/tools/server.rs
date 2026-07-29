@@ -1,3 +1,11 @@
+//! Wires every MCP tool to the Zotero, Better `BibTeX`, and Better Notes
+//! clients.
+//!
+//! Each `#[tool(description = "...")]` attribute below *is* the
+//! documentation surfaced to MCP clients, so individual tool methods
+//! intentionally carry no separate `///` rustdoc — adding one would just
+//! duplicate the `description` string.
+
 use rmcp::{
     ServerHandler,
     handler::server::wrapper::Parameters,
@@ -17,6 +25,8 @@ use crate::state::AppState;
 use crate::tools::models::*;
 use crate::zotero::ZoteroClient;
 
+/// The MCP tool router: holds the shared [`AppState`] and implements
+/// [`ServerHandler`], hosting every `#[tool]` method below.
 pub(crate) struct ZoteroMcpServer {
     #[expect(
         dead_code,

@@ -1,8 +1,14 @@
+//! Async client for the Zotero Local HTTP API.
+//!
+//! Thin wrapper around [`reqwest`] calls to the local Zotero library server,
+//! using [`AppState::send_with_retry`] for transient-failure retries.
+
 use crate::errors::ZoteroMcpError;
 use crate::state::AppState;
 use crate::zotero::models::{LocalApiStatus, ZoteroCollection, ZoteroItem};
 use reqwest::StatusCode;
 
+/// Client for the Zotero Local HTTP API, scoped to a single tool call.
 #[expect(dead_code, reason = "Client invoked by MCP tool handlers")]
 pub(crate) struct ZoteroClient<'a> {
     state: &'a AppState,
@@ -16,6 +22,12 @@ impl<'a> ZoteroClient<'a> {
         }
     }
 
+    /// Probes the Zotero Local API for availability.
+    ///
+    /// Issues a lightweight `items?limit=1` request. Never returns an
+    /// error: connection and non-2xx failures are captured in the returned
+    /// [`LocalApiStatus::error`] field instead of being propagated, so
+    /// callers can always surface a diagnostic result.
     pub(crate) async fn check_status(&self) -> LocalApiStatus {
         let url =
             format!("{}/users/0/items?limit=1", self.state.zotero_api_url);
@@ -51,6 +63,16 @@ impl<'a> ZoteroClient<'a> {
         }
     }
 
+    /// Fetches the `limit` most recently modified library items (notes
+    /// excluded).
+    ///
+    /// # Errors
+    ///
+    /// - [`LocalApi`] if the Local API responds with a non-2xx status
+    /// - [`Network`] if the request fails at the transport level
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
     pub(crate) async fn get_recent_items(
         &self,
         limit: usize,
@@ -71,6 +93,17 @@ impl<'a> ZoteroClient<'a> {
         Ok(items)
     }
 
+    /// Searches library items by `query` (title, creator, year, or
+    /// fulltext), optionally scoped to `collection_key`, returning at most
+    /// `limit` results. Notes are excluded.
+    ///
+    /// # Errors
+    ///
+    /// - [`LocalApi`] if the Local API responds with a non-2xx status
+    /// - [`Network`] if the request fails at the transport level
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
     pub(crate) async fn search_items(
         &self,
         query: &str,
@@ -99,6 +132,17 @@ impl<'a> ZoteroClient<'a> {
         Ok(items)
     }
 
+    /// Fetches the item identified by `item_key`.
+    ///
+    /// # Errors
+    ///
+    /// - [`NotFound`] if no item with that key exists
+    /// - [`LocalApi`] if the Local API responds with another non-2xx status
+    /// - [`Network`] if the request fails at the transport level
+    ///
+    /// [`NotFound`]: ZoteroMcpError::NotFound
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
     pub(crate) async fn get_item(
         &self,
         item_key: &str,
@@ -120,6 +164,15 @@ impl<'a> ZoteroClient<'a> {
         Ok(item)
     }
 
+    /// Fetches every collection in the library.
+    ///
+    /// # Errors
+    ///
+    /// - [`LocalApi`] if the Local API responds with a non-2xx status
+    /// - [`Network`] if the request fails at the transport level
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
     pub(crate) async fn get_collections(
         &self,
     ) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
@@ -136,6 +189,16 @@ impl<'a> ZoteroClient<'a> {
         Ok(collections)
     }
 
+    /// Fetches every item inside the collection identified by
+    /// `collection_key`.
+    ///
+    /// # Errors
+    ///
+    /// - [`LocalApi`] if the Local API responds with a non-2xx status
+    /// - [`Network`] if the request fails at the transport level
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
     pub(crate) async fn get_collection_items(
         &self,
         collection_key: &str,
@@ -156,6 +219,15 @@ impl<'a> ZoteroClient<'a> {
         Ok(items)
     }
 
+    /// Fetches the child items (notes and attachments) of `item_key`.
+    ///
+    /// # Errors
+    ///
+    /// - [`LocalApi`] if the Local API responds with a non-2xx status
+    /// - [`Network`] if the request fails at the transport level
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
     pub(crate) async fn get_item_children(
         &self,
         item_key: &str,
@@ -176,6 +248,16 @@ impl<'a> ZoteroClient<'a> {
         Ok(items)
     }
 
+    /// Fetches Zotero's indexed fulltext content for `item_key`, or an
+    /// empty string if none has been indexed.
+    ///
+    /// # Errors
+    ///
+    /// - [`LocalApi`] if the Local API responds with a non-2xx status
+    /// - [`Network`] if the request fails at the transport level
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
     pub(crate) async fn get_item_fulltext(
         &self,
         item_key: &str,
@@ -201,6 +283,23 @@ impl<'a> ZoteroClient<'a> {
         Ok(content)
     }
 
+    /// Creates a note item attached to `parent_item_key` with body
+    /// `note_content`, returning the created item.
+    ///
+    /// Assumes the caller has already enforced
+    /// [`AppState::check_write_permission`]; this method re-checks it
+    /// itself before issuing the write.
+    ///
+    /// # Errors
+    ///
+    /// - [`PermissionDenied`] if write operations are disabled
+    /// - [`LocalApi`] if the Local API responds with a non-2xx status, or
+    ///   returns an empty result for the created note
+    /// - [`Network`] if the request fails at the transport level
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
     pub(crate) async fn create_note(
         &self,
         parent_item_key: &str,

@@ -1,5 +1,9 @@
+//! Serde models mirroring the Zotero Local API's JSON item and collection
+//! shapes.
+
 use serde::{Deserialize, Serialize};
 
+/// A single Zotero library item as returned by the Local API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroItem {
     pub(crate) key: String,
@@ -13,6 +17,13 @@ pub(crate) struct ZoteroItem {
     pub(crate) data: ZoteroItemData,
 }
 
+/// Bibliographic and attachment fields carried by a Zotero item.
+///
+/// Maps Zotero's `camelCase` JSON field names. Covers every item type the
+/// Local API can return; most fields only apply to specific item types
+/// (`itemType`). Notably, `parent_item`, `link_mode`, `content_type`,
+/// `charset`, `filename`, and `path` are populated only for attachments,
+/// and `note` only for notes.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ZoteroItemData {
@@ -64,6 +75,7 @@ pub(crate) struct ZoteroItemData {
     pub(crate) note: Option<String>,
 }
 
+/// An author, editor, or other creator credited on an item.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroCreator {
     #[serde(rename = "creatorType")]
@@ -73,6 +85,7 @@ pub(crate) struct ZoteroCreator {
     pub(crate) name: Option<String>,
 }
 
+/// A tag attached to an item.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroTag {
     pub(crate) tag: String,
@@ -80,6 +93,7 @@ pub(crate) struct ZoteroTag {
     pub(crate) type_num: u8,
 }
 
+/// A Zotero collection as returned by the Local API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroCollection {
     pub(crate) key: String,
@@ -87,6 +101,7 @@ pub(crate) struct ZoteroCollection {
     pub(crate) data: ZoteroCollectionData,
 }
 
+/// Metadata for a [`ZoteroCollection`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroCollectionData {
     pub(crate) key: String,
@@ -95,6 +110,7 @@ pub(crate) struct ZoteroCollectionData {
     pub(crate) parent_collection: Option<serde_json::Value>,
 }
 
+/// Result of probing the Zotero Local API for availability.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct LocalApiStatus {
     pub(crate) online: bool,

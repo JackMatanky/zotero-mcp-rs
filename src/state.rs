@@ -1,3 +1,11 @@
+//! Shared runtime state threaded through every MCP tool handler.
+//!
+//! [`AppState`] bundles the configured backend URLs and a shared
+//! [`reqwest::Client`], plus the write-permission gate that every mutating
+//! operation checks before touching the Zotero library. This module also
+//! provides [`AppState::send_with_retry`], the single retry policy used by
+//! all three backend clients.
+
 use crate::errors::ZoteroMcpError;
 use reqwest::{Client, RequestBuilder, Response, StatusCode};
 use std::env;
@@ -7,6 +15,11 @@ const RETRY_MAX_ATTEMPTS: u32 = 3;
 const RETRY_BASE_DELAY: Duration = Duration::from_millis(200);
 const RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
 
+/// Shared configuration and HTTP client for the Zotero, Better `BibTeX`, and
+/// Better Notes backends.
+///
+/// Constructed once at startup via [`AppState::from_env`] and passed by
+/// reference to every backend client for the lifetime of the server.
 #[derive(Clone, Debug)]
 pub(crate) struct AppState {
     pub(crate) client: Client,
@@ -18,6 +31,13 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
+    /// Builds an [`AppState`] from environment variables.
+    ///
+    /// Reads `ZOTERO_API_URL`, `BETTER_BIBTEX_URL`, and `BETTER_NOTES_URL`
+    /// for the backend URLs, defaulting to the standard local Zotero plugin
+    /// ports when unset, and `ZOTERO_WRITE_ENABLED` (`"1"` or `"true"`,
+    /// case-insensitive) to opt into write operations, defaulting to
+    /// read-only. Returns the constructed [`AppState`].
     pub(crate) fn from_env() -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(15))
@@ -50,6 +70,16 @@ impl AppState {
         }
     }
 
+    /// Checks whether write operations are permitted.
+    ///
+    /// Every mutating backend call must invoke this before touching the
+    /// Zotero library.
+    ///
+    /// # Errors
+    ///
+    /// - [`PermissionDenied`] if `write_enabled` is `false` (the default)
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
     pub(crate) fn check_write_permission(&self) -> Result<(), ZoteroMcpError> {
         if !self.write_enabled {
             Err(ZoteroMcpError::PermissionDenied(
@@ -60,8 +90,19 @@ impl AppState {
         }
     }
 
-    /// Send a request, retrying transient failures (5xx, 429, timeouts, connect errors)
-    /// with exponential backoff (200ms base, 5s cap, 3 attempts total).
+    /// Sends `req`, retrying transient failures with exponential backoff.
+    ///
+    /// Retries on `5xx` responses, HTTP 429, timeouts, and connect errors, up
+    /// to [`RETRY_MAX_ATTEMPTS`] attempts total, doubling the delay from
+    /// [`RETRY_BASE_DELAY`] and capping it at [`RETRY_MAX_DELAY`]. Returns
+    /// the first response that isn't a transient failure, or the final
+    /// attempt's outcome once retries are exhausted.
+    ///
+    /// # Errors
+    ///
+    /// - [`Network`] if every attempt fails at the transport level
+    ///
+    /// [`Network`]: ZoteroMcpError::Network
     pub(crate) async fn send_with_retry(
         &self,
         req: RequestBuilder,

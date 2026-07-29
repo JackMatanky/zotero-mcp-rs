@@ -1,3 +1,11 @@
+//! Model Context Protocol server exposing a Zotero library over stdio.
+//!
+//! Wires the [`ZoteroMcpServer`] tool router to three backends: the Zotero
+//! Local HTTP API, the Better `BibTeX` JSON-RPC API, and the Better Notes
+//! companion bridge. Communicates with MCP clients over stdio using JSON-RPC
+//! ([`rmcp::transport::stdio`]); all diagnostic logging is routed to stderr
+//! so it never corrupts the stdio protocol stream.
+
 mod better_bibtex;
 mod better_notes;
 mod errors;

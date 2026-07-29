@@ -1,3 +1,5 @@
+//! Async client for the Better Notes bridge's HTTP companion API.
+
 use crate::better_notes::models::{
     BetterNotesStatus, MarkdownResponse, NoteItemResponse, NoteTreeResponse,
     RelationsResponse, TemplateResponse,
@@ -7,6 +9,7 @@ use crate::state::AppState;
 use serde::Serialize;
 use serde_json::Value;
 
+/// Client for the Better Notes bridge, scoped to a single tool call.
 #[expect(dead_code, reason = "Client invoked by MCP tool handlers")]
 pub(crate) struct BetterNotesClient<'a> {
     state: &'a AppState,
@@ -20,6 +23,10 @@ impl<'a> BetterNotesClient<'a> {
         }
     }
 
+    /// Probes the Better Notes bridge for availability.
+    ///
+    /// Never returns an error: failures are captured in the returned
+    /// [`BetterNotesStatus::error`] field instead of being propagated.
     pub(crate) async fn check_status(&self) -> BetterNotesStatus {
         let url = format!("{}/status", self.state.better_notes_url);
         match self.state.client.get(&url).send().await {
@@ -54,6 +61,18 @@ impl<'a> BetterNotesClient<'a> {
         }
     }
 
+    /// Posts `payload` as JSON to `endpoint` on the Better Notes bridge and
+    /// decodes the response as `R`.
+    ///
+    /// # Errors
+    ///
+    /// - [`BetterNotes`] if the HTTP response is non-2xx
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body fails to deserialize as `R`
+    ///
+    /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     async fn post_json<P: Serialize, R: serde::de::DeserializeOwned>(
         &self,
         endpoint: &str,
@@ -77,6 +96,14 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res)
     }
 
+    /// Converts a note to Markdown, either by `item_key` (an existing
+    /// Zotero note) or raw `html`.
+    ///
+    /// # Errors
+    ///
+    /// - [`BetterNotes`] if the bridge call fails
+    ///
+    /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn to_markdown(
         &self,
         item_key: Option<&str>,
@@ -91,6 +118,20 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.markdown)
     }
 
+    /// Creates a note attached to `parent_key` from `markdown`, returning
+    /// the created note's item key.
+    ///
+    /// Mutates the Zotero library; assumes the caller has already enforced
+    /// [`AppState::check_write_permission`], and re-checks it itself
+    /// before issuing the call.
+    ///
+    /// # Errors
+    ///
+    /// - [`PermissionDenied`] if write operations are disabled
+    /// - [`BetterNotes`] if the bridge call fails
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn convert_from_markdown(
         &self,
         parent_key: &str,
@@ -106,6 +147,13 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.item_key)
     }
 
+    /// Runs the named Better Notes template `name` against `item_key`.
+    ///
+    /// # Errors
+    ///
+    /// - [`BetterNotes`] if the bridge call fails
+    ///
+    /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn run_template(
         &self,
         name: &str,
@@ -120,6 +168,14 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.result)
     }
 
+    /// Fetches outlinks, backlinks, and other graph relations for
+    /// `item_key`.
+    ///
+    /// # Errors
+    ///
+    /// - [`BetterNotes`] if the bridge call fails
+    ///
+    /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn get_relations(
         &self,
         item_key: &str,
@@ -132,6 +188,13 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.relations)
     }
 
+    /// Fetches the full Better Notes hierarchy tree rooted at `item_key`.
+    ///
+    /// # Errors
+    ///
+    /// - [`BetterNotes`] if the bridge call fails
+    ///
+    /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn get_tree(
         &self,
         item_key: &str,

@@ -1,6 +1,9 @@
+//! JSON-RPC 2.0 envelopes and response shapes for the Better `BibTeX` API.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// A JSON-RPC 2.0 request envelope.
 #[derive(Debug, Serialize)]
 pub(crate) struct JsonRpcRequest<'a, T: Serialize> {
     pub(crate) jsonrpc: &'static str,
@@ -14,6 +17,7 @@ pub(crate) struct JsonRpcRequest<'a, T: Serialize> {
     reason = "Deserialized from Better BibTeX JSON-RPC response"
 )]
 #[derive(Debug, Deserialize)]
+/// A JSON-RPC 2.0 response envelope, carrying either `result` or `error`.
 pub(crate) struct JsonRpcResponse<T> {
     pub(crate) jsonrpc: String,
     pub(crate) result: Option<T>,
@@ -22,6 +26,7 @@ pub(crate) struct JsonRpcResponse<T> {
 }
 
 #[expect(dead_code, reason = "Deserialized from Better BibTeX JSON-RPC error")]
+/// A JSON-RPC 2.0 error object.
 #[derive(Debug, Deserialize)]
 pub(crate) struct JsonRpcError {
     pub(crate) code: i64,
@@ -29,6 +34,7 @@ pub(crate) struct JsonRpcError {
     pub(crate) data: Option<serde_json::Value>,
 }
 
+/// Result of probing the Better `BibTeX` JSON-RPC endpoint for availability.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct BetterBibtexStatus {
     pub(crate) ready: bool,
@@ -36,6 +42,7 @@ pub(crate) struct BetterBibtexStatus {
     pub(crate) error: Option<String>,
 }
 
+/// Maps a Zotero item key to its Better `BibTeX` citation key.
 pub(crate) type CitekeyMap = HashMap<String, String>;
 
 #[cfg(test)]

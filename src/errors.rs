@@ -1,5 +1,13 @@
+//! Crate-wide error type unifying failures from every backend.
+//!
+//! [`ZoteroMcpError`] is the single error type returned by every fallible
+//! operation in the crate, built with [`thiserror`] so each variant's
+//! `Display` message doubles as the text surfaced back to MCP clients.
+
 use thiserror::Error;
 
+/// Error returned by any fallible operation against the Zotero Local API,
+/// Better `BibTeX`, Better Notes, or local file system.
 #[derive(Debug, Error)]
 pub(crate) enum ZoteroMcpError {
     #[error("Network error: {0}")]

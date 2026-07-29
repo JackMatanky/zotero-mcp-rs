@@ -1,9 +1,28 @@
+//! Read-only `SQLite` access to Better `BibTeX`'s citekey cache database.
+//!
+//! Used as a fast, offline fallback for citekey lookups that avoids a
+//! round trip through the JSON-RPC API.
+
 use crate::better_bibtex::models::CitekeyMap;
 use crate::errors::ZoteroMcpError;
 use rusqlite::{Connection, OpenFlags};
 use std::collections::HashMap;
 use std::path::Path;
 
+/// Reads citation keys for `item_keys` from the Better `BibTeX` `SQLite`
+/// database at `db_path`.
+///
+/// An empty `item_keys` slice fetches every citekey in the database.
+/// Returns a map from Zotero item key to citation key; items with no
+/// pinned citekey are simply absent from the result, not an error.
+///
+/// # Errors
+///
+/// - [`NotFound`] if `db_path` does not exist
+/// - [`Sqlite`] if the database cannot be opened or queried
+///
+/// [`NotFound`]: ZoteroMcpError::NotFound
+/// [`Sqlite`]: ZoteroMcpError::Sqlite
 pub(crate) fn read_bbt_citekeys_sqlite(
     db_path: &Path,
     item_keys: &[&str],
@@ -48,6 +67,13 @@ pub(crate) fn read_bbt_citekeys_sqlite(
     Ok(map)
 }
 
+/// Resolves the default path to Better `BibTeX`'s `better-bibtex.migrated`
+/// `SQLite` database.
+///
+/// Probes `~/Zotero/better-bibtex.migrated`, then
+/// `~/Zotero/zotero/better-bibtex.migrated`, returning the first path that
+/// exists. Falls back to a relative `Zotero/better-bibtex.migrated` path if
+/// `$HOME` is unset.
 pub(crate) fn get_default_bbt_db_path() -> std::path::PathBuf {
     if let Some(home) = std::env::var_os("HOME") {
         let path =

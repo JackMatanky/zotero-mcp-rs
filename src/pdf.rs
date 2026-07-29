@@ -1,3 +1,8 @@
+//! Local PDF text extraction backing the `zotero_read_pdf_pages` tool.
+//!
+//! Wraps the [`pdf_extract`] crate to pull plain text out of a PDF file on
+//! disk, with optional page-range filtering.
+
 use crate::errors::ZoteroMcpError;
 use std::path::Path;
 #[cfg_attr(
@@ -7,6 +12,22 @@ use std::path::Path;
         reason = "Function called by spawn_blocking in MCP tool handler"
     )
 )]
+/// Extracts text from the PDF at `file_path`, optionally restricted to
+/// `page_numbers`.
+///
+/// `pdf-extract` delimits pages with a form-feed (`\x0C`) character in its
+/// output. When `page_numbers` is `Some`, only the matching 1-based pages
+/// are kept, rejoined with `\x0C`; when it's `None`, the full extracted text
+/// is returned unmodified. An empty `page_numbers` slice returns an empty
+/// string.
+///
+/// # Errors
+///
+/// - [`NotFound`] if `file_path` does not exist
+/// - [`PdfExtract`] if `pdf-extract` fails to parse the file
+///
+/// [`NotFound`]: ZoteroMcpError::NotFound
+/// [`PdfExtract`]: ZoteroMcpError::PdfExtract
 pub(crate) fn extract_pdf_pages(
     file_path: &Path,
     page_numbers: Option<&[usize]>,
