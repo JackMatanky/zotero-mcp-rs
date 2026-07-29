@@ -139,8 +139,10 @@ pub(crate) struct ZoteroCreator {
     #[serde(rename = "creatorType")]
     pub(crate) creator_type: Option<String>,
     /// First name or given name.
+    #[serde(rename = "firstName")]
     pub(crate) first_name: Option<String>,
     /// Last name or surname.
+    #[serde(rename = "lastName")]
     pub(crate) last_name: Option<String>,
     /// Single-field name for institutional/single-field creators.
     pub(crate) name: Option<String>,
@@ -221,5 +223,20 @@ mod tests {
             Some("Quantum Computing Advances")
         );
         assert!(item.data.doi.is_none());
+    }
+
+    #[test]
+    fn deserializes_creator_camel_case_names() {
+        let raw_json = serde_json::json!({
+            "creatorType": "author",
+            "firstName": "Ada",
+            "lastName": "Lovelace"
+        });
+
+        let creator: ZoteroCreator = serde_json::from_value(raw_json).unwrap();
+
+        assert_eq!(creator.creator_type.as_deref(), Some("author"));
+        assert_eq!(creator.first_name.as_deref(), Some("Ada"));
+        assert_eq!(creator.last_name.as_deref(), Some("Lovelace"));
     }
 }

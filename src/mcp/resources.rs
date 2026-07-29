@@ -1,23 +1,12 @@
-//! MCP resource and prompt handlers and unit tests.
+//! MCP resource and prompt handlers.
+
+use serde::Serialize;
 
 use crate::{ZoteroMcpServer, zotero::ZoteroClient};
 
 impl ZoteroMcpServer {
-    #[expect(
-        clippy::unused_self,
-        clippy::unnecessary_wraps,
-        reason = "instance method on ZoteroMcpServer required for \
-                  ServerHandler trait dispatch"
-    )]
     /// Lists MCP resources exposed by the server.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) fn list_resources_impl(
-        &self,
-    ) -> Result<rmcp::model::ListResourcesResult, rmcp::ErrorData> {
+    pub(crate) fn list_resources_impl() -> rmcp::model::ListResourcesResult {
         let raw_resource = rmcp::model::RawResource {
             uri: "zotero://collections".to_owned(),
             name: "Zotero Collections".to_owned(),
@@ -29,10 +18,10 @@ impl ZoteroMcpServer {
             mime_type: Some("application/json".to_owned()),
             size: None,
         };
-        Ok(rmcp::model::ListResourcesResult {
+        rmcp::model::ListResourcesResult {
             resources: vec![rmcp::model::Annotated::new(raw_resource, None)],
             next_cursor: None,
-        })
+        }
     }
 
     /// Reads a single MCP resource by URI.
@@ -48,36 +37,14 @@ impl ZoteroMcpServer {
         let client = ZoteroClient::new(&self.state);
         if uri == "zotero://collections" {
             match client.get_collections().await {
-                Ok(collections) => {
-                    let json_str = serde_json::to_string_pretty(&collections)
-                        .unwrap_or_default();
-                    Ok(rmcp::model::ReadResourceResult {
-                        contents: vec![rmcp::model::ResourceContents::TextResourceContents {
-                            uri: uri.to_owned(),
-                            mime_type: Some("application/json".to_owned()),
-                            text: json_str,
-                            meta: None,
-                        }],
-                    })
-                }
+                Ok(collections) => Ok(json_resource(uri, &collections)),
                 Err(e) => {
                     Err(rmcp::ErrorData::internal_error(e.to_string(), None))
                 }
             }
         } else if let Some(item_key) = uri.strip_prefix("zotero://items/") {
             match client.get_item(item_key).await {
-                Ok(item) => {
-                    let json_str =
-                        serde_json::to_string_pretty(&item).unwrap_or_default();
-                    Ok(rmcp::model::ReadResourceResult {
-                        contents: vec![rmcp::model::ResourceContents::TextResourceContents {
-                            uri: uri.to_owned(),
-                            mime_type: Some("application/json".to_owned()),
-                            text: json_str,
-                            meta: None,
-                        }],
-                    })
-                }
+                Ok(item) => Ok(json_resource(uri, &item)),
                 Err(e) => {
                     Err(rmcp::ErrorData::internal_error(e.to_string(), None))
                 }
@@ -90,21 +57,8 @@ impl ZoteroMcpServer {
         }
     }
 
-    #[expect(
-        clippy::unused_self,
-        clippy::unnecessary_wraps,
-        reason = "instance method on ZoteroMcpServer required for \
-                  ServerHandler trait dispatch"
-    )]
     /// Lists MCP prompts exposed by the server.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) fn list_prompts_impl(
-        &self,
-    ) -> Result<rmcp::model::ListPromptsResult, rmcp::ErrorData> {
+    pub(crate) fn list_prompts_impl() -> rmcp::model::ListPromptsResult {
         let prompt = rmcp::model::Prompt {
             name: "zotero_literature_review".to_owned(),
             title: None,
@@ -120,25 +74,18 @@ impl ZoteroMcpServer {
                 required: Some(true),
             }]),
         };
-        Ok(rmcp::model::ListPromptsResult {
+        rmcp::model::ListPromptsResult {
             prompts: vec![prompt],
             next_cursor: None,
-        })
+        }
     }
 
-    #[expect(
-        clippy::unused_self,
-        reason = "instance method on ZoteroMcpServer required for \
-                  ServerHandler trait dispatch"
-    )]
     /// Builds an MCP prompt response by prompt name.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// Returns [`rmcp::ErrorData`] if `name` is not a known prompt.
     pub(crate) fn get_prompt_impl(
-        &self,
         name: &str,
         arguments: Option<&serde_json::Map<String, serde_json::Value>>,
     ) -> Result<rmcp::model::GetPromptResult, rmcp::ErrorData> {
@@ -168,5 +115,19 @@ impl ZoteroMcpServer {
                 None,
             ))
         }
+    }
+}
+
+fn json_resource<T: Serialize>(
+    uri: &str,
+    value: &T,
+) -> rmcp::model::ReadResourceResult {
+    rmcp::model::ReadResourceResult {
+        contents: vec![rmcp::model::ResourceContents::TextResourceContents {
+            uri: uri.to_owned(),
+            mime_type: Some("application/json".to_owned()),
+            text: serde_json::to_string_pretty(value).unwrap_or_default(),
+            meta: None,
+        }],
     }
 }

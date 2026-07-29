@@ -29,70 +29,6 @@ impl<'a> BetterBibtexClient<'a> {
         }
     }
 
-    /// Issues a JSON-RPC 2.0 call to `method` with `params`, decoding the
-    /// result as `R`.
-    ///
-    /// # Errors
-    ///
-    /// - [`BetterBibTeX`] if the HTTP response is non-2xx, the RPC response
-    ///   carries an `error` object, or the result is `null`
-    /// - [`Network`] if the request fails at the transport level
-    ///
-    /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
-    /// [`Network`]: ZoteroMcpError::Network
-    async fn call_rpc<P: Serialize, R: serde::de::DeserializeOwned>(
-        &self,
-        method: &str,
-        params: P,
-    ) -> Result<R, ZoteroMcpError> {
-        let req_body = JsonRpcRequest {
-            jsonrpc: "2.0",
-            method,
-            params,
-            id: 1,
-        };
-
-        let resp = self
-            .state
-            .send_with_retry(
-                self.state
-                    .client
-                    .post(&self.state.better_bibtex_url)
-                    .json(&req_body),
-            )
-            .await?;
-
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::BetterBibTeX(format!(
-                "HTTP {}",
-                resp.status()
-            )));
-        }
-
-        let rpc_resp: JsonRpcResponse<R> = resp.json().await?;
-        if rpc_resp.jsonrpc != "2.0" {
-            return Err(ZoteroMcpError::BetterBibTeX(format!(
-                "Unsupported JSON-RPC version {}",
-                rpc_resp.jsonrpc
-            )));
-        }
-
-        if let Some(err) = rpc_resp.error {
-            let detail =
-                err.data.map(|d| format!(" (data: {d})")).unwrap_or_default();
-            return Err(ZoteroMcpError::BetterBibTeX(format!(
-                "RPC error {}: {}{detail}",
-                err.code, err.message
-            )));
-        }
-
-        rpc_resp.result.ok_or_else(|| {
-            ZoteroMcpError::BetterBibTeX(
-                "JSON-RPC returned null result".to_owned(),
-            )
-        })
-    }
-
     /// Maps `item_keys` to their Better `BibTeX` citation keys.
     ///
     /// Tries the local `SQLite` citekey cache first (fast path, no HTTP round
@@ -259,6 +195,70 @@ impl<'a> BetterBibtexClient<'a> {
         let params = (collection_key, aux_path);
         self.call_rpc("collection.scanAUX", params).await
     }
+
+    /// Issues a JSON-RPC 2.0 call to `method` with `params`, decoding the
+    /// result as `R`.
+    ///
+    /// # Errors
+    ///
+    /// - [`BetterBibTeX`] if the HTTP response is non-2xx, the RPC response
+    ///   carries an `error` object, or the result is `null`
+    /// - [`Network`] if the request fails at the transport level
+    ///
+    /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
+    /// [`Network`]: ZoteroMcpError::Network
+    async fn call_rpc<P: Serialize, R: serde::de::DeserializeOwned>(
+        &self,
+        method: &str,
+        params: P,
+    ) -> Result<R, ZoteroMcpError> {
+        let req_body = JsonRpcRequest {
+            jsonrpc: "2.0",
+            method,
+            params,
+            id: 1,
+        };
+
+        let resp = self
+            .state
+            .send_with_retry(
+                self.state
+                    .client
+                    .post(&self.state.better_bibtex_url)
+                    .json(&req_body),
+            )
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(ZoteroMcpError::BetterBibTeX(format!(
+                "HTTP {}",
+                resp.status()
+            )));
+        }
+
+        let rpc_resp: JsonRpcResponse<R> = resp.json().await?;
+        if rpc_resp.jsonrpc != "2.0" {
+            return Err(ZoteroMcpError::BetterBibTeX(format!(
+                "Unsupported JSON-RPC version {}",
+                rpc_resp.jsonrpc
+            )));
+        }
+
+        if let Some(err) = rpc_resp.error {
+            let detail =
+                err.data.map(|d| format!(" (data: {d})")).unwrap_or_default();
+            return Err(ZoteroMcpError::BetterBibTeX(format!(
+                "RPC error {}: {}{detail}",
+                err.code, err.message
+            )));
+        }
+
+        rpc_resp.result.ok_or_else(|| {
+            ZoteroMcpError::BetterBibTeX(
+                "JSON-RPC returned null result".to_owned(),
+            )
+        })
+    }
 }
 
 #[cfg(test)]
@@ -290,32 +290,27 @@ mod tests {
             }
         }
 
-        /// Formats a minimal raw HTTP/1.1 response with `status` (e.g.
-        /// `"200 OK"`) and a JSON `body`, computing `Content-Length`
-        /// automatically.
+        /// Formats a minimal JSON HTTP response for fixture servers.
         pub(super) fn http_response(status: &str, body: &str) -> String {
             format!(
-                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: \
-                 close\r\n\r\n{body}",
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\nConnection: close\r\n\r\n{body}",
                 body.len()
             )
         }
 
-        /// Spawns a background thread serving one canned raw HTTP response
-        /// (see [`http_response`]) per accepted connection, in order.
-        /// Returns the bound `http://host:port` base URL, standing in for
-        /// the Better `BibTeX` JSON-RPC endpoint.
+        /// Runs a one-shot fixture HTTP server and returns its base URL.
         pub(super) fn mock_server(responses: Vec<String>) -> String {
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-            let addr = listener.local_addr().unwrap();
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind listener");
+            let addr = listener.local_addr().expect("local addr");
             std::thread::spawn(move || {
-                let mut it = responses.into_iter();
-                while let (Some(resp), Ok((mut stream, _))) =
-                    (it.next(), listener.accept())
-                {
+                for response in responses {
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
                     let mut buf = [0_u8; 1024];
                     let _ = stream.read(&mut buf);
-                    let _ = stream.write_all(resp.as_bytes());
+                    let _ = stream.write_all(response.as_bytes());
                 }
             });
             format!("http://{addr}")

@@ -290,12 +290,12 @@ mod tests {
             // Arrange: every attempt (RETRY_MAX_ATTEMPTS of them) stays
             // transient, so the final attempt's response is still returned
             // rather than an error.
-            let responses =
-                vec![
-                    "HTTP/1.1 503 Service Unavailable\r\nContent-Length: \
+            let responses = vec![
+                "HTTP/1.1 503 Service Unavailable\r\nContent-Length: \
                      0\r\nConnection: close\r\n\r\n";
-                    usize::try_from(RETRY_MAX_ATTEMPTS).unwrap_or(3)
-                ];
+                usize::try_from(RETRY_MAX_ATTEMPTS)
+                    .unwrap_or(3)
+            ];
             let base = mock_server(responses);
             let state = test_state(false);
             let url = format!("{base}/");

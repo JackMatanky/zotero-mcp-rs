@@ -4,10 +4,7 @@ use reqwest::StatusCode;
 
 use crate::{
     errors::ZoteroMcpError,
-    zotero::{
-        client::ZoteroClient,
-        models::{ZoteroCollection, ZoteroItem},
-    },
+    zotero::{ZoteroClient, ZoteroCollection, ZoteroItem},
 };
 
 impl ZoteroClient<'_> {
@@ -29,16 +26,7 @@ impl ZoteroClient<'_> {
              itemType=-note",
             self.state.zotero_api_url, limit
         );
-        let resp =
-            self.state.send_with_retry(self.state.client.get(&url)).await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        let items: Vec<ZoteroItem> = resp.json().await?;
-        Ok(items)
+        self.get_json(&url).await
     }
 
     /// Searches library items by `query` (title, creator, year, or
@@ -67,16 +55,7 @@ impl ZoteroClient<'_> {
         let encoded_q = urlencoding::encode(query);
         let url = format!("{base}?q={encoded_q}&limit={limit}&itemType=-note");
 
-        let resp =
-            self.state.send_with_retry(self.state.client.get(&url)).await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        let items: Vec<ZoteroItem> = resp.json().await?;
-        Ok(items)
+        self.get_json(&url).await
     }
 
     /// Fetches the item identified by `item_key`.
@@ -98,14 +77,7 @@ impl ZoteroClient<'_> {
         if resp.status() == StatusCode::NOT_FOUND {
             return Err(ZoteroMcpError::NotFound(format!("Item {item_key}")));
         }
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        let item: ZoteroItem = resp.json().await?;
-        Ok(item)
+        Ok(self.ensure_success(resp).await?.json().await?)
     }
 
     /// Fetches every collection in the library.
@@ -120,16 +92,29 @@ impl ZoteroClient<'_> {
         &self,
     ) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
         let url = format!("{}/users/0/collections", self.state.zotero_api_url);
-        let resp =
-            self.state.send_with_retry(self.state.client.get(&url)).await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        let collections: Vec<ZoteroCollection> = resp.json().await?;
-        Ok(collections)
+        self.get_json(&url).await
+    }
+
+    /// Searches collections by `query` matching collection names
+    /// case-insensitively.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    pub(crate) async fn search_collections(
+        &self,
+        query: &str,
+    ) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
+        let collections = self.get_collections().await?;
+        let query_lc = query.to_lowercase();
+        let filtered = collections
+            .into_iter()
+            .filter(|c| c.data.name.to_lowercase().contains(&query_lc))
+            .collect();
+        Ok(filtered)
     }
 
     /// Fetches every item inside the collection identified by
@@ -149,16 +134,7 @@ impl ZoteroClient<'_> {
             "{}/users/0/collections/{}/items",
             self.state.zotero_api_url, collection_key
         );
-        let resp =
-            self.state.send_with_retry(self.state.client.get(&url)).await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        let items: Vec<ZoteroItem> = resp.json().await?;
-        Ok(items)
+        self.get_json(&url).await
     }
 
     /// Fetches the child items (notes and attachments) of `item_key`.
@@ -177,16 +153,7 @@ impl ZoteroClient<'_> {
             "{}/users/0/items/{}/children",
             self.state.zotero_api_url, item_key
         );
-        let resp =
-            self.state.send_with_retry(self.state.client.get(&url)).await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        let items: Vec<ZoteroItem> = resp.json().await?;
-        Ok(items)
+        self.get_json(&url).await
     }
 
     /// Fetches Zotero's indexed fulltext content for `item_key`, or an
@@ -206,15 +173,7 @@ impl ZoteroClient<'_> {
             "{}/users/0/items/{}/fulltext",
             self.state.zotero_api_url, item_key
         );
-        let resp =
-            self.state.send_with_retry(self.state.client.get(&url)).await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        let val: serde_json::Value = resp.json().await?;
+        let val: serde_json::Value = self.get_json(&url).await?;
         let content = val
             .get("content")
             .and_then(|v| v.as_str())
@@ -241,16 +200,7 @@ impl ZoteroClient<'_> {
             "{}/users/0/items?tag={}&limit={}&itemType=-note",
             self.state.zotero_api_url, encoded_tag, limit
         );
-        let resp =
-            self.state.send_with_retry(self.state.client.get(&url)).await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        let items: Vec<ZoteroItem> = resp.json().await?;
-        Ok(items)
+        self.get_json(&url).await
     }
 
     /// Searches items by citation key in `extra` field or query.
@@ -305,6 +255,32 @@ impl ZoteroClient<'_> {
         Ok(results)
     }
 
+    /// Finds potential duplicate items in library or collection by matching
+    /// title or DOI.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    pub(crate) async fn find_duplicates(
+        &self,
+        collection_key: Option<&str>,
+    ) -> Result<Vec<serde_json::Value>, ZoteroMcpError> {
+        let items = if let Some(col) = collection_key {
+            self.get_collection_items(col).await?
+        } else {
+            let url = format!(
+                "{}/users/0/items?limit=100",
+                self.state.zotero_api_url
+            );
+            self.get_json(&url).await?
+        };
+
+        Ok(find_duplicate_groups(&items))
+    }
+
     /// Computes library or collection coverage statistics (PDF, DOI, Notes).
     ///
     /// # Errors
@@ -322,49 +298,14 @@ impl ZoteroClient<'_> {
             None => self.get_recent_items(100).await?,
         };
 
-        let total_items = items.len();
-        let mut items_with_doi: usize = 0;
-        let mut items_with_pdf: usize = 0;
-        let mut items_with_notes: usize = 0;
-
+        let mut flags = Vec::with_capacity(items.len());
         for item in &items {
-            if item.data.doi.as_deref().is_some_and(|d| !d.trim().is_empty()) {
-                items_with_doi = items_with_doi.saturating_add(1);
-            }
-
-            if let Ok(children) = self.get_item_children(&item.key).await {
-                let has_pdf = children.iter().any(|c| {
-                    c.data.item_type == "attachment"
-                        && c.data
-                            .content_type
-                            .as_deref()
-                            .is_some_and(|ct| ct.contains("pdf"))
-                });
-                if has_pdf {
-                    items_with_pdf = items_with_pdf.saturating_add(1);
-                }
-
-                let has_note =
-                    children.iter().any(|c| c.data.item_type == "note");
-                if has_note {
-                    items_with_notes = items_with_notes.saturating_add(1);
-                }
-            }
+            let children =
+                self.get_item_children(&item.key).await.unwrap_or_default();
+            flags.push(coverage_flags(item, &children));
         }
 
-        let doi_pct = compute_percentage(items_with_doi, total_items);
-        let pdf_pct = compute_percentage(items_with_pdf, total_items);
-        let notes_pct = compute_percentage(items_with_notes, total_items);
-
-        Ok(serde_json::json!({
-            "total_items": total_items,
-            "items_with_doi": items_with_doi,
-            "doi_coverage_pct": doi_pct,
-            "items_with_pdf": items_with_pdf,
-            "pdf_coverage_pct": pdf_pct,
-            "items_with_notes": items_with_notes,
-            "notes_coverage_pct": notes_pct,
-        }))
+        Ok(classify_coverage(&flags))
     }
 
     /// Extracts and synthesizes annotations and notes into structured Markdown.
@@ -396,46 +337,13 @@ impl ZoteroClient<'_> {
             let _ = writeln!(md, "**Date:** {date}");
         }
         md.push('\n');
-        let mut has_annotations = false;
-        let _ = writeln!(md, "## Highlights & Annotations\n");
-        for child in &children {
-            if child.data.item_type == "annotation" {
-                has_annotations = true;
-                let page =
-                    child.data.annotation_page_label.as_deref().unwrap_or("?");
-                if let Some(ref text) = child.data.annotation_text {
-                    let _ = writeln!(md, "> \"{text}\" (p. {page})\n");
-                }
-                if let Some(ref comment) = child.data.annotation_comment {
-                    let _ = writeln!(md, "**Comment:** {comment}\n");
-                }
-            }
-        }
-        if !has_annotations {
-            let _ = writeln!(md, "*No annotations found.*\n");
-        }
-
-        let mut has_notes = false;
-        let _ = writeln!(md, "## Notes\n");
-        if let Some(ref note) = item.data.note {
-            has_notes = true;
-            let _ = writeln!(md, "{note}\n");
-        }
-        for child in &children {
-            if child.data.item_type == "note" {
-                if let Some(ref note) = child.data.note {
-                    has_notes = true;
-                    let _ = writeln!(md, "{note}\n");
-                }
-            }
-        }
-        if !has_notes {
-            let _ = writeln!(md, "*No notes found.*\n");
-        }
+        md.push_str(&format_annotations_section(&children));
+        md.push_str(&format_notes_section(&item, &children));
 
         Ok(md)
     }
 }
+
 fn match_condition(item: &ZoteroItem, cond: &serde_json::Value) -> bool {
     let field = cond.get("field").and_then(|v| v.as_str()).unwrap_or("");
     let op =
@@ -492,18 +400,148 @@ fn match_condition(item: &ZoteroItem, cond: &serde_json::Value) -> bool {
     }
 }
 
+fn find_duplicate_groups(items: &[ZoteroItem]) -> Vec<serde_json::Value> {
+    let mut doi_map: std::collections::BTreeMap<String, Vec<&ZoteroItem>> =
+        std::collections::BTreeMap::new();
+    let mut title_map: std::collections::BTreeMap<String, Vec<&ZoteroItem>> =
+        std::collections::BTreeMap::new();
+
+    for item in items {
+        if let Some(ref doi) = item.data.doi {
+            let clean_doi = doi.trim().to_lowercase();
+            if !clean_doi.is_empty() {
+                doi_map.entry(clean_doi).or_default().push(item);
+            }
+        }
+        if let Some(ref title) = item.data.title {
+            let clean_title: String = title
+                .chars()
+                .filter(|c| c.is_alphanumeric())
+                .collect::<String>()
+                .to_lowercase();
+            if clean_title.len() >= 3 {
+                title_map.entry(clean_title).or_default().push(item);
+            }
+        }
+    }
+
+    let mut duplicates = Vec::new();
+    for (doi, grouped) in doi_map {
+        if grouped.len() > 1 {
+            duplicates.push(serde_json::json!({
+                "reason": "matching_doi",
+                "match_key": doi,
+                "count": grouped.len(),
+                "items": grouped,
+            }));
+        }
+    }
+    for (title, grouped) in title_map {
+        if grouped.len() > 1 {
+            duplicates.push(serde_json::json!({
+                "reason": "matching_title",
+                "match_key": title,
+                "count": grouped.len(),
+                "items": grouped,
+            }));
+        }
+    }
+
+    duplicates
+}
+
+type CoverageFlags = (bool, bool, bool);
+
+fn coverage_flags(item: &ZoteroItem, children: &[ZoteroItem]) -> CoverageFlags {
+    let has_doi =
+        item.data.doi.as_deref().is_some_and(|d| !d.trim().is_empty());
+    let has_pdf = children.iter().any(|child| {
+        child.data.item_type == "attachment"
+            && child
+                .data
+                .content_type
+                .as_deref()
+                .is_some_and(|ct| ct.contains("pdf"))
+    });
+    let has_notes = children.iter().any(|child| child.data.item_type == "note");
+
+    (has_doi, has_pdf, has_notes)
+}
+
+fn classify_coverage(flags: &[CoverageFlags]) -> serde_json::Value {
+    let total_items = flags.len();
+    let items_with_doi =
+        flags.iter().filter(|(has_doi, _, _)| *has_doi).count();
+    let items_with_pdf =
+        flags.iter().filter(|(_, has_pdf, _)| *has_pdf).count();
+    let items_with_notes =
+        flags.iter().filter(|(_, _, has_notes)| *has_notes).count();
+
+    serde_json::json!({
+        "total_items": total_items,
+        "items_with_doi": items_with_doi,
+        "doi_coverage_pct": compute_percentage(items_with_doi, total_items),
+        "items_with_pdf": items_with_pdf,
+        "pdf_coverage_pct": compute_percentage(items_with_pdf, total_items),
+        "items_with_notes": items_with_notes,
+        "notes_coverage_pct": compute_percentage(items_with_notes, total_items),
+    })
+}
+
 fn compute_percentage(count: usize, total: usize) -> f64 {
     if total == 0 {
         return 0.0;
     }
-    #[expect(
-        clippy::as_conversions,
-        clippy::cast_precision_loss,
-        reason = "coverage percentage calculation requires float division"
-    )]
-    {
-        (count as f64 / total as f64) * 100.0
+    let count = f64::from(u32::try_from(count).map_or(u32::MAX, |n| n));
+    let total = f64::from(u32::try_from(total).map_or(u32::MAX, |n| n));
+    (count / total) * 100.0
+}
+
+fn format_annotations_section(children: &[ZoteroItem]) -> String {
+    use std::fmt::Write as _;
+
+    let mut md = String::from("## Highlights & Annotations\n\n");
+    let mut has_annotations = false;
+    for child in children {
+        if child.data.item_type == "annotation" {
+            has_annotations = true;
+            let page =
+                child.data.annotation_page_label.as_deref().unwrap_or("?");
+            if let Some(ref text) = child.data.annotation_text {
+                let _ = writeln!(md, "> \"{text}\" (p. {page})\n");
+            }
+            if let Some(ref comment) = child.data.annotation_comment {
+                let _ = writeln!(md, "**Comment:** {comment}\n");
+            }
+        }
     }
+    if !has_annotations {
+        let _ = writeln!(md, "*No annotations found.*\n");
+    }
+    md
+}
+
+fn format_notes_section(item: &ZoteroItem, children: &[ZoteroItem]) -> String {
+    use std::fmt::Write as _;
+
+    let mut md = String::from("## Notes\n\n");
+    let mut has_notes = false;
+    if let Some(ref note) = item.data.note {
+        has_notes = true;
+        let _ = writeln!(md, "{note}\n");
+    }
+    for child in children {
+        if child.data.item_type == "note" {
+            if let Some(ref note) = child.data.note {
+                has_notes = true;
+                let _ = writeln!(md, "{note}\n");
+            }
+        }
+    }
+    if !has_notes {
+        let _ = writeln!(md, "*No notes found.*\n");
+    }
+    md
 }
 
 #[cfg(test)]
@@ -594,7 +632,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fn_filters_items_by_conditions() {
+    async fn advanced_search_filters_items_by_conditions() {
         let items = json!([
             {
                 "key": "ITEM1",
@@ -712,5 +750,47 @@ mod tests {
         assert!(md.contains("> \"Key discovery in quantum state\" (p. 12)"));
         assert!(md.contains("**Comment:** Important finding"));
         assert!(md.contains("Summary of paper methods"));
+    }
+    #[tokio::test]
+    async fn search_collections_returns_matching_items() {
+        let collections = json!([
+            { "key": "C1", "version": 1, "data": { "key": "C1", "name": "Quantum Physics" } },
+            { "key": "C2", "version": 1, "data": { "key": "C2", "name": "Quantum Mechanics" } },
+            { "key": "C3", "version": 1, "data": { "key": "C3", "name": "Biology" } }
+        ]);
+        let base = mock_server(vec![http_response(
+            "200 OK",
+            &collections.to_string(),
+        )]);
+        let state = test_state(base, false);
+
+        let results = ZoteroClient::new(&state)
+            .search_collections("quantum")
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn find_duplicates_detects_duplicates_by_title_and_doi() {
+        let items = json!([
+            {
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Unique Article Title", "doi": "10.1234/unique" }
+            },
+            {
+                "key": "ITEM2",
+                "version": 1,
+                "data": { "key": "ITEM2", "itemType": "journalArticle", "title": "Unique Article Title", "doi": "10.1234/unique" }
+            }
+        ]);
+        let base =
+            mock_server(vec![http_response("200 OK", &items.to_string())]);
+        let state = test_state(base, false);
+
+        let duplicates =
+            ZoteroClient::new(&state).find_duplicates(None).await.unwrap();
+        assert_eq!(duplicates.len(), 2);
     }
 }

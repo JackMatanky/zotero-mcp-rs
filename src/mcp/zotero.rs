@@ -1,5 +1,4 @@
-//! MCP tool handlers, argument models, and unit tests for Zotero Local API
-//! tools.
+//! MCP tool handlers and argument models for Zotero Local API tools.
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -16,6 +15,8 @@ use crate::{
 /// Arguments for tools that take no parameters.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct EmptyArgs {}
+
+// --- Zotero Read Operations ---
 
 /// Arguments for `zotero_get_recent`.
 #[derive(Deserialize, JsonSchema)]
@@ -95,6 +96,8 @@ pub(crate) struct GetNotesArgs {
     pub(crate) item_key: String,
 }
 
+// --- Zotero Write Operations ---
+
 /// Arguments for `zotero_create_note`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateNoteArgs {
@@ -164,6 +167,8 @@ pub(crate) struct BatchUpdateTagsArgs {
     pub(crate) remove_tags: Option<Vec<String>>,
 }
 
+// --- Zotero Discovery & Analysis ---
+
 /// Arguments for `zotero_find_duplicates`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FindDuplicatesArgs {
@@ -204,6 +209,8 @@ pub(crate) struct LibraryCoverageArgs {
     pub(crate) collection_key: Option<String>,
 }
 
+// --- Zotero Annotation Synthesis ---
+
 /// Arguments for `zotero_synthesize_annotations`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SynthesizeAnnotationsArgs {
@@ -214,6 +221,8 @@ pub(crate) struct SynthesizeAnnotationsArgs {
 // --- Handler Implementations ---
 
 impl ZoteroMcpServer {
+    // --- Zotero Diagnostics & Status ---
+
     /// Handles Zotero Local API status tool calls.
     ///
     /// # Errors
@@ -225,9 +234,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
         let status = client.check_status().await;
-        let json_str =
-            serde_json::to_string_pretty(&status).unwrap_or_default();
-        Ok(CallToolResult::success(vec![rmcp::model::Content::text(json_str)]))
+        Ok(super::json_success(&status))
     }
 
     /// Handles recent Zotero item lookup tool calls.
@@ -242,18 +249,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let limit = args.limit.unwrap_or(10).min(100);
         let client = ZoteroClient::new(&self.state);
-        match client.get_recent_items(limit).await {
-            Ok(items) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&items).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(client.get_recent_items(limit).await))
     }
 
     /// Handles Zotero item search tool calls.
@@ -268,21 +264,15 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let limit = args.limit.unwrap_or(20);
         let client = ZoteroClient::new(&self.state);
-        match client
-            .search_items(&args.query, args.collection_key.as_deref(), limit)
-            .await
-        {
-            Ok(items) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&items).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(
+            client
+                .search_items(
+                    &args.query,
+                    args.collection_key.as_deref(),
+                    limit,
+                )
+                .await,
+        ))
     }
 
     /// Handles Zotero item retrieval tool calls.
@@ -296,18 +286,7 @@ impl ZoteroMcpServer {
         args: GetItemArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.get_item(&args.item_key).await {
-            Ok(item) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&item).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(client.get_item(&args.item_key).await))
     }
 
     /// Handles Zotero item metadata formatting tool calls.
@@ -325,30 +304,12 @@ impl ZoteroMcpServer {
             let bbt_client =
                 crate::better_bibtex::BetterBibtexClient::new(&self.state);
             let item_keys = vec![args.item_key.as_str()];
-            match bbt_client.export_items(&item_keys, "bibtex").await {
-                Ok(bibtex) => Ok(CallToolResult::success(vec![
-                    rmcp::model::Content::text(bibtex),
-                ])),
-                Err(e) => {
-                    Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                        e.to_string(),
-                    )]))
-                }
-            }
+            Ok(super::text_result(
+                bbt_client.export_items(&item_keys, "bibtex").await,
+            ))
         } else {
             let client = ZoteroClient::new(&self.state);
-            match client.get_item(&args.item_key).await {
-                Ok(item) => Ok(CallToolResult::success(vec![
-                    rmcp::model::Content::text(
-                        serde_json::to_string_pretty(&item).unwrap_or_default(),
-                    ),
-                ])),
-                Err(e) => {
-                    Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                        e.to_string(),
-                    )]))
-                }
-            }
+            Ok(super::json_result(client.get_item(&args.item_key).await))
         }
     }
 
@@ -363,18 +324,9 @@ impl ZoteroMcpServer {
         args: GetCollectionItemsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.get_collection_items(&args.collection_key).await {
-            Ok(items) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&items).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(
+            client.get_collection_items(&args.collection_key).await,
+        ))
     }
 
     /// Handles Zotero child item listing tool calls.
@@ -388,18 +340,7 @@ impl ZoteroMcpServer {
         args: GetItemChildrenArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.get_item_children(&args.item_key).await {
-            Ok(items) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&items).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(client.get_item_children(&args.item_key).await))
     }
 
     /// Handles Zotero full-text retrieval tool calls.
@@ -413,18 +354,7 @@ impl ZoteroMcpServer {
         args: GetItemFulltextArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.get_item_fulltext(&args.item_key).await {
-            Ok(text) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    text,
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::text_result(client.get_item_fulltext(&args.item_key).await))
     }
 
     /// Handles Zotero PDF path discovery tool calls.
@@ -440,49 +370,22 @@ impl ZoteroMcpServer {
         let client = ZoteroClient::new(&self.state);
         let item = match client.get_item(&args.item_key).await {
             Ok(item) => item,
-            Err(e) => {
-                return Ok(CallToolResult::error(vec![
-                    rmcp::model::Content::text(e.to_string()),
-                ]));
+            Err(e) => return Ok(super::text_error(&e)),
+        };
+
+        let found_path = if item.data.item_type == "attachment" {
+            item.data.path
+        } else {
+            match client.get_item_children(&args.item_key).await {
+                Ok(children) => find_pdf_path(&children),
+                Err(e) => return Ok(super::text_error(&e)),
             }
         };
 
-        if item.data.item_type == "attachment" {
-            if let Some(path) = item.data.path {
-                return Ok(CallToolResult::success(vec![
-                    rmcp::model::Content::text(path),
-                ]));
-            }
+        match found_path {
+            Some(path) => Ok(super::text_success(path)),
+            None => Ok(super::text_error("No PDF attachment found for item")),
         }
-
-        let children = match client.get_item_children(&args.item_key).await {
-            Ok(children) => children,
-            Err(e) => {
-                return Ok(CallToolResult::error(vec![
-                    rmcp::model::Content::text(e.to_string()),
-                ]));
-            }
-        };
-
-        for child in children {
-            let is_pdf = child.data.item_type == "attachment"
-                && child
-                    .data
-                    .content_type
-                    .as_deref()
-                    .is_some_and(|ct| ct.contains("pdf"));
-            if is_pdf {
-                if let Some(path) = child.data.path {
-                    return Ok(CallToolResult::success(vec![
-                        rmcp::model::Content::text(path),
-                    ]));
-                }
-            }
-        }
-
-        Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-            "No PDF attachment found for item".to_owned(),
-        )]))
     }
 
     /// Handles PDF page extraction tool calls.
@@ -535,20 +438,10 @@ impl ZoteroMcpServer {
         };
 
         let pages_ref = args.pages.as_deref();
-        match extract_pdf_pages(std::path::Path::new(&pdf_path), pages_ref) {
-            Ok(extracted) => {
-                let json_str = serde_json::to_string_pretty(&extracted)
-                    .unwrap_or_default();
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    json_str,
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(extract_pdf_pages(
+            std::path::Path::new(&pdf_path),
+            pages_ref,
+        )))
     }
 
     /// Handles Zotero note retrieval tool calls.
@@ -568,15 +461,9 @@ impl ZoteroMcpServer {
                     .into_iter()
                     .filter(|c| c.data.item_type == "note")
                     .collect();
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&notes).unwrap_or_default(),
-                )]))
+                Ok(super::json_success(&notes))
             }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
+            Err(e) => Ok(super::text_error(&e)),
         }
     }
 
@@ -591,21 +478,9 @@ impl ZoteroMcpServer {
         args: CreateNoteArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client
-            .create_note(&args.parent_item_key, &args.note_content)
-            .await
-        {
-            Ok(note) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&note).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(
+            client.create_note(&args.parent_item_key, &args.note_content).await,
+        ))
     }
 
     /// Handles Zotero collection creation tool calls.
@@ -619,21 +494,11 @@ impl ZoteroMcpServer {
         args: CreateCollectionArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client
-            .create_collection(&args.name, args.parent_key.as_deref())
-            .await
-        {
-            Ok(col) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&col).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(
+            client
+                .create_collection(&args.name, args.parent_key.as_deref())
+                .await,
+        ))
     }
 
     /// Handles Zotero collection search tool calls.
@@ -647,18 +512,7 @@ impl ZoteroMcpServer {
         args: SearchCollectionsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.search_collections(&args.query).await {
-            Ok(cols) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&cols).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(client.search_collections(&args.query).await))
     }
 
     /// Handles Zotero collection item membership tool calls.
@@ -682,15 +536,9 @@ impl ZoteroMcpServer {
             .await
         {
             Ok(()) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    "Collection items updated successfully".to_owned(),
-                )]))
+                Ok(super::text_success("Collection items updated successfully"))
             }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
+            Err(e) => Ok(super::text_error(&e)),
         }
     }
 
@@ -705,18 +553,9 @@ impl ZoteroMcpServer {
         args: UpdateItemArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.update_item(&args.item_key, args.fields).await {
-            Ok(item) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&item).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(
+            client.update_item(&args.item_key, args.fields).await,
+        ))
     }
 
     /// Handles Zotero linked-file attachment tool calls.
@@ -730,26 +569,16 @@ impl ZoteroMcpServer {
         args: AttachFileArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client
-            .attach_file_link(
-                &args.parent_item_key,
-                &args.title,
-                &args.path_or_url,
-                args.content_type.as_deref(),
-            )
-            .await
-        {
-            Ok(item) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&item).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(
+            client
+                .attach_file_link(
+                    &args.parent_item_key,
+                    &args.title,
+                    &args.path_or_url,
+                    args.content_type.as_deref(),
+                )
+                .await,
+        ))
     }
 
     /// Handles Zotero batch tag update tool calls.
@@ -766,16 +595,10 @@ impl ZoteroMcpServer {
         let add = args.add_tags.unwrap_or_default();
         let rem = args.remove_tags.unwrap_or_default();
         match client.batch_update_tags(&args.item_keys, &add, &rem).await {
-            Ok(count) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    format!("Batch updated tags on {count} items"),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
+            Ok(count) => Ok(super::text_success(format!(
+                "Batch updated tags on {count} items"
+            ))),
+            Err(e) => Ok(super::text_error(&e)),
         }
     }
 
@@ -790,18 +613,9 @@ impl ZoteroMcpServer {
         args: FindDuplicatesArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.find_duplicates(args.collection_key.as_deref()).await {
-            Ok(dups) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&dups).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(
+            client.find_duplicates(args.collection_key.as_deref()).await,
+        ))
     }
 
     /// Handles Zotero tag search tool calls.
@@ -816,18 +630,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let limit = args.limit.unwrap_or(20);
         let client = ZoteroClient::new(&self.state);
-        match client.search_by_tag(&args.tag, limit).await {
-            Ok(items) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&items).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(client.search_by_tag(&args.tag, limit).await))
     }
 
     /// Handles Zotero citation-key search tool calls.
@@ -841,18 +644,9 @@ impl ZoteroMcpServer {
         args: SearchByCitationKeyArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.search_by_citation_key(&args.citekey).await {
-            Ok(item) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&item).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(
+            client.search_by_citation_key(&args.citekey).await,
+        ))
     }
 
     /// Handles Zotero structured search tool calls.
@@ -867,18 +661,9 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let limit = args.limit.unwrap_or(20);
         let client = ZoteroClient::new(&self.state);
-        match client.advanced_search(args.conditions, limit).await {
-            Ok(items) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&items).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(
+            client.advanced_search(args.conditions, limit).await,
+        ))
     }
 
     /// Handles Zotero library coverage analysis tool calls.
@@ -892,19 +677,9 @@ impl ZoteroMcpServer {
         args: LibraryCoverageArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.get_library_coverage(args.collection_key.as_deref()).await
-        {
-            Ok(cov) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&cov).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(
+            client.get_library_coverage(args.collection_key.as_deref()).await,
+        ))
     }
 
     /// Handles Zotero annotation synthesis tool calls.
@@ -918,18 +693,9 @@ impl ZoteroMcpServer {
         args: SynthesizeAnnotationsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.synthesize_annotations(&args.item_key).await {
-            Ok(md) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    md,
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::text_result(
+            client.synthesize_annotations(&args.item_key).await,
+        ))
     }
 }
 fn find_pdf_path(children: &[ZoteroItem]) -> Option<String> {

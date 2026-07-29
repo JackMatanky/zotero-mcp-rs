@@ -1,5 +1,4 @@
-//! MCP tool handlers, argument models, and unit tests for Better `BibTeX`
-//! tools.
+//! MCP tool handlers and argument models for Better `BibTeX` tools.
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -91,18 +90,7 @@ impl ZoteroMcpServer {
         let client = BetterBibtexClient::new(&self.state);
         let keys_str: Vec<&str> =
             args.item_keys.iter().map(String::as_str).collect();
-        match client.get_citekeys(&keys_str).await {
-            Ok(citekeys) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&citekeys).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(client.get_citekeys(&keys_str).await))
     }
 
     /// Handles Better `BibTeX` citation key regeneration tool calls.
@@ -119,16 +107,10 @@ impl ZoteroMcpServer {
         let keys_str: Vec<&str> =
             args.item_keys.iter().map(String::as_str).collect();
         match client.regenerate_keys(&keys_str).await {
-            Ok(_) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    "Citation keys regenerated successfully".to_owned(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
+            Ok(_) => Ok(super::text_success(
+                "Citation keys regenerated successfully",
+            )),
+            Err(e) => Ok(super::text_error(&e)),
         }
     }
 
@@ -145,18 +127,9 @@ impl ZoteroMcpServer {
         let client = BetterBibtexClient::new(&self.state);
         let keys_str: Vec<&str> =
             args.item_keys.iter().map(String::as_str).collect();
-        match client.export_items(&keys_str, &args.translator).await {
-            Ok(output) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    output,
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::text_result(
+            client.export_items(&keys_str, &args.translator).await,
+        ))
     }
 
     /// Handles Better `BibTeX` bibliography formatting tool calls.
@@ -172,19 +145,9 @@ impl ZoteroMcpServer {
         let client = BetterBibtexClient::new(&self.state);
         let keys_str: Vec<&str> =
             args.citekeys.iter().map(String::as_str).collect();
-        match client.bibliography(&keys_str, args.style.as_deref(), None).await
-        {
-            Ok(bib) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    bib,
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::text_result(
+            client.bibliography(&keys_str, args.style.as_deref(), None).await,
+        ))
     }
 
     /// Handles Better `BibTeX` `.aux` import tool calls.
@@ -199,18 +162,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
         let col = args.collection_key.as_deref().unwrap_or("");
-        match client.scan_aux(col, &args.aux_path).await {
-            Ok(keys) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&keys).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(client.scan_aux(col, &args.aux_path).await))
     }
 
     /// Handles Better `BibTeX` Pandoc filter tool calls.
@@ -226,18 +178,7 @@ impl ZoteroMcpServer {
         let client = BetterBibtexClient::new(&self.state);
         let keys_str: Vec<&str> =
             args.citekeys.iter().map(String::as_str).collect();
-        match client.pandoc_filter(&keys_str, true).await {
-            Ok(output) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&output).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(client.pandoc_filter(&keys_str, true).await))
     }
 
     /// Handles Better `BibTeX` auto-export registration tool calls.
@@ -256,15 +197,9 @@ impl ZoteroMcpServer {
             .await
         {
             Ok(_) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    "Autoexport configured successfully".to_owned(),
-                )]))
+                Ok(super::text_success("Autoexport configured successfully"))
             }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
+            Err(e) => Ok(super::text_error(&e)),
         }
     }
 
@@ -279,17 +214,6 @@ impl ZoteroMcpServer {
         args: BetterBibtexSearchArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
-        match client.search(&args.query).await {
-            Ok(results) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&results).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(client.search(&args.query).await))
     }
 }

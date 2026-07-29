@@ -25,41 +25,6 @@ impl<'a> BetterNotesClient<'a> {
         }
     }
 
-    /// Posts `payload` as JSON to `endpoint` on the Better Notes bridge and
-    /// decodes the response as `R`.
-    ///
-    /// # Errors
-    ///
-    /// - [`BetterNotes`] if the HTTP response is non-2xx
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body fails to deserialize as `R`
-    ///
-    /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
-    /// [`Network`]: ZoteroMcpError::Network
-    /// [`Json`]: ZoteroMcpError::Json
-    async fn post_json<P: Serialize, R: serde::de::DeserializeOwned>(
-        &self,
-        endpoint: &str,
-        payload: P,
-    ) -> Result<R, ZoteroMcpError> {
-        let url = format!("{}{}", self.state.better_notes_url, endpoint);
-        let resp = self
-            .state
-            .send_with_retry(self.state.client.post(&url).json(&payload))
-            .await?;
-
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::BetterNotes(format!(
-                "HTTP {} calling {}",
-                resp.status(),
-                endpoint
-            )));
-        }
-
-        let res: R = resp.json().await?;
-        Ok(res)
-    }
-
     /// Converts a note to Markdown, either by `item_key` (an existing Zotero
     /// note) or raw `html`.
     ///
@@ -170,6 +135,41 @@ impl<'a> BetterNotesClient<'a> {
             self.post_json("/notes/tree", payload).await?;
         Ok(res.tree)
     }
+
+    /// Posts `payload` as JSON to `endpoint` on the Better Notes bridge and
+    /// decodes the response as `R`.
+    ///
+    /// # Errors
+    ///
+    /// - [`BetterNotes`] if the HTTP response is non-2xx
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body fails to deserialize as `R`
+    ///
+    /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
+    async fn post_json<P: Serialize, R: serde::de::DeserializeOwned>(
+        &self,
+        endpoint: &str,
+        payload: P,
+    ) -> Result<R, ZoteroMcpError> {
+        let url = format!("{}{}", self.state.better_notes_url, endpoint);
+        let resp = self
+            .state
+            .send_with_retry(self.state.client.post(&url).json(&payload))
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(ZoteroMcpError::BetterNotes(format!(
+                "HTTP {} calling {}",
+                resp.status(),
+                endpoint
+            )));
+        }
+
+        let res: R = resp.json().await?;
+        Ok(res)
+    }
 }
 
 #[cfg(test)]
@@ -201,32 +201,27 @@ mod tests {
             }
         }
 
-        /// Formats a minimal raw HTTP/1.1 response with `status` (e.g.
-        /// `"200 OK"`) and a JSON `body`, computing `Content-Length`
-        /// automatically.
+        /// Formats a minimal JSON HTTP response for fixture servers.
         pub(super) fn http_response(status: &str, body: &str) -> String {
             format!(
-                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: \
-                 close\r\n\r\n{body}",
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\nConnection: close\r\n\r\n{body}",
                 body.len()
             )
         }
 
-        /// Spawns a background thread serving one canned raw HTTP response
-        /// (see [`http_response`]) per accepted connection, in order.
-        /// Returns the bound `http://host:port` base URL, standing in for
-        /// the Better Notes bridge.
+        /// Runs a one-shot fixture HTTP server and returns its base URL.
         pub(super) fn mock_server(responses: Vec<String>) -> String {
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-            let addr = listener.local_addr().unwrap();
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind listener");
+            let addr = listener.local_addr().expect("local addr");
             std::thread::spawn(move || {
-                let mut it = responses.into_iter();
-                while let (Some(resp), Ok((mut stream, _))) =
-                    (it.next(), listener.accept())
-                {
+                for response in responses {
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
                     let mut buf = [0_u8; 1024];
                     let _ = stream.read(&mut buf);
-                    let _ = stream.write_all(resp.as_bytes());
+                    let _ = stream.write_all(response.as_bytes());
                 }
             });
             format!("http://{addr}")

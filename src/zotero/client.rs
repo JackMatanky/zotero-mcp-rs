@@ -1,6 +1,11 @@
 //! Async client for the Zotero Local HTTP API.
 
-use crate::{state::AppState, zotero::models::LocalApiStatus};
+use reqwest::Response;
+use serde::{Serialize, de::DeserializeOwned};
+
+use crate::{
+    errors::ZoteroMcpError, state::AppState, zotero::models::LocalApiStatus,
+};
 
 /// Client for the Zotero Local HTTP API, scoped to a single tool call.
 pub(crate) struct ZoteroClient<'a> {
@@ -55,6 +60,61 @@ impl<'a> ZoteroClient<'a> {
             },
         }
     }
+
+    /// Converts non-success Zotero HTTP responses into [`ZoteroMcpError::LocalApi`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ZoteroMcpError::LocalApi`] when `resp` is not a successful
+    /// HTTP response.
+    pub(super) async fn ensure_success(
+        &self,
+        resp: Response,
+    ) -> Result<Response, ZoteroMcpError> {
+        if resp.status().is_success() {
+            return Ok(resp);
+        }
+        Err(ZoteroMcpError::LocalApi {
+            status: resp.status().as_u16(),
+            message: resp.text().await.unwrap_or_default(),
+        })
+    }
+
+    /// Sends a GET request to `url` and decodes the JSON body.
+    ///
+    /// # Errors
+    ///
+    /// Returns network, non-success HTTP, or JSON decode failures.
+    pub(super) async fn get_json<T: DeserializeOwned>(
+        &self,
+        url: &str,
+    ) -> Result<T, ZoteroMcpError> {
+        let resp =
+            self.state.send_with_retry(self.state.client.get(url)).await?;
+        Ok(self.ensure_success(resp).await?.json().await?)
+    }
+
+    /// Sends a JSON POST request and returns the first item from Zotero's array response.
+    ///
+    /// # Errors
+    ///
+    /// Returns network, non-success HTTP, JSON decode, or empty-array failures.
+    pub(super) async fn post_json_first<T: DeserializeOwned, P: Serialize>(
+        &self,
+        url: &str,
+        payload: &P,
+        empty_message: &'static str,
+    ) -> Result<T, ZoteroMcpError> {
+        let resp = self
+            .state
+            .send_with_retry(self.state.client.post(url).json(payload))
+            .await?;
+        let created: Vec<T> = self.ensure_success(resp).await?.json().await?;
+        created.into_iter().next().ok_or_else(|| ZoteroMcpError::LocalApi {
+            status: 500,
+            message: empty_message.to_owned(),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -89,15 +149,11 @@ pub(crate) mod tests {
         pub(crate) fn http_response(status: &str, body: &str) -> String {
             format!(
                 "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
-                 application/json\r\n\r\n{body}",
+                 application/json\r\nConnection: close\r\n\r\n{body}",
                 body.len()
             )
         }
 
-        #[expect(
-            clippy::excessive_nesting,
-            reason = "mock HTTP server thread loop"
-        )]
         /// Runs a one-shot fixture HTTP server and returns its base URL.
         pub(crate) fn mock_server(responses: Vec<String>) -> String {
             let listener =
@@ -105,10 +161,9 @@ pub(crate) mod tests {
             let addr = listener.local_addr().expect("local addr");
             std::thread::spawn(move || {
                 for response in responses {
-                    let Ok((mut stream, _)) = listener.accept() else {
-                        continue;
-                    };
-                    let mut buf = [0u8; 1024];
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
+                    let mut buf = [0_u8; 1024];
                     let _ = stream.read(&mut buf);
                     let _ = stream.write_all(response.as_bytes());
                 }

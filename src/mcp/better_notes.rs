@@ -1,4 +1,4 @@
-//! MCP tool handlers, argument models, and unit tests for Better Notes tools.
+//! MCP tool handlers and argument models for Better Notes tools.
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -64,18 +64,9 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterNotesClient::new(&self.state);
         let format = args.format.as_deref();
-        match client.to_markdown(Some(&args.item_key), format).await {
-            Ok(output) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    output,
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::text_result(
+            client.to_markdown(Some(&args.item_key), format).await,
+        ))
     }
 
     /// Handles Better Notes Markdown import tool calls.
@@ -89,21 +80,11 @@ impl ZoteroMcpServer {
         args: FromMarkdownArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterNotesClient::new(&self.state);
-        match client
-            .convert_from_markdown(&args.parent_key, &args.markdown)
-            .await
-        {
-            Ok(key) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    key,
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::text_result(
+            client
+                .convert_from_markdown(&args.parent_key, &args.markdown)
+                .await,
+        ))
     }
 
     /// Handles Better Notes template execution tool calls.
@@ -117,18 +98,9 @@ impl ZoteroMcpServer {
         args: RunTemplateArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterNotesClient::new(&self.state);
-        match client.run_template(&args.template_name, &args.item_key).await {
-            Ok(result) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&result).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(
+            client.run_template(&args.template_name, &args.item_key).await,
+        ))
     }
 
     /// Handles Better Notes relation lookup tool calls.
@@ -142,19 +114,7 @@ impl ZoteroMcpServer {
         args: NoteRelationsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterNotesClient::new(&self.state);
-        match client.get_relations(&args.item_key).await {
-            Ok(relations) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&relations)
-                        .unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(client.get_relations(&args.item_key).await))
     }
 
     /// Handles Better Notes tree lookup tool calls.
@@ -168,17 +128,6 @@ impl ZoteroMcpServer {
         args: NoteTreeArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterNotesClient::new(&self.state);
-        match client.get_tree(&args.item_key).await {
-            Ok(tree) => {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    serde_json::to_string_pretty(&tree).unwrap_or_default(),
-                )]))
-            }
-            Err(e) => {
-                Ok(CallToolResult::error(vec![rmcp::model::Content::text(
-                    e.to_string(),
-                )]))
-            }
-        }
+        Ok(super::json_result(client.get_tree(&args.item_key).await))
     }
 }

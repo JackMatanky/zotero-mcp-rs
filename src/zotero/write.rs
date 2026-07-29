@@ -2,10 +2,7 @@
 
 use crate::{
     errors::ZoteroMcpError,
-    zotero::{
-        client::ZoteroClient,
-        models::{ZoteroCollection, ZoteroItem},
-    },
+    zotero::{ZoteroClient, ZoteroCollection, ZoteroItem},
 };
 
 impl ZoteroClient<'_> {
@@ -32,21 +29,8 @@ impl ZoteroClient<'_> {
             "note": note_content,
         }]);
 
-        let resp = self
-            .state
-            .send_with_retry(self.state.client.post(&url).json(&payload))
-            .await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        let created: Vec<ZoteroItem> = resp.json().await?;
-        created.into_iter().next().ok_or_else(|| ZoteroMcpError::LocalApi {
-            status: 500,
-            message: "Created note array was empty".to_owned(),
-        })
+        self.post_json_first(&url, &payload, "Created note array was empty")
+            .await
     }
 
     /// Creates a new collection with name `name` and optional `parent_key`.
@@ -74,44 +58,12 @@ impl ZoteroClient<'_> {
             "parentCollection": parent_val,
         }]);
 
-        let resp = self
-            .state
-            .send_with_retry(self.state.client.post(&url).json(&payload))
-            .await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        let created: Vec<ZoteroCollection> = resp.json().await?;
-        created.into_iter().next().ok_or_else(|| ZoteroMcpError::LocalApi {
-            status: 500,
-            message: "Created collection array was empty".to_owned(),
-        })
-    }
-
-    /// Searches collections by `query` matching collection names
-    /// case-insensitively.
-    ///
-    /// # Errors
-    ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
-    pub(crate) async fn search_collections(
-        &self,
-        query: &str,
-    ) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
-        let collections = self.get_collections().await?;
-        let query_lc = query.to_lowercase();
-        let filtered = collections
-            .into_iter()
-            .filter(|c| c.data.name.to_lowercase().contains(&query_lc))
-            .collect();
-        Ok(filtered)
+        self.post_json_first(
+            &url,
+            &payload,
+            "Created collection array was empty",
+        )
+        .await
     }
 
     /// Adds or removes item keys to/from a collection.
@@ -142,13 +94,7 @@ impl ZoteroClient<'_> {
             self.state.client.post(&url).body(body_str)
         };
 
-        let resp = self.state.send_with_retry(req).await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
+        self.ensure_success(self.state.send_with_retry(req).await?).await?;
         Ok(())
     }
 
@@ -173,16 +119,10 @@ impl ZoteroClient<'_> {
             .state
             .send_with_retry(self.state.client.patch(&url).json(&fields))
             .await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        if let Ok(item) = resp.json::<ZoteroItem>().await {
-            Ok(item)
-        } else {
-            self.get_item(item_key).await
+        let resp = self.ensure_success(resp).await?;
+        match resp.json::<ZoteroItem>().await {
+            Ok(item) => Ok(item),
+            Err(_) => self.get_item(item_key).await,
         }
     }
 
@@ -213,21 +153,12 @@ impl ZoteroClient<'_> {
             "contentType": content_type.unwrap_or("application/pdf"),
         }]);
 
-        let resp = self
-            .state
-            .send_with_retry(self.state.client.post(&url).json(&payload))
-            .await?;
-        if !resp.status().is_success() {
-            return Err(ZoteroMcpError::LocalApi {
-                status: resp.status().as_u16(),
-                message: resp.text().await.unwrap_or_default(),
-            });
-        }
-        let created: Vec<ZoteroItem> = resp.json().await?;
-        created.into_iter().next().ok_or_else(|| ZoteroMcpError::LocalApi {
-            status: 500,
-            message: "Created attachment array was empty".to_owned(),
-        })
+        self.post_json_first(
+            &url,
+            &payload,
+            "Created attachment array was empty",
+        )
+        .await
     }
 
     /// Batch updates tags across multiple items by adding and/or removing tags.
@@ -269,89 +200,6 @@ impl ZoteroClient<'_> {
             count = count.saturating_add(1);
         }
         Ok(count)
-    }
-
-    /// Finds potential duplicate items in library or collection by matching
-    /// title or DOI.
-    ///
-    /// # Errors
-    ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
-    pub(crate) async fn find_duplicates(
-        &self,
-        collection_key: Option<&str>,
-    ) -> Result<Vec<serde_json::Value>, ZoteroMcpError> {
-        let items = if let Some(col) = collection_key {
-            self.get_collection_items(col).await?
-        } else {
-            let url = format!(
-                "{}/users/0/items?limit=100",
-                self.state.zotero_api_url
-            );
-            let resp =
-                self.state.send_with_retry(self.state.client.get(&url)).await?;
-            if !resp.status().is_success() {
-                return Err(ZoteroMcpError::LocalApi {
-                    status: resp.status().as_u16(),
-                    message: resp.text().await.unwrap_or_default(),
-                });
-            }
-            resp.json().await?
-        };
-
-        let mut doi_map: std::collections::BTreeMap<String, Vec<&ZoteroItem>> =
-            std::collections::BTreeMap::new();
-        let mut title_map: std::collections::BTreeMap<
-            String,
-            Vec<&ZoteroItem>,
-        > = std::collections::BTreeMap::new();
-
-        for item in &items {
-            if let Some(ref doi) = item.data.doi {
-                let clean_doi = doi.trim().to_lowercase();
-                if !clean_doi.is_empty() {
-                    doi_map.entry(clean_doi).or_default().push(item);
-                }
-            }
-            if let Some(ref title) = item.data.title {
-                let clean_title: String = title
-                    .chars()
-                    .filter(|c| c.is_alphanumeric())
-                    .collect::<String>()
-                    .to_lowercase();
-                if clean_title.len() >= 3 {
-                    title_map.entry(clean_title).or_default().push(item);
-                }
-            }
-        }
-
-        let mut duplicates = Vec::new();
-        for (doi, grouped) in doi_map {
-            if grouped.len() > 1 {
-                duplicates.push(serde_json::json!({
-                    "reason": "matching_doi",
-                    "match_key": doi,
-                    "count": grouped.len(),
-                    "items": grouped,
-                }));
-            }
-        }
-        for (title, grouped) in title_map {
-            if grouped.len() > 1 {
-                duplicates.push(serde_json::json!({
-                    "reason": "matching_title",
-                    "match_key": title,
-                    "count": grouped.len(),
-                    "items": grouped,
-                }));
-            }
-        }
-
-        Ok(duplicates)
     }
 }
 
@@ -411,26 +259,6 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(col.key, "COL1");
-    }
-
-    #[tokio::test]
-    async fn search_collections_returns_matching_items() {
-        let collections = json!([
-            { "key": "C1", "version": 1, "data": { "key": "C1", "name": "Quantum Physics" } },
-            { "key": "C2", "version": 1, "data": { "key": "C2", "name": "Quantum Mechanics" } },
-            { "key": "C3", "version": 1, "data": { "key": "C3", "name": "Biology" } }
-        ]);
-        let base = mock_server(vec![http_response(
-            "200 OK",
-            &collections.to_string(),
-        )]);
-        let state = test_state(base, false);
-
-        let results = ZoteroClient::new(&state)
-            .search_collections("quantum")
-            .await
-            .unwrap();
-        assert_eq!(results.len(), 2);
     }
 
     #[tokio::test]
@@ -519,28 +347,5 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 1);
-    }
-
-    #[tokio::test]
-    async fn find_duplicates_detects_duplicates_by_title_and_doi() {
-        let items = json!([
-            {
-                "key": "ITEM1",
-                "version": 1,
-                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Unique Article Title", "doi": "10.1234/unique" }
-            },
-            {
-                "key": "ITEM2",
-                "version": 1,
-                "data": { "key": "ITEM2", "itemType": "journalArticle", "title": "Unique Article Title", "doi": "10.1234/unique" }
-            }
-        ]);
-        let base =
-            mock_server(vec![http_response("200 OK", &items.to_string())]);
-        let state = test_state(base, false);
-
-        let duplicates =
-            ZoteroClient::new(&state).find_duplicates(None).await.unwrap();
-        assert_eq!(duplicates.len(), 2);
     }
 }

@@ -6,4 +6,4 @@ mod read;
 mod write;
 
 pub(crate) use client::ZoteroClient;
-pub(crate) use models::ZoteroItem;
+pub(crate) use models::{ZoteroCollection, ZoteroItem};

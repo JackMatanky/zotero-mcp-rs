@@ -100,7 +100,7 @@ impl ServerHandler for ZoteroMcpServer {
         _param: Option<rmcp::model::PaginatedRequestParam>,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> Result<rmcp::model::ListResourcesResult, rmcp::ErrorData> {
-        self.list_resources_impl()
+        Ok(Self::list_resources_impl())
     }
 
     async fn read_resource(
@@ -116,7 +116,7 @@ impl ServerHandler for ZoteroMcpServer {
         _param: Option<rmcp::model::PaginatedRequestParam>,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> Result<rmcp::model::ListPromptsResult, rmcp::ErrorData> {
-        self.list_prompts_impl()
+        Ok(Self::list_prompts_impl())
     }
 
     async fn get_prompt(
@@ -124,10 +124,11 @@ impl ServerHandler for ZoteroMcpServer {
         param: rmcp::model::GetPromptRequestParam,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> Result<rmcp::model::GetPromptResult, rmcp::ErrorData> {
-        self.get_prompt_impl(&param.name, param.arguments.as_ref())
+        Self::get_prompt_impl(&param.name, param.arguments.as_ref())
     }
 }
 
+/// All `#[tool]` methods stay in this one router impl; keep bodies as one-line forwards.
 #[tool_router]
 impl ZoteroMcpServer {
     // --- Zotero Diagnostics & Status ---
@@ -137,7 +138,6 @@ impl ZoteroMcpServer {
         description = "Check Zotero Local API availability, version, and \
                        connectivity"
     )]
-    /// Routes `zotero_status` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -156,7 +156,6 @@ impl ZoteroMcpServer {
         name = "zotero_get_recent",
         description = "Fetch recently modified library items (notes excluded)"
     )]
-    /// Routes `zotero_get_recent` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -173,7 +172,6 @@ impl ZoteroMcpServer {
         name = "zotero_search_items",
         description = "Search items by title, creator, year, or fulltext query"
     )]
-    /// Routes `zotero_search_items` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -190,7 +188,6 @@ impl ZoteroMcpServer {
         name = "zotero_get_item",
         description = "Fetch a single Zotero item by its key"
     )]
-    /// Routes `zotero_get_item` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -208,7 +205,6 @@ impl ZoteroMcpServer {
         description = "Get metadata for an item as JSON or formatted BibTeX \
                        string"
     )]
-    /// Routes `zotero_get_item_metadata` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -225,8 +221,6 @@ impl ZoteroMcpServer {
         name = "zotero_get_collection_items",
         description = "Fetch items inside a specific Zotero collection"
     )]
-    /// Routes `zotero_get_collection_items` MCP tool calls to the domain
-    /// handler.
     ///
     /// # Errors
     ///
@@ -244,7 +238,6 @@ impl ZoteroMcpServer {
         description = "Get child items (notes, attachments) for a given item \
                        key"
     )]
-    /// Routes `zotero_get_item_children` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -261,7 +254,6 @@ impl ZoteroMcpServer {
         name = "zotero_get_item_fulltext",
         description = "Get Zotero's indexed fulltext for an item"
     )]
-    /// Routes `zotero_get_item_fulltext` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -279,7 +271,6 @@ impl ZoteroMcpServer {
         description = "Locate the local PDF file path for an item or its \
                        attachment"
     )]
-    /// Routes `zotero_get_pdf_path` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -296,7 +287,6 @@ impl ZoteroMcpServer {
         name = "zotero_read_pdf_pages",
         description = "Extract raw text from specific 1-based pages of a PDF"
     )]
-    /// Routes `zotero_read_pdf_pages` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -313,7 +303,6 @@ impl ZoteroMcpServer {
         name = "zotero_get_notes",
         description = "Fetch all note child items for a given item key"
     )]
-    /// Routes `zotero_get_notes` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -333,7 +322,6 @@ impl ZoteroMcpServer {
         description = "Attach a new note to an item (requires write \
                        permission)"
     )]
-    /// Routes `zotero_create_note` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -351,7 +339,6 @@ impl ZoteroMcpServer {
         description = "Create a new Zotero collection (requires write \
                        permission)"
     )]
-    /// Routes `zotero_create_collection` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -368,7 +355,6 @@ impl ZoteroMcpServer {
         name = "zotero_search_collections",
         description = "Search collections by collection name query"
     )]
-    /// Routes `zotero_search_collections` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -386,7 +372,6 @@ impl ZoteroMcpServer {
         description = "Add or remove items to/from a collection (requires \
                        write permission)"
     )]
-    /// Routes `zotero_manage_collections` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -404,7 +389,6 @@ impl ZoteroMcpServer {
         description = "Update fields of an existing item using PATCH \
                        (requires write permission)"
     )]
-    /// Routes `zotero_update_item` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -422,7 +406,6 @@ impl ZoteroMcpServer {
         description = "Attach a file link to a parent item (requires write \
                        permission)"
     )]
-    /// Routes `zotero_attach_file` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -440,7 +423,6 @@ impl ZoteroMcpServer {
         description = "Batch add/remove tags across items (requires write \
                        permission)"
     )]
-    /// Routes `zotero_batch_update_tags` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -458,7 +440,6 @@ impl ZoteroMcpServer {
         description = "Finds potential duplicate items in library or \
                        collection by matching title or DOI"
     )]
-    /// Routes `zotero_find_duplicates` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -475,7 +456,6 @@ impl ZoteroMcpServer {
         name = "zotero_search_by_tag",
         description = "Search Zotero items by tag string"
     )]
-    /// Routes `zotero_search_by_tag` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -492,8 +472,6 @@ impl ZoteroMcpServer {
         name = "zotero_search_by_citation_key",
         description = "Search Zotero items by citation key string"
     )]
-    /// Routes `zotero_search_by_citation_key` MCP tool calls to the domain
-    /// handler.
     ///
     /// # Errors
     ///
@@ -511,7 +489,6 @@ impl ZoteroMcpServer {
         description = "Advanced multi-condition structured search over item \
                        fields"
     )]
-    /// Routes `zotero_advanced_search` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -529,7 +506,6 @@ impl ZoteroMcpServer {
         description = "Analyze library or collection statistics for PDF, DOI, \
                        and note coverage"
     )]
-    /// Routes `zotero_library_coverage` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -547,8 +523,6 @@ impl ZoteroMcpServer {
         description = "Extract and synthesize annotations and notes into \
                        structured Markdown"
     )]
-    /// Routes `zotero_synthesize_annotations` MCP tool calls to the domain
-    /// handler.
     ///
     /// # Errors
     ///
@@ -567,8 +541,6 @@ impl ZoteroMcpServer {
         name = "better_bibtex_get_citekeys",
         description = "Fetch citation keys for Zotero items via Better BibTeX"
     )]
-    /// Routes `better_bibtex_get_citekeys` MCP tool calls to the domain
-    /// handler.
     ///
     /// # Errors
     ///
@@ -586,8 +558,6 @@ impl ZoteroMcpServer {
         description = "Regenerate citation keys for items via Better BibTeX \
                        (requires write permission)"
     )]
-    /// Routes `better_bibtex_regenerate_citekeys` MCP tool calls to the domain
-    /// handler.
     ///
     /// # Errors
     ///
@@ -604,8 +574,6 @@ impl ZoteroMcpServer {
         name = "better_bibtex_export_items",
         description = "Export items using a Better BibTeX translator"
     )]
-    /// Routes `better_bibtex_export_items` MCP tool calls to the domain
-    /// handler.
     ///
     /// # Errors
     ///
@@ -622,8 +590,6 @@ impl ZoteroMcpServer {
         name = "better_bibtex_format_bibliography",
         description = "Format a bibliography for citekeys in a given CSL style"
     )]
-    /// Routes `better_bibtex_format_bibliography` MCP tool calls to the domain
-    /// handler.
     ///
     /// # Errors
     ///
@@ -641,7 +607,6 @@ impl ZoteroMcpServer {
         description = "Extract citekeys from a LaTeX .aux file via Better \
                        BibTeX"
     )]
-    /// Routes `better_bibtex_scan_aux` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -658,8 +623,6 @@ impl ZoteroMcpServer {
         name = "better_bibtex_pandoc_filter",
         description = "Process citekeys through Better BibTeX's Pandoc filter"
     )]
-    /// Routes `better_bibtex_pandoc_filter` MCP tool calls to the domain
-    /// handler.
     ///
     /// # Errors
     ///
@@ -677,8 +640,6 @@ impl ZoteroMcpServer {
         description = "Configure auto-export for a collection/library \
                        (requires write permission)"
     )]
-    /// Routes `better_bibtex_autoexport_add` MCP tool calls to the domain
-    /// handler.
     ///
     /// # Errors
     ///
@@ -695,7 +656,6 @@ impl ZoteroMcpServer {
         name = "better_bibtex_search",
         description = "Search items using Better BibTeX's query engine"
     )]
-    /// Routes `better_bibtex_search` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -714,7 +674,6 @@ impl ZoteroMcpServer {
         name = "better_notes_to_markdown",
         description = "Convert a Zotero note item to Markdown via Better Notes"
     )]
-    /// Routes `better_notes_to_markdown` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -732,8 +691,6 @@ impl ZoteroMcpServer {
         description = "Convert Markdown to HTML formatted for Zotero notes \
                        via Better Notes"
     )]
-    /// Routes `better_notes_from_markdown` MCP tool calls to the domain
-    /// handler.
     ///
     /// # Errors
     ///
@@ -750,7 +707,6 @@ impl ZoteroMcpServer {
         name = "better_notes_run_template",
         description = "Execute a Better Notes template against an item"
     )]
-    /// Routes `better_notes_run_template` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -768,8 +724,6 @@ impl ZoteroMcpServer {
         description = "Fetch linked items / note network for a note via \
                        Better Notes"
     )]
-    /// Routes `better_notes_get_relations` MCP tool calls to the domain
-    /// handler.
     ///
     /// # Errors
     ///
@@ -787,7 +741,6 @@ impl ZoteroMcpServer {
         description = "Fetch the hierarchical note outline/tree for a note \
                        via Better Notes"
     )]
-    /// Routes `better_notes_get_tree` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -807,7 +760,6 @@ impl ZoteroMcpServer {
         description = "ChatGPT Connector search tool - search Zotero items by \
                        query"
     )]
-    /// Routes `chatgpt_search` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -825,7 +777,6 @@ impl ZoteroMcpServer {
         description = "ChatGPT Connector fetch tool - get item metadata by \
                        item ID/key"
     )]
-    /// Routes `chatgpt_fetch` MCP tool calls to the domain handler.
     ///
     /// # Errors
     ///
@@ -869,15 +820,11 @@ mod tests {
         pub(super) fn http_response(status: &str, body: &str) -> String {
             format!(
                 "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
-                 application/json\r\n\r\n{body}",
+                 application/json\r\nConnection: close\r\n\r\n{body}",
                 body.len()
             )
         }
 
-        #[expect(
-            clippy::excessive_nesting,
-            reason = "mock HTTP server thread loop"
-        )]
         /// Runs a one-shot fixture HTTP server and returns its base URL.
         pub(super) fn mock_server(responses: Vec<String>) -> String {
             let listener =
@@ -885,10 +832,9 @@ mod tests {
             let addr = listener.local_addr().expect("local addr");
             std::thread::spawn(move || {
                 for response in responses {
-                    let Ok((mut stream, _)) = listener.accept() else {
-                        continue;
-                    };
-                    let mut buf = [0u8; 1024];
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
+                    let mut buf = [0_u8; 1024];
                     let _ = stream.read(&mut buf);
                     let _ = stream.write_all(response.as_bytes());
                 }
@@ -921,8 +867,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_resources_returns_collections_uri() {
-        let server = ZoteroMcpServer::new(zotero_state(String::new()));
-        let res = server.list_resources_impl().unwrap();
+        let res = ZoteroMcpServer::list_resources_impl();
         assert_eq!(res.resources.len(), 1);
         assert_eq!(
             res.resources.first().expect("resource").raw.uri,
@@ -951,8 +896,8 @@ mod tests {
 
     #[tokio::test]
     async fn list_and_get_prompts_work() {
-        let server = ZoteroMcpServer::new(zotero_state(String::new()));
-        let list = server.list_prompts_impl().unwrap();
+        let _server = ZoteroMcpServer::new(zotero_state(String::new()));
+        let list = ZoteroMcpServer::list_prompts_impl();
         assert_eq!(list.prompts.len(), 1);
         assert_eq!(
             list.prompts.first().expect("prompt").name,
@@ -961,9 +906,11 @@ mod tests {
 
         let mut args = serde_json::Map::new();
         args.insert("collection_key".to_owned(), json!("COL123"));
-        let prompt = server
-            .get_prompt_impl("zotero_literature_review", Some(&args))
-            .unwrap();
+        let prompt = ZoteroMcpServer::get_prompt_impl(
+            "zotero_literature_review",
+            Some(&args),
+        )
+        .unwrap();
         assert_eq!(prompt.messages.len(), 1);
     }
 
