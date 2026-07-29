@@ -96,30 +96,101 @@ pub(crate) fn get_default_bbt_db_path() -> std::path::PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
+    mod fixtures {
+        use std::path::PathBuf;
 
-    use super::*;
+        use rusqlite::Connection;
+        use tempfile::TempDir;
 
-    #[test]
-    fn test_sqlite_bbt_reader() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("better-bibtex.migrated");
+        /// Creates a temp Better `BibTeX` `citationkey` table seeded with
+        /// `insert_sql` (a full `INSERT INTO citationkey (...) VALUES
+        /// (...)` statement). Returns the backing [`TempDir`] — keep it
+        /// alive for the test's duration — and the database path.
+        pub(super) fn seeded_db(insert_sql: &str) -> (TempDir, PathBuf) {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let db_path = temp_dir.path().join("better-bibtex.migrated");
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute(
+                "CREATE TABLE citationkey (itemID INTEGER, itemKey TEXT, \
+                 libraryID INTEGER, citationKey TEXT, pinned INTEGER)",
+                [],
+            )
+            .unwrap();
+            conn.execute(insert_sql, []).unwrap();
+            (temp_dir, db_path)
+        }
+    }
 
-        let conn = Connection::open(&db_path).unwrap();
-        conn.execute(
-            "CREATE TABLE citationkey (itemID INTEGER, itemKey TEXT, \
-             libraryID INTEGER, citationKey TEXT, pinned INTEGER)",
-            [],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO citationkey (itemID, itemKey, libraryID, \
-             citationKey, pinned) VALUES (1, 'ITEMKEY1', 1, 'citekey1', 0)",
-            [],
-        )
-        .unwrap();
+    mod read_bbt_citekeys_sqlite {
+        use pretty_assertions::assert_eq;
 
-        let map = read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1"]).unwrap();
-        assert_eq!(map.get("ITEMKEY1").unwrap(), "citekey1");
+        use super::{super::*, fixtures::seeded_db};
+
+        #[test]
+        fn returns_citekey_for_matching_item_key() {
+            // Arrange
+            let (_temp_dir, db_path) = seeded_db(
+                "INSERT INTO citationkey (itemID, itemKey, libraryID, \
+                 citationKey, pinned) VALUES (1, 'ITEMKEY1', 1, 'citekey1', \
+                 0)",
+            );
+
+            // Act
+            let map =
+                read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1"]).unwrap();
+
+            // Assert
+            assert_eq!(map.get("ITEMKEY1").unwrap(), "citekey1");
+        }
+
+        #[test]
+        fn returns_not_found_error_when_database_is_missing() {
+            // Arrange
+            let temp_dir = tempfile::tempdir().unwrap();
+            let db_path = temp_dir.path().join("does-not-exist.migrated");
+
+            // Act
+            let err =
+                read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1"]).unwrap_err();
+
+            // Assert
+            assert!(matches!(err, ZoteroMcpError::NotFound(_)));
+        }
+
+        #[test]
+        fn returns_every_pinned_citekey_when_item_keys_is_empty() {
+            // Arrange
+            let (_temp_dir, db_path) = seeded_db(
+                "INSERT INTO citationkey (itemID, itemKey, libraryID, \
+                 citationKey, pinned) VALUES (1, 'ITEMKEY1', 1, 'citekey1', \
+                 0), (2, 'ITEMKEY2', 1, 'citekey2', 0), (3, 'ITEMKEY3', 1, \
+                 NULL, 0)",
+            );
+
+            // Act
+            let map = read_bbt_citekeys_sqlite(&db_path, &[]).unwrap();
+
+            // Assert
+            assert_eq!(map.len(), 2);
+            assert_eq!(map.get("ITEMKEY1").unwrap(), "citekey1");
+            assert_eq!(map.get("ITEMKEY2").unwrap(), "citekey2");
+            assert!(!map.contains_key("ITEMKEY3"));
+        }
+
+        #[test]
+        fn omits_items_without_a_pinned_citekey_from_the_map() {
+            // Arrange
+            let (_temp_dir, db_path) = seeded_db(
+                "INSERT INTO citationkey (itemID, itemKey, libraryID, \
+                 citationKey, pinned) VALUES (1, 'ITEMKEY1', 1, NULL, 0)",
+            );
+
+            // Act
+            let map = read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1", "MISSING"])
+                .unwrap();
+
+            // Assert
+            assert!(map.is_empty());
+        }
     }
 }

@@ -39,9 +39,12 @@ use crate::{
 /// The MCP tool router: holds the shared [`AppState`] and implements
 /// [`ServerHandler`], hosting every `#[tool]` method below.
 pub(crate) struct ZoteroMcpServer {
-    #[expect(
-        dead_code,
-        reason = "State accessed dynamically by tool router methods"
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "State accessed dynamically by tool router methods"
+        )
     )]
     pub(crate) state: AppState,
 }
@@ -801,6 +804,563 @@ impl ZoteroMcpServer {
             Err(e) => {
                 Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod fixtures {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
+
+        use reqwest::Client;
+        use rmcp::model::RawContent;
+
+        use super::{AppState, CallToolResult};
+
+        /// Builds an [`AppState`] pointing each backend URL at its own
+        /// fixture server (or `String::new()` when a test doesn't need
+        /// that backend).
+        pub(super) fn test_state(
+            zotero_api_url: String,
+            better_bibtex_url: String,
+            better_notes_url: String,
+        ) -> AppState {
+            AppState {
+                client: Client::new(),
+                zotero_api_url,
+                better_bibtex_url,
+                better_notes_url,
+                write_enabled: false,
+            }
+        }
+
+        /// [`test_state`] with only `zotero_api_url` set.
+        pub(super) fn zotero_state(zotero_api_url: String) -> AppState {
+            test_state(zotero_api_url, String::new(), String::new())
+        }
+
+        /// Formats a minimal raw HTTP/1.1 response with `status` (e.g.
+        /// `"200 OK"`) and a JSON `body`, computing `Content-Length`
+        /// automatically.
+        pub(super) fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: \
+                 close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        /// Spawns a background thread serving one canned raw HTTP response
+        /// (see [`http_response`]) per accepted connection, in order.
+        /// Returns the bound `http://host:port` base URL, standing in for
+        /// a Zotero/Better BibTeX/Better Notes backend.
+        pub(super) fn mock_server(responses: Vec<String>) -> String {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = listener.local_addr().unwrap();
+            std::thread::spawn(move || {
+                for resp in responses {
+                    let Ok((mut stream, _)) = listener.accept() else {
+                        return;
+                    };
+                    let mut buf = [0_u8; 4096];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(resp.as_bytes());
+                }
+            });
+            format!("http://{addr}")
+        }
+
+        /// Extracts the text of the first content block in a
+        /// [`CallToolResult`].
+        ///
+        /// # Panics
+        ///
+        /// Panics if `result` has no content blocks or the first isn't
+        /// text — acceptable in test-only code asserting a specific tool
+        /// response shape.
+        pub(super) fn result_text(result: &CallToolResult) -> &str {
+            match &result.content.first().expect("result has content").raw {
+                RawContent::Text(t) => &t.text,
+                other => panic!("expected text content, got {other:?}"),
+            }
+        }
+    }
+
+    mod get_pdf_path {
+        use pretty_assertions::assert_eq;
+        use serde_json::json;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, result_text, zotero_state},
+        };
+
+        #[tokio::test]
+        async fn returns_direct_path_for_an_attachment_item() {
+            // Arrange
+            let item = json!({
+                "key": "ATT1",
+                "version": 1,
+                "data": {
+                    "key": "ATT1",
+                    "version": 1,
+                    "itemType": "attachment",
+                    "path": "/tmp/file.pdf"
+                }
+            });
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &item.to_string(),
+            )]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let result = server
+                .zotero_get_pdf_path(Parameters(GetPdfPathArgs {
+                    item_key: "ATT1".to_owned(),
+                }))
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(result.is_error, Some(false));
+            assert_eq!(result_text(&result), "/tmp/file.pdf");
+        }
+
+        #[tokio::test]
+        async fn finds_pdf_attachment_among_parent_items_children() {
+            // Arrange
+            let parent = json!({
+                "key": "PARENT1",
+                "version": 1,
+                "data": { "key": "PARENT1", "version": 1, "itemType": "journalArticle" }
+            });
+            let children = json!([
+                {
+                    "key": "NOTE1",
+                    "version": 1,
+                    "data": { "key": "NOTE1", "version": 1, "itemType": "note" }
+                },
+                {
+                    "key": "ATT2",
+                    "version": 1,
+                    "data": {
+                        "key": "ATT2",
+                        "version": 1,
+                        "itemType": "attachment",
+                        "contentType": "application/pdf",
+                        "path": "/tmp/child.pdf"
+                    }
+                }
+            ]);
+            let base = mock_server(vec![
+                http_response("200 OK", &parent.to_string()),
+                http_response("200 OK", &children.to_string()),
+            ]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let result = server
+                .zotero_get_pdf_path(Parameters(GetPdfPathArgs {
+                    item_key: "PARENT1".to_owned(),
+                }))
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(result.is_error, Some(false));
+            assert_eq!(result_text(&result), "/tmp/child.pdf");
+        }
+
+        #[tokio::test]
+        async fn errors_when_no_pdf_attachment_is_found() {
+            // Arrange
+            let parent = json!({
+                "key": "PARENT1",
+                "version": 1,
+                "data": { "key": "PARENT1", "version": 1, "itemType": "journalArticle" }
+            });
+            let children = json!([{
+                "key": "NOTE1",
+                "version": 1,
+                "data": { "key": "NOTE1", "version": 1, "itemType": "note" }
+            }]);
+            let base = mock_server(vec![
+                http_response("200 OK", &parent.to_string()),
+                http_response("200 OK", &children.to_string()),
+            ]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let result = server
+                .zotero_get_pdf_path(Parameters(GetPdfPathArgs {
+                    item_key: "PARENT1".to_owned(),
+                }))
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(result.is_error, Some(true));
+            assert_eq!(result_text(&result), "No local PDF path found for item");
+        }
+
+        #[tokio::test]
+        async fn propagates_the_item_lookup_error() {
+            // Arrange
+            let base = mock_server(vec![http_response("404 Not Found", "")]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let result = server
+                .zotero_get_pdf_path(Parameters(GetPdfPathArgs {
+                    item_key: "MISSING".to_owned(),
+                }))
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(result.is_error, Some(true));
+            assert!(result_text(&result).contains("MISSING"));
+        }
+    }
+
+    mod read_pdf_pages {
+        use pretty_assertions::assert_eq;
+        use serde_json::json;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, result_text, zotero_state},
+        };
+
+        #[tokio::test]
+        async fn skips_zotero_lookup_for_an_absolute_path() {
+            // Arrange: no mock server — an absolute path never hits the
+            // Zotero API.
+            let server = ZoteroMcpServer::new(zotero_state(String::new()));
+
+            // Act
+            let result = server
+                .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                    item_key_or_path: "/nonexistent/direct.pdf".to_owned(),
+                    pages: None,
+                }))
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(result.is_error, Some(true));
+            assert!(result_text(&result).contains("/nonexistent/direct.pdf"));
+        }
+
+        #[tokio::test]
+        async fn resolves_an_attachment_key_to_its_path() {
+            // Arrange
+            let item = json!({
+                "key": "ATT1",
+                "version": 1,
+                "data": {
+                    "key": "ATT1",
+                    "version": 1,
+                    "itemType": "attachment",
+                    "path": "/nonexistent/att.pdf"
+                }
+            });
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &item.to_string(),
+            )]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let result = server
+                .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                    item_key_or_path: "ATT1".to_owned(),
+                    pages: None,
+                }))
+                .await
+                .unwrap();
+
+            // Assert: resolution succeeded (reached the extraction stage
+            // against the resolved path); the file itself doesn't exist,
+            // which is expected.
+            assert_eq!(result.is_error, Some(true));
+            assert!(result_text(&result).contains("/nonexistent/att.pdf"));
+        }
+
+        #[tokio::test]
+        async fn resolves_a_parent_key_to_a_pdf_child_case_insensitively() {
+            // Arrange
+            let parent = json!({
+                "key": "PARENT1",
+                "version": 1,
+                "data": { "key": "PARENT1", "version": 1, "itemType": "journalArticle" }
+            });
+            let children = json!([{
+                "key": "ATT3",
+                "version": 1,
+                "data": {
+                    "key": "ATT3",
+                    "version": 1,
+                    "itemType": "attachment",
+                    "path": "/nonexistent/child.PDF"
+                }
+            }]);
+            let base = mock_server(vec![
+                http_response("200 OK", &parent.to_string()),
+                http_response("200 OK", &children.to_string()),
+            ]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let result = server
+                .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                    item_key_or_path: "PARENT1".to_owned(),
+                    pages: None,
+                }))
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(result.is_error, Some(true));
+            assert!(result_text(&result).contains("/nonexistent/child.PDF"));
+        }
+
+        #[tokio::test]
+        async fn errors_when_parent_has_no_pdf_child() {
+            // Arrange
+            let parent = json!({
+                "key": "PARENT1",
+                "version": 1,
+                "data": { "key": "PARENT1", "version": 1, "itemType": "journalArticle" }
+            });
+            let children = json!([{
+                "key": "NOTE1",
+                "version": 1,
+                "data": { "key": "NOTE1", "version": 1, "itemType": "note" }
+            }]);
+            let base = mock_server(vec![
+                http_response("200 OK", &parent.to_string()),
+                http_response("200 OK", &children.to_string()),
+            ]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let result = server
+                .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                    item_key_or_path: "PARENT1".to_owned(),
+                    pages: None,
+                }))
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(result.is_error, Some(true));
+            assert_eq!(
+                result_text(&result),
+                "PDF attachment path not found for item"
+            );
+        }
+    }
+
+    mod get_item_metadata {
+        use pretty_assertions::assert_eq;
+        use serde_json::{Value, json};
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, result_text, test_state},
+        };
+
+        #[tokio::test]
+        async fn returns_item_data_for_the_default_json_format() {
+            // Arrange
+            let item = json!({
+                "key": "ITEM1",
+                "version": 3,
+                "data": {
+                    "key": "ITEM1",
+                    "version": 3,
+                    "itemType": "book",
+                    "title": "My Book"
+                }
+            });
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &item.to_string(),
+            )]);
+            let server = ZoteroMcpServer::new(test_state(
+                base,
+                String::new(),
+                String::new(),
+            ));
+
+            // Act
+            let result = server
+                .zotero_get_item_metadata(Parameters(GetItemMetadataArgs {
+                    item_key: "ITEM1".to_owned(),
+                    format: None,
+                }))
+                .await
+                .unwrap();
+
+            // Assert: item.data has no nested "data" field; the full
+            // ZoteroItem wrapper does, so this distinguishes the two shapes.
+            let parsed: Value =
+                serde_json::from_str(result_text(&result)).unwrap();
+            assert!(parsed.get("data").is_none());
+            assert_eq!(parsed.get("title"), Some(&json!("My Book")));
+        }
+
+        #[tokio::test]
+        async fn exports_via_better_bibtex_for_the_bibtex_format() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"jsonrpc":"2.0","result":"@book{foo,}"}"#,
+            )]);
+            let server = ZoteroMcpServer::new(test_state(
+                String::new(),
+                base,
+                String::new(),
+            ));
+
+            // Act
+            let result = server
+                .zotero_get_item_metadata(Parameters(GetItemMetadataArgs {
+                    item_key: "ITEM1".to_owned(),
+                    format: Some("bibtex".to_owned()),
+                }))
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(result_text(&result), "@book{foo,}");
+        }
+
+        #[tokio::test]
+        async fn treats_the_bibtex_format_as_case_insensitive() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"jsonrpc":"2.0","result":"@book{foo,}"}"#,
+            )]);
+            let server = ZoteroMcpServer::new(test_state(
+                String::new(),
+                base,
+                String::new(),
+            ));
+
+            // Act
+            let result = server
+                .zotero_get_item_metadata(Parameters(GetItemMetadataArgs {
+                    item_key: "ITEM1".to_owned(),
+                    format: Some("BibTeX".to_owned()),
+                }))
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(result_text(&result), "@book{foo,}");
+        }
+    }
+
+    mod get_notes {
+        use pretty_assertions::assert_eq;
+        use serde_json::{Value, json};
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, result_text, test_state},
+        };
+
+        /// One note child (with HTML body) and one non-note attachment
+        /// child, as returned by `GET /items/{key}/children`.
+        fn note_and_attachment_children() -> Value {
+            json!([
+                {
+                    "key": "NOTE1",
+                    "version": 1,
+                    "data": {
+                        "key": "NOTE1",
+                        "version": 1,
+                        "itemType": "note",
+                        "note": "<p>Hello</p>"
+                    }
+                },
+                {
+                    "key": "ATT1",
+                    "version": 1,
+                    "data": { "key": "ATT1", "version": 1, "itemType": "attachment" }
+                }
+            ])
+        }
+
+        #[tokio::test]
+        async fn filters_to_notes_and_falls_back_to_html_when_bridge_is_down() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &note_and_attachment_children().to_string(),
+            )]);
+            // Port 0 is never a live listener: to_markdown always fails.
+            let state = test_state(
+                base,
+                String::new(),
+                "http://127.0.0.1:0".to_owned(),
+            );
+            let server = ZoteroMcpServer::new(state);
+
+            // Act
+            let result = server
+                .zotero_get_notes(Parameters(GetNotesArgs {
+                    item_key: "PARENT1".to_owned(),
+                }))
+                .await
+                .unwrap();
+
+            // Assert
+            let parsed: Vec<Value> =
+                serde_json::from_str(result_text(&result)).unwrap();
+            assert_eq!(parsed.len(), 1, "attachment child must be filtered out");
+            assert_eq!(parsed[0]["key"], "NOTE1");
+            assert_eq!(parsed[0]["html"], "<p>Hello</p>");
+            assert_eq!(parsed[0]["markdown"], "<p>Hello</p>");
+        }
+
+        #[tokio::test]
+        async fn uses_better_notes_markdown_when_the_bridge_is_available() {
+            // Arrange
+            let zotero_base = mock_server(vec![http_response(
+                "200 OK",
+                &note_and_attachment_children().to_string(),
+            )]);
+            let bn_base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"markdown":"**Hello**"}"#,
+            )]);
+            let state = test_state(zotero_base, String::new(), bn_base);
+            let server = ZoteroMcpServer::new(state);
+
+            // Act
+            let result = server
+                .zotero_get_notes(Parameters(GetNotesArgs {
+                    item_key: "PARENT1".to_owned(),
+                }))
+                .await
+                .unwrap();
+
+            // Assert
+            let parsed: Vec<Value> =
+                serde_json::from_str(result_text(&result)).unwrap();
+            assert_eq!(parsed[0]["markdown"], "**Hello**");
+            assert_eq!(parsed[0]["html"], "<p>Hello</p>");
         }
     }
 }

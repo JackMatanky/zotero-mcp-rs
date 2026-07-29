@@ -49,14 +49,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_better_notes_status_serde() {
+    fn serializes_online_flag_and_version() {
+        // Arrange
         let status = BetterNotesStatus {
             online: true,
             url: "http://127.0.0.1:23119/better-notes".to_owned(),
             version: Some("1.0.0".to_owned()),
             error: None,
         };
+
+        // Act
         let val = serde_json::to_value(&status).unwrap();
+
+        // Assert
         assert_eq!(val.get("online"), Some(&serde_json::json!(true)));
         assert_eq!(val.get("version"), Some(&serde_json::json!("1.0.0")));
     }

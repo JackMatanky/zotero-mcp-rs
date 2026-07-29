@@ -317,3 +317,260 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("collection.scanAUX", params).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod fixtures {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
+
+        use reqwest::Client;
+
+        use super::AppState;
+
+        /// Builds an [`AppState`] pointing `better_bibtex_url` at a fixture
+        /// server, with `write_enabled` set for write-gate tests.
+        pub(super) fn test_state(
+            better_bibtex_url: String,
+            write_enabled: bool,
+        ) -> AppState {
+            AppState {
+                client: Client::new(),
+                zotero_api_url: String::new(),
+                better_bibtex_url,
+                better_notes_url: String::new(),
+                write_enabled,
+            }
+        }
+
+        /// Formats a minimal raw HTTP/1.1 response with `status` (e.g.
+        /// `"200 OK"`) and a JSON `body`, computing `Content-Length`
+        /// automatically.
+        pub(super) fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: \
+                 close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        /// Spawns a background thread serving one canned raw HTTP response
+        /// (see [`http_response`]) per accepted connection, in order.
+        /// Returns the bound `http://host:port` base URL, standing in for
+        /// the Better `BibTeX` JSON-RPC endpoint.
+        pub(super) fn mock_server(responses: Vec<String>) -> String {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = listener.local_addr().unwrap();
+            std::thread::spawn(move || {
+                for resp in responses {
+                    let Ok((mut stream, _)) = listener.accept() else {
+                        return;
+                    };
+                    let mut buf = [0_u8; 4096];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(resp.as_bytes());
+                }
+            });
+            format!("http://{addr}")
+        }
+    }
+
+    mod check_status {
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn reports_ready_when_rpc_succeeds() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"jsonrpc":"2.0","result":true}"#,
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let status = BetterBibtexClient::new(&state).check_status().await;
+
+            // Assert
+            assert!(status.ready);
+            assert!(status.error.is_none());
+        }
+
+        #[tokio::test]
+        async fn reports_not_ready_when_http_error() {
+            // Arrange: 5xx is retried by AppState::send_with_retry (up to 3
+            // attempts total), so the mock must answer every attempt.
+            let base = mock_server(vec![
+                http_response("500 Internal Server Error", "");
+                3
+            ]);
+            let state = test_state(base, false);
+
+            // Act
+            let status = BetterBibtexClient::new(&state).check_status().await;
+
+            // Assert
+            assert!(!status.ready);
+            assert!(status.error.unwrap().contains("500"));
+        }
+    }
+
+    mod call_rpc {
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        // Exercised indirectly through `export_items`, the simplest caller
+        // of the shared `call_rpc` envelope handling.
+
+        #[tokio::test]
+        async fn returns_better_bibtex_error_when_http_status_is_non_success() {
+            // Arrange
+            let base = mock_server(vec![http_response("404 Not Found", "")]);
+            let state = test_state(base, false);
+
+            // Act
+            let err = BetterBibtexClient::new(&state)
+                .export_items(&["KEY1"], "Better BibTeX")
+                .await
+                .unwrap_err();
+
+            // Assert
+            match err {
+                ZoteroMcpError::BetterBibTeX(msg) => assert!(msg.contains("404")),
+                other => panic!("expected BetterBibTeX error, got {other:?}"),
+            }
+        }
+
+        #[tokio::test]
+        async fn returns_better_bibtex_error_when_response_carries_an_rpc_error()
+        {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"jsonrpc":"2.0","error":{"code":-32600,"message":"boom"}}"#,
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let err = BetterBibtexClient::new(&state)
+                .export_items(&["KEY1"], "Better BibTeX")
+                .await
+                .unwrap_err();
+
+            // Assert
+            match err {
+                ZoteroMcpError::BetterBibTeX(msg) => {
+                    assert!(msg.contains("-32600"));
+                    assert!(msg.contains("boom"));
+                }
+                other => panic!("expected BetterBibTeX error, got {other:?}"),
+            }
+        }
+
+        #[tokio::test]
+        async fn returns_better_bibtex_error_when_result_is_null() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"jsonrpc":"2.0"}"#,
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let err = BetterBibtexClient::new(&state)
+                .export_items(&["KEY1"], "Better BibTeX")
+                .await
+                .unwrap_err();
+
+            // Assert
+            match err {
+                ZoteroMcpError::BetterBibTeX(msg) => {
+                    assert!(msg.contains("null result"));
+                }
+                other => panic!("expected BetterBibTeX error, got {other:?}"),
+            }
+        }
+    }
+
+    mod export_items {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn returns_exported_string_on_success() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"jsonrpc":"2.0","result":"@article{foo,}"}"#,
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let exported = BetterBibtexClient::new(&state)
+                .export_items(&["KEY1"], "Better BibTeX")
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(exported, "@article{foo,}");
+        }
+    }
+
+    mod regenerate_keys {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            // Arrange
+            let state = test_state(String::new(), false);
+
+            // Act
+            let err = BetterBibtexClient::new(&state)
+                .regenerate_keys(&["KEY1"])
+                .await
+                .unwrap_err();
+
+            // Assert
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn returns_new_citekeys_when_write_is_enabled() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"jsonrpc":"2.0","result":{"KEY1":"newkey1"}}"#,
+            )]);
+            let state = test_state(base, true);
+
+            // Act
+            let result = BetterBibtexClient::new(&state)
+                .regenerate_keys(&["KEY1"])
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(
+                result.get("KEY1"),
+                Some(&Value::String("newkey1".to_owned()))
+            );
+        }
+    }
+}

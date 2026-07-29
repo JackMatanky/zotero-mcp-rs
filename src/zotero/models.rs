@@ -125,7 +125,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_zotero_item_deserialization() {
+    fn deserializes_item_leaving_omitted_optional_fields_as_none() {
+        // Arrange
         let raw_json = serde_json::json!({
             "key": "ABC12345",
             "version": 42,
@@ -137,11 +138,15 @@ mod tests {
             }
         });
 
+        // Act
         let item: ZoteroItem = serde_json::from_value(raw_json).unwrap();
+
+        // Assert
         assert_eq!(item.key, "ABC12345");
         assert_eq!(
             item.data.title.as_deref(),
             Some("Quantum Computing Advances")
         );
+        assert!(item.data.doi.is_none());
     }
 }

@@ -333,3 +333,337 @@ impl<'a> ZoteroClient<'a> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod fixtures {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
+
+        use reqwest::Client;
+
+        use super::AppState;
+
+        /// Builds an [`AppState`] pointing `zotero_api_url` at a fixture
+        /// server, with `write_enabled` set for write-gate tests.
+        pub(super) fn test_state(
+            zotero_api_url: String,
+            write_enabled: bool,
+        ) -> AppState {
+            AppState {
+                client: Client::new(),
+                zotero_api_url,
+                better_bibtex_url: String::new(),
+                better_notes_url: String::new(),
+                write_enabled,
+            }
+        }
+
+        /// Formats a minimal raw HTTP/1.1 response with `status` (e.g.
+        /// `"200 OK"`) and a JSON/text `body`, computing `Content-Length`
+        /// automatically.
+        pub(super) fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: \
+                 close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        /// Spawns a background thread serving one canned raw HTTP response
+        /// (see [`http_response`]) per accepted connection, in order.
+        /// Returns the bound `http://host:port` base URL, standing in for
+        /// the Zotero Local API.
+        pub(super) fn mock_server(responses: Vec<String>) -> String {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = listener.local_addr().unwrap();
+            std::thread::spawn(move || {
+                for resp in responses {
+                    let Ok((mut stream, _)) = listener.accept() else {
+                        return;
+                    };
+                    let mut buf = [0_u8; 4096];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(resp.as_bytes());
+                }
+            });
+            format!("http://{addr}")
+        }
+    }
+
+    mod check_status {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn reports_online_with_version_when_api_responds_success() {
+            // Arrange
+            let body = "[]";
+            let raw = format!(
+                "HTTP/1.1 200 OK\r\nzotero-api-version: 3\r\nContent-Length: \
+                 {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let base = mock_server(vec![raw]);
+            let state = test_state(base, false);
+
+            // Act
+            let status = ZoteroClient::new(&state).check_status().await;
+
+            // Assert
+            assert!(status.online);
+            assert_eq!(status.version.as_deref(), Some("3"));
+            assert!(status.error.is_none());
+        }
+
+        #[tokio::test]
+        async fn reports_offline_with_error_when_api_returns_error_status() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "500 Internal Server Error",
+                "",
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let status = ZoteroClient::new(&state).check_status().await;
+
+            // Assert
+            assert!(!status.online);
+            assert!(status.error.unwrap().contains("500"));
+        }
+
+        #[tokio::test]
+        async fn reports_offline_with_error_when_connection_fails() {
+            // Arrange: port 0 is never a live listener, so the connection
+            // is refused instantly.
+            let state = test_state("http://127.0.0.1:0/api".to_owned(), false);
+
+            // Act
+            let status = ZoteroClient::new(&state).check_status().await;
+
+            // Assert
+            assert!(!status.online);
+            assert!(status.error.is_some());
+        }
+    }
+
+    mod get_recent_items {
+        use pretty_assertions::assert_eq;
+        use serde_json::json;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn returns_items_on_success() {
+            // Arrange
+            let items = json!([{
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle" }
+            }]);
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &items.to_string(),
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let result =
+                ZoteroClient::new(&state).get_recent_items(5).await.unwrap();
+
+            // Assert
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].key, "ITEM1");
+        }
+
+        #[tokio::test]
+        async fn returns_local_api_error_when_response_is_non_success() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "400 Bad Request",
+                "invalid limit",
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let err =
+                ZoteroClient::new(&state).get_recent_items(5).await.unwrap_err();
+
+            // Assert
+            match err {
+                ZoteroMcpError::LocalApi { status, message } => {
+                    assert_eq!(status, 400);
+                    assert_eq!(message, "invalid limit");
+                }
+                other => panic!("expected LocalApi error, got {other:?}"),
+            }
+        }
+    }
+
+    mod get_item {
+        use pretty_assertions::assert_eq;
+        use serde_json::json;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn returns_item_on_success() {
+            // Arrange
+            let item = json!({
+                "key": "ITEM2",
+                "version": 7,
+                "data": { "key": "ITEM2", "version": 7, "itemType": "book" }
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &item.to_string())]);
+            let state = test_state(base, false);
+
+            // Act
+            let result = ZoteroClient::new(&state).get_item("ITEM2").await.unwrap();
+
+            // Assert
+            assert_eq!(result.key, "ITEM2");
+        }
+
+        #[tokio::test]
+        async fn returns_not_found_error_when_response_is_404() {
+            // Arrange
+            let base = mock_server(vec![http_response("404 Not Found", "")]);
+            let state = test_state(base, false);
+
+            // Act
+            let err =
+                ZoteroClient::new(&state).get_item("MISSING").await.unwrap_err();
+
+            // Assert
+            assert!(matches!(err, ZoteroMcpError::NotFound(_)));
+        }
+    }
+
+    mod get_item_fulltext {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn returns_empty_string_when_content_field_is_missing() {
+            // Arrange
+            let base = mock_server(vec![http_response("200 OK", "{}")]);
+            let state = test_state(base, false);
+
+            // Act
+            let text = ZoteroClient::new(&state)
+                .get_item_fulltext("ITEM3")
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(text, "");
+        }
+
+        #[tokio::test]
+        async fn returns_indexed_content_when_present() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"content":"indexed body text"}"#,
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let text = ZoteroClient::new(&state)
+                .get_item_fulltext("ITEM3")
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(text, "indexed body text");
+        }
+    }
+
+    mod create_note {
+        use pretty_assertions::assert_eq;
+        use serde_json::json;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            // Arrange
+            let state = test_state(String::new(), false);
+
+            // Act
+            let err = ZoteroClient::new(&state)
+                .create_note("PARENT1", "note body")
+                .await
+                .unwrap_err();
+
+            // Assert
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn returns_created_item_on_success() {
+            // Arrange
+            let created = json!([{
+                "key": "NOTE1",
+                "version": 1,
+                "data": { "key": "NOTE1", "version": 1, "itemType": "note", "note": "note body" }
+            }]);
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &created.to_string(),
+            )]);
+            let state = test_state(base, true);
+
+            // Act
+            let item = ZoteroClient::new(&state)
+                .create_note("PARENT1", "note body")
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(item.key, "NOTE1");
+        }
+
+        #[tokio::test]
+        async fn returns_local_api_error_when_response_array_is_empty() {
+            // Arrange
+            let base = mock_server(vec![http_response("200 OK", "[]")]);
+            let state = test_state(base, true);
+
+            // Act
+            let err = ZoteroClient::new(&state)
+                .create_note("PARENT1", "note body")
+                .await
+                .unwrap_err();
+
+            // Assert
+            match err {
+                ZoteroMcpError::LocalApi { status, .. } => assert_eq!(status, 500),
+                other => panic!("expected LocalApi error, got {other:?}"),
+            }
+        }
+    }
+}

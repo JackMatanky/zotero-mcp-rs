@@ -209,3 +209,223 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.tree)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod fixtures {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
+
+        use reqwest::Client;
+
+        use super::AppState;
+
+        /// Builds an [`AppState`] pointing `better_notes_url` at a fixture
+        /// server, with `write_enabled` set for write-gate tests.
+        pub(super) fn test_state(
+            better_notes_url: String,
+            write_enabled: bool,
+        ) -> AppState {
+            AppState {
+                client: Client::new(),
+                zotero_api_url: String::new(),
+                better_bibtex_url: String::new(),
+                better_notes_url,
+                write_enabled,
+            }
+        }
+
+        /// Formats a minimal raw HTTP/1.1 response with `status` (e.g.
+        /// `"200 OK"`) and a JSON `body`, computing `Content-Length`
+        /// automatically.
+        pub(super) fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: \
+                 close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        /// Spawns a background thread serving one canned raw HTTP response
+        /// (see [`http_response`]) per accepted connection, in order.
+        /// Returns the bound `http://host:port` base URL, standing in for
+        /// the Better Notes bridge.
+        pub(super) fn mock_server(responses: Vec<String>) -> String {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = listener.local_addr().unwrap();
+            std::thread::spawn(move || {
+                for resp in responses {
+                    let Ok((mut stream, _)) = listener.accept() else {
+                        return;
+                    };
+                    let mut buf = [0_u8; 4096];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(resp.as_bytes());
+                }
+            });
+            format!("http://{addr}")
+        }
+    }
+
+    mod check_status {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn reports_online_with_version_when_bridge_responds_success() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"version":"1.0.0"}"#,
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let status = BetterNotesClient::new(&state).check_status().await;
+
+            // Assert
+            assert!(status.online);
+            assert_eq!(status.version.as_deref(), Some("1.0.0"));
+            assert!(status.error.is_none());
+        }
+
+        #[tokio::test]
+        async fn reports_offline_with_error_when_bridge_returns_error_status() {
+            // Arrange
+            let base = mock_server(vec![http_response("404 Not Found", "")]);
+            let state = test_state(base, false);
+
+            // Act
+            let status = BetterNotesClient::new(&state).check_status().await;
+
+            // Assert
+            assert!(!status.online);
+            assert!(status.error.unwrap().contains("404"));
+        }
+
+        #[tokio::test]
+        async fn reports_offline_with_error_when_connection_fails() {
+            // Arrange: port 0 is never a live listener, so the connection
+            // is refused instantly.
+            let state = test_state("http://127.0.0.1:0".to_owned(), false);
+
+            // Act
+            let status = BetterNotesClient::new(&state).check_status().await;
+
+            // Assert
+            assert!(!status.online);
+            assert!(status.error.is_some());
+        }
+    }
+
+    mod post_json {
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        // Exercised indirectly through `to_markdown`, the simplest caller
+        // of the shared `post_json` envelope handling.
+
+        #[tokio::test]
+        async fn returns_better_notes_error_when_response_is_non_success() {
+            // Arrange
+            let base = mock_server(vec![http_response("400 Bad Request", "")]);
+            let state = test_state(base, false);
+
+            // Act
+            let err = BetterNotesClient::new(&state)
+                .to_markdown(Some("NOTE1"), None)
+                .await
+                .unwrap_err();
+
+            // Assert
+            match err {
+                ZoteroMcpError::BetterNotes(msg) => {
+                    assert!(msg.contains("400"));
+                    assert!(msg.contains("/notes/to-markdown"));
+                }
+                other => panic!("expected BetterNotes error, got {other:?}"),
+            }
+        }
+    }
+
+    mod to_markdown {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn returns_markdown_on_success() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r##"{"markdown":"# Hello"}"##,
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let markdown = BetterNotesClient::new(&state)
+                .to_markdown(Some("NOTE1"), None)
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(markdown, "# Hello");
+        }
+    }
+
+    mod convert_from_markdown {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            // Arrange
+            let state = test_state(String::new(), false);
+
+            // Act
+            let err = BetterNotesClient::new(&state)
+                .convert_from_markdown("PARENT1", "# Hello")
+                .await
+                .unwrap_err();
+
+            // Assert
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn returns_created_item_key_when_write_is_enabled() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"itemKey":"NOTE1"}"#,
+            )]);
+            let state = test_state(base, true);
+
+            // Act
+            let key = BetterNotesClient::new(&state)
+                .convert_from_markdown("PARENT1", "# Hello")
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(key, "NOTE1");
+        }
+    }
+}
