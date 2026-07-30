@@ -1,13 +1,19 @@
 //! MCP tool handlers and argument models for Better `BibTeX` integration.
 
+use std::collections::HashMap;
+
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::{
     ZoteroMcpServer,
-    better_bibtex::BetterBibtexClient,
-    zotero::{CitationKey, CollectionKey, ItemKey},
+    better_bibtex::{
+        AutoexportAddRequest, AuxFilePath, BetterBibtexClient,
+        BibliographyFormat, CollectionPath, ExportFilePath, SearchQuery,
+        TranslatorName,
+    },
+    zotero::{CitationKey, ItemKey},
 };
 
 // --- Argument Schemas ---
@@ -22,17 +28,17 @@ pub(crate) struct GetCitekeysArgs {
 /// Arguments for `better_bibtex_regenerate_citekeys`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RegenerateKeysArgs {
-    /// Zotero item keys to regenerate citation keys for.
-    pub(crate) item_keys: Vec<ItemKey>,
+    /// Better `BibTeX` citation keys to regenerate.
+    pub(crate) citekeys: Vec<CitationKey>,
 }
 
 /// Arguments for `better_bibtex_export_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ExportItemsArgs {
-    /// Zotero item keys to export.
-    pub(crate) item_keys: Vec<ItemKey>,
-    /// Translator format string (e.g. `"bibtex"`, `"biblatex"`, `"csljson"`).
-    pub(crate) translator: String,
+    /// Better `BibTeX` citation keys to export.
+    pub(crate) citekeys: Vec<CitationKey>,
+    /// Translator name or GUID.
+    pub(crate) translator: TranslatorName,
 }
 
 /// Arguments for `better_bibtex_format_bibliography`.
@@ -40,17 +46,18 @@ pub(crate) struct ExportItemsArgs {
 pub(crate) struct BibliographyArgs {
     /// Citation keys to format.
     pub(crate) citekeys: Vec<CitationKey>,
-    /// Optional CSL style string (e.g. `"apa"`, `"ieee"`).
-    pub(crate) style: Option<String>,
+    /// Optional Better `BibTeX` bibliography format object.
+    pub(crate) format: Option<BibliographyFormat>,
 }
 
 /// Arguments for `better_bibtex_scan_aux`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ScanAuxArgs {
-    /// Target Zotero collection key to import references into.
-    pub(crate) collection_key: Option<CollectionKey>,
-    /// Path to the `LaTeX` `.aux` file.
-    pub(crate) aux_path: String,
+    /// Better `BibTeX` collection path to import references into.
+    /// Defaults to `//`, the personal-library root.
+    pub(crate) collection: Option<CollectionPath>,
+    /// Absolute path to the `LaTeX` `.aux` file.
+    pub(crate) aux_path: AuxFilePath,
 }
 
 /// Arguments for `better_bibtex_pandoc_filter`.
@@ -63,19 +70,23 @@ pub(crate) struct PandocFilterArgs {
 /// Arguments for `better_bibtex_autoexport_add`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AutoexportAddArgs {
-    /// Zotero collection key or library ID.
-    pub(crate) collection_key: CollectionKey,
+    /// Better `BibTeX` collection path.
+    pub(crate) collection: CollectionPath,
     /// Destination export file path.
-    pub(crate) path: String,
-    /// Format translator string (e.g. `"bibtex"`, `"biblatex"`).
-    pub(crate) translator: String,
+    pub(crate) path: ExportFilePath,
+    /// Translator name or GUID.
+    pub(crate) translator: TranslatorName,
+    /// Interactive export display options.
+    pub(crate) display_options: Option<HashMap<String, bool>>,
+    /// Replace an existing auto-export with incompatible parameters.
+    pub(crate) replace: Option<bool>,
 }
 
 /// Arguments for `better_bibtex_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BetterBibtexSearchArgs {
-    /// Search query string.
-    pub(crate) query: String,
+    /// Better `BibTeX` quick-search query string.
+    pub(crate) query: SearchQuery,
 }
 
 // --- Handler Implementations ---
@@ -93,9 +104,7 @@ impl ZoteroMcpServer {
         args: GetCitekeysArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
-        let keys_str: Vec<&str> =
-            args.item_keys.iter().map(ItemKey::as_str).collect();
-        Ok(super::json_result(client.get_citekeys(&keys_str).await))
+        Ok(super::json_result(client.get_citekeys(&args.item_keys).await))
     }
 
     /// Regenerates Better `BibTeX` citation keys using `args`.
@@ -110,9 +119,7 @@ impl ZoteroMcpServer {
         args: RegenerateKeysArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
-        let keys_str: Vec<&str> =
-            args.item_keys.iter().map(ItemKey::as_str).collect();
-        match client.regenerate_keys(&keys_str).await {
+        match client.regenerate_keys(&args.citekeys).await {
             Ok(_) => Ok(super::text_success(
                 "Citation keys regenerated successfully",
             )),
@@ -120,7 +127,7 @@ impl ZoteroMcpServer {
         }
     }
 
-    /// Exports Zotero items in the requested translator format using `args`.
+    /// Exports citekeys in the requested translator format using `args`.
     ///
     /// # Errors
     ///
@@ -132,10 +139,8 @@ impl ZoteroMcpServer {
         args: ExportItemsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
-        let keys_str: Vec<&str> =
-            args.item_keys.iter().map(ItemKey::as_str).collect();
         Ok(super::text_result(
-            client.export_items(&keys_str, &args.translator).await,
+            client.export_items(&args.citekeys, &args.translator).await,
         ))
     }
 
@@ -151,10 +156,8 @@ impl ZoteroMcpServer {
         args: BibliographyArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
-        let keys_str: Vec<&str> =
-            args.citekeys.iter().map(CitationKey::as_str).collect();
         Ok(super::text_result(
-            client.bibliography(&keys_str, args.style.as_deref(), None).await,
+            client.bibliography(&args.citekeys, args.format.as_ref()).await,
         ))
     }
 
@@ -170,9 +173,11 @@ impl ZoteroMcpServer {
         args: ScanAuxArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
-        let fallback = CollectionKey::from("");
-        let col = args.collection_key.as_ref().unwrap_or(&fallback);
-        Ok(super::json_result(client.scan_aux(col, &args.aux_path).await))
+        let collection =
+            args.collection.unwrap_or_else(CollectionPath::personal_library);
+        Ok(super::json_result(
+            client.scan_aux(&collection, &args.aux_path).await,
+        ))
     }
 
     /// Processes citation keys through the Better `BibTeX` Pandoc filter using
@@ -188,9 +193,7 @@ impl ZoteroMcpServer {
         args: PandocFilterArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
-        let keys_str: Vec<&str> =
-            args.citekeys.iter().map(CitationKey::as_str).collect();
-        Ok(super::json_result(client.pandoc_filter(&keys_str, true).await))
+        Ok(super::json_result(client.pandoc_filter(&args.citekeys, true).await))
     }
 
     /// Registers a Better `BibTeX` auto-export target using `args`.
@@ -205,10 +208,14 @@ impl ZoteroMcpServer {
         args: AutoexportAddArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
-        match client
-            .autoexport_add(&args.collection_key, &args.translator, &args.path)
-            .await
-        {
+        let request = AutoexportAddRequest {
+            collection: args.collection,
+            translator: args.translator,
+            path: args.path,
+            display_options: args.display_options,
+            replace: args.replace,
+        };
+        match client.autoexport_add(&request).await {
             Ok(_) => {
                 Ok(super::text_success("Autoexport configured successfully"))
             }

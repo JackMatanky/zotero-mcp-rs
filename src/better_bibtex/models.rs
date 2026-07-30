@@ -4,6 +4,154 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::zotero::{CitationKey, ItemKey};
+
+/// Generates a `String`-backed Better `BibTeX` newtype with the conversions
+/// needed for JSON-RPC argument boundaries.
+macro_rules! string_value {
+    ($name:ident, $doc:expr) => {
+        #[doc = $doc]
+        #[derive(
+            Clone,
+            Debug,
+            Default,
+            Deserialize,
+            Eq,
+            Hash,
+            Ord,
+            PartialEq,
+            PartialOrd,
+            schemars::JsonSchema,
+            Serialize,
+        )]
+        #[serde(transparent)]
+        pub(crate) struct $name(pub(crate) String);
+
+        impl std::fmt::Display for $name {
+            #[inline]
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl From<String> for $name {
+            #[inline]
+            fn from(value: String) -> Self {
+                Self(value)
+            }
+        }
+
+        impl From<&str> for $name {
+            #[inline]
+            fn from(value: &str) -> Self {
+                Self(value.to_owned())
+            }
+        }
+
+        impl AsRef<str> for $name {
+            #[inline]
+            fn as_ref(&self) -> &str {
+                &self.0
+            }
+        }
+    };
+}
+
+string_value!(
+    CollectionPath,
+    concat!(
+        "Better `BibTeX` collection path: a forward-slash separated \
+         collection ",
+        "path, where `//` targets the user's personal library root. Distinct ",
+        "from Zotero collection keys."
+    )
+);
+
+impl CollectionPath {
+    /// Personal-library root path used by Better `BibTeX` collection APIs.
+    pub(crate) fn personal_library() -> Self {
+        Self("//".to_owned())
+    }
+}
+
+string_value!(
+    TranslatorName,
+    concat!(
+        "Better `BibTeX` translator name or GUID, e.g. `Better BibTeX`, ",
+        "`Better BibLaTeX`, or `Better CSL JSON`."
+    )
+);
+string_value!(AuxFilePath, "Absolute path to a `LaTeX` `.aux` file.");
+string_value!(
+    ExportFilePath,
+    "Absolute path for a Better `BibTeX` auto-export output file."
+);
+string_value!(
+    CslStyleId,
+    "CSL style identifier accepted by Zotero, e.g. `apa` or a full style URI."
+);
+string_value!(
+    Locale,
+    "CSL locale identifier accepted by Zotero, e.g. `en-US`."
+);
+string_value!(SearchQuery, "Better `BibTeX` quick-search query string.");
+
+/// Bibliography output content type accepted by Better `BibTeX`.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Deserialize,
+    Eq,
+    PartialEq,
+    schemars::JsonSchema,
+    Serialize,
+)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum BibliographyContentType {
+    /// Render bibliography as HTML.
+    Html,
+    /// Render bibliography as plain text.
+    #[default]
+    Text,
+}
+
+/// Format object passed to `item.bibliography`.
+#[derive(
+    Clone, Debug, Default, Deserialize, schemars::JsonSchema, Serialize,
+)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BibliographyFormat {
+    /// Output content type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) content_type: Option<BibliographyContentType>,
+    /// CSL style identifier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) id: Option<CslStyleId>,
+    /// CSL locale identifier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) locale: Option<Locale>,
+    /// Use Zotero quick-copy settings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) quick_copy: Option<bool>,
+}
+
+/// Request payload for `autoexport.add`.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct AutoexportAddRequest {
+    /// Better `BibTeX` collection path.
+    pub(crate) collection: CollectionPath,
+    /// Translator name or GUID.
+    pub(crate) translator: TranslatorName,
+    /// Destination export file path.
+    pub(crate) path: ExportFilePath,
+    /// Interactive export display options.
+    pub(crate) display_options: Option<HashMap<String, bool>>,
+    /// Replace an existing auto-export with incompatible parameters.
+    pub(crate) replace: Option<bool>,
+}
+
 /// A JSON-RPC 2.0 request envelope.
 #[derive(Debug, Serialize)]
 pub(crate) struct JsonRpcRequest<'a, T: Serialize> {
@@ -40,9 +188,11 @@ pub(crate) struct JsonRpcError {
     pub(crate) data: Option<serde_json::Value>,
 }
 
-/// Maps a Zotero item key to its Better `BibTeX` citation key using
-/// [`HashMap`].
-pub(crate) type CitekeyMap = HashMap<String, String>;
+/// Maps a Zotero item key to its Better `BibTeX` citation key.
+pub(crate) type CitekeyMap = HashMap<ItemKey, Option<CitationKey>>;
+
+/// Maps an old Better `BibTeX` citation key to its regenerated citation key.
+pub(crate) type RegenerateKeyMap = HashMap<CitationKey, Option<CitationKey>>;
 
 #[cfg(test)]
 mod tests {

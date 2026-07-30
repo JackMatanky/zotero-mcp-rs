@@ -720,8 +720,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_regenerate_citekeys",
-        description = "Regenerate citation keys for items via Better BibTeX \
-                       (requires write permission)"
+        description = "Regenerate Better BibTeX citation keys (requires write \
+                       permission)"
     )]
     /// # Errors
     ///
@@ -736,7 +736,7 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_export_items",
-        description = "Export items using a Better BibTeX translator"
+        description = "Export citekeys using a Better BibTeX translator"
     )]
     /// # Errors
     ///
@@ -751,7 +751,7 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_format_bibliography",
-        description = "Format a bibliography for citekeys in a given CSL style"
+        description = "Format a bibliography for citekeys with Better BibTeX"
     )]
     /// # Errors
     ///
@@ -797,8 +797,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_autoexport_add",
-        description = "Configure auto-export for a collection/library \
-                       (requires write permission)"
+        description = "Configure Better BibTeX auto-export for a collection \
+                       path (requires write permission)"
     )]
     /// # Errors
     ///

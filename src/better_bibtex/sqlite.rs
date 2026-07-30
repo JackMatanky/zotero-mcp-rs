@@ -10,7 +10,11 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteConnection},
 };
 
-use crate::{better_bibtex::models::CitekeyMap, errors::ZoteroMcpError};
+use crate::{
+    better_bibtex::models::CitekeyMap,
+    errors::ZoteroMcpError,
+    zotero::{CitationKey, ItemKey},
+};
 
 /// A row from Better `BibTeX`'s citekey cache table, mapping one Zotero item
 /// key to its pinned citation key.
@@ -27,7 +31,7 @@ struct CitationRow {
 ///
 /// An empty `item_keys` slice fetches every citekey in the database.
 /// Returns a [`CitekeyMap`] from Zotero item key to citation key; items with no
-/// pinned citekey are simply absent from the result, not an error.
+/// pinned citekey are returned with a `None` value, not an error.
 ///
 /// # Errors
 ///
@@ -38,7 +42,7 @@ struct CitationRow {
 /// [`Sqlite`]: ZoteroMcpError::Sqlite
 pub(crate) async fn read_bbt_citekeys_sqlite(
     db_path: &Path,
-    item_keys: &[&str],
+    item_keys: &[ItemKey],
 ) -> Result<CitekeyMap, ZoteroMcpError> {
     if !db_path.exists() {
         return Err(ZoteroMcpError::NotFound(format!(
@@ -65,21 +69,26 @@ pub(crate) async fn read_bbt_citekeys_sqlite(
         .await?;
 
         for row in rows {
-            map.insert(row.item_key, row.citation_key);
+            map.insert(
+                ItemKey::from(row.item_key),
+                Some(CitationKey::from(row.citation_key)),
+            );
         }
     } else {
-        for &key in item_keys {
+        for key in item_keys {
             let row = sqlx::query(
                 "SELECT citationKey FROM citationkey WHERE itemKey = ?1 AND \
                  citationKey IS NOT NULL",
             )
-            .bind(key)
+            .bind(key.as_str())
             .fetch_optional(&mut conn)
             .await?;
 
-            if let Some(row) = row {
-                map.insert(key.to_owned(), row.try_get("citationKey")?);
-            }
+            let citation_key = row
+                .map(|row| row.try_get::<String, _>("citationKey"))
+                .transpose()?
+                .map(CitationKey::from);
+            map.insert(key.clone(), citation_key);
         }
     }
 
@@ -162,13 +171,17 @@ mod tests {
             )
             .await;
 
-            // Act
-            let map = read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1"])
-                .await
-                .unwrap();
+            let map = read_bbt_citekeys_sqlite(&db_path, &[ItemKey::from(
+                "ITEMKEY1",
+            )])
+            .await
+            .unwrap();
 
             // Assert
-            assert_eq!(map.get("ITEMKEY1").unwrap(), "citekey1");
+            assert_eq!(
+                map.get(&ItemKey::from("ITEMKEY1")),
+                Some(&Some(CitationKey::from("citekey1")))
+            );
         }
 
         #[tokio::test]
@@ -178,9 +191,11 @@ mod tests {
             let db_path = temp_dir.path().join("does-not-exist.migrated");
 
             // Act
-            let err = read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1"])
-                .await
-                .unwrap_err();
+            let err = read_bbt_citekeys_sqlite(&db_path, &[ItemKey::from(
+                "ITEMKEY1",
+            )])
+            .await
+            .unwrap_err();
 
             // Assert
             assert!(matches!(err, ZoteroMcpError::NotFound(_)));
@@ -202,13 +217,19 @@ mod tests {
 
             // Assert
             assert_eq!(map.len(), 2);
-            assert_eq!(map.get("ITEMKEY1").unwrap(), "citekey1");
-            assert_eq!(map.get("ITEMKEY2").unwrap(), "citekey2");
-            assert!(!map.contains_key("ITEMKEY3"));
+            assert_eq!(
+                map.get(&ItemKey::from("ITEMKEY1")),
+                Some(&Some(CitationKey::from("citekey1")))
+            );
+            assert_eq!(
+                map.get(&ItemKey::from("ITEMKEY2")),
+                Some(&Some(CitationKey::from("citekey2")))
+            );
+            assert!(!map.contains_key(&ItemKey::from("ITEMKEY3")));
         }
 
         #[tokio::test]
-        async fn omits_items_without_a_pinned_citekey_from_the_map() {
+        async fn returns_none_for_requested_items_without_a_pinned_citekey() {
             // Arrange
             let (_temp_dir, db_path) = seeded_db(
                 "INSERT INTO citationkey (itemID, itemKey, libraryID, \
@@ -217,13 +238,16 @@ mod tests {
             .await;
 
             // Act
-            let map =
-                read_bbt_citekeys_sqlite(&db_path, &["ITEMKEY1", "MISSING"])
-                    .await
-                    .unwrap();
+            let map = read_bbt_citekeys_sqlite(&db_path, &[
+                ItemKey::from("ITEMKEY1"),
+                ItemKey::from("MISSING"),
+            ])
+            .await
+            .unwrap();
 
             // Assert
-            assert!(map.is_empty());
+            assert_eq!(map.get(&ItemKey::from("ITEMKEY1")), Some(&None));
+            assert_eq!(map.get(&ItemKey::from("MISSING")), Some(&None));
         }
     }
 }

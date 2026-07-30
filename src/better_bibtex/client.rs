@@ -5,16 +5,20 @@
 //! [`ZoteroMcpError::BetterBibTeX`].
 
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::{
     better_bibtex::{
-        models::{CitekeyMap, JsonRpcRequest, JsonRpcResponse},
+        models::{
+            AutoexportAddRequest, AuxFilePath, BibliographyFormat, CitekeyMap,
+            CollectionPath, JsonRpcRequest, JsonRpcResponse, RegenerateKeyMap,
+            SearchQuery, TranslatorName,
+        },
         sqlite::{get_default_bbt_db_path, read_bbt_citekeys_sqlite},
     },
     errors::ZoteroMcpError,
     state::AppState,
-    zotero::CollectionKey,
+    zotero::{CitationKey, ItemKey},
 };
 
 /// Client for the Better `BibTeX` JSON-RPC API, scoped to a single tool call.
@@ -31,7 +35,7 @@ impl<'a> BetterBibtexClient<'a> {
         }
     }
 
-    /// Maps `item_keys` to their Better `BibTeX` citation keys in a
+    /// Maps Zotero `item_keys` to their Better `BibTeX` citation keys in a
     /// [`CitekeyMap`].
     ///
     /// Tries the local `SQLite` citekey cache first (fast path, no HTTP round
@@ -45,13 +49,13 @@ impl<'a> BetterBibtexClient<'a> {
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn get_citekeys(
         &self,
-        item_keys: &[&str],
+        item_keys: &[ItemKey],
     ) -> Result<CitekeyMap, ZoteroMcpError> {
         // Fast path: Try reading from ~/Zotero/better-bibtex.migrated SQLite DB
         // (~0.01ms)
         let db_path = get_default_bbt_db_path();
         if let Ok(map) = read_bbt_citekeys_sqlite(&db_path, item_keys).await {
-            if !map.is_empty() {
+            if map.values().any(Option::is_some) {
                 return Ok(map);
             }
         }
@@ -61,8 +65,7 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("item.citationkey", params).await
     }
 
-    /// Exports `item_keys` using the named `translator` (e.g. `Better BibTeX`,
-    /// `Better BibLaTeX`, `CSL JSON`).
+    /// Exports `citekeys` using `translator`.
     ///
     /// # Errors
     ///
@@ -71,20 +74,19 @@ impl<'a> BetterBibtexClient<'a> {
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn export_items(
         &self,
-        item_keys: &[&str],
-        translator: &str,
+        citekeys: &[CitationKey],
+        translator: &TranslatorName,
     ) -> Result<String, ZoteroMcpError> {
-        let params = (item_keys, translator);
+        let params = (citekeys, translator);
         self.call_rpc("item.export", params).await
     }
 
-    /// Generates a formatted bibliography for `item_keys`.
+    /// Generates a formatted bibliography for `citekeys`.
     ///
     /// # Arguments
     ///
-    /// * `item_keys` - Item keys to include in the bibliography
-    /// * `style` - Optional citation style name
-    /// * `locale` - Optional locale code
+    /// * `citekeys` - Citation keys to include in the bibliography
+    /// * `format` - Optional Better `BibTeX` bibliography format object
     /// # Errors
     ///
     /// - [`BetterBibTeX`] if the JSON-RPC call fails
@@ -92,11 +94,13 @@ impl<'a> BetterBibtexClient<'a> {
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn bibliography(
         &self,
-        item_keys: &[&str],
-        style: Option<&str>,
-        locale: Option<&str>,
+        citekeys: &[CitationKey],
+        format: Option<&BibliographyFormat>,
     ) -> Result<String, ZoteroMcpError> {
-        let params = (item_keys, style, locale);
+        let mut params = vec![serde_json::to_value(citekeys)?];
+        if let Some(format) = format {
+            params.push(serde_json::to_value(format)?);
+        }
         self.call_rpc("item.bibliography", params).await
     }
 
@@ -109,13 +113,13 @@ impl<'a> BetterBibtexClient<'a> {
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn search(
         &self,
-        terms: &str,
+        terms: &SearchQuery,
     ) -> Result<Value, ZoteroMcpError> {
         let params = vec![terms];
         self.call_rpc("item.search", params).await
     }
 
-    /// Fetches Pandoc citeproc filter metadata for `item_keys`, as CSL JSON
+    /// Fetches Pandoc citeproc filter metadata for `citekeys`, as CSL JSON
     /// when `as_csl` is `true`.
     ///
     /// # Errors
@@ -125,14 +129,14 @@ impl<'a> BetterBibtexClient<'a> {
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn pandoc_filter(
         &self,
-        item_keys: &[&str],
+        citekeys: &[CitationKey],
         as_csl: bool,
     ) -> Result<Value, ZoteroMcpError> {
-        let params = (item_keys, as_csl);
+        let params = (citekeys, as_csl);
         self.call_rpc("item.pandoc_filter", params).await
     }
 
-    /// Regenerates citation keys for `item_keys`.
+    /// Regenerates citation keys for `citekeys`.
     ///
     /// Mutates the Zotero library; assumes the caller has already enforced
     /// [`AppState::check_write_permission`], and re-checks it itself before
@@ -147,10 +151,10 @@ impl<'a> BetterBibtexClient<'a> {
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn regenerate_keys(
         &self,
-        item_keys: &[&str],
-    ) -> Result<Value, ZoteroMcpError> {
+        citekeys: &[CitationKey],
+    ) -> Result<RegenerateKeyMap, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let params = vec![item_keys];
+        let params = vec![citekeys];
         self.call_rpc("item.regenerate_key", params).await
     }
 
@@ -162,9 +166,8 @@ impl<'a> BetterBibtexClient<'a> {
     ///
     /// # Arguments
     ///
-    /// * `collection_key` - Key of the collection to auto-export
-    /// * `translator` - Export format translator name
-    /// * `path` - Destination file path
+    /// * `request` - Auto-export collection, translator, output path, and
+    ///   optional display/replace settings
     ///
     /// # Errors
     ///
@@ -175,17 +178,29 @@ impl<'a> BetterBibtexClient<'a> {
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn autoexport_add(
         &self,
-        collection_key: &CollectionKey,
-        translator: &str,
-        path: &str,
+        request: &AutoexportAddRequest,
     ) -> Result<Value, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let params = (collection_key.as_str(), translator, path);
+        let mut params = vec![
+            serde_json::to_value(&request.collection)?,
+            serde_json::to_value(&request.translator)?,
+            serde_json::to_value(&request.path)?,
+        ];
+        match (&request.display_options, request.replace) {
+            (Some(display_options), _) => {
+                params.push(serde_json::to_value(display_options)?);
+            }
+            (None, Some(_)) => params.push(json!({})),
+            (None, None) => {}
+        }
+        if let Some(replace) = request.replace {
+            params.push(json!(replace));
+        }
         self.call_rpc("autoexport.add", params).await
     }
 
     /// Scans a `LaTeX` `.aux` file at `aux_path` and imports its cited
-    /// references into `collection_key`.
+    /// references into `collection`.
     ///
     /// Mutates the Zotero library; assumes the caller has already enforced
     /// [`AppState::check_write_permission`], and re-checks it itself before
@@ -200,11 +215,11 @@ impl<'a> BetterBibtexClient<'a> {
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn scan_aux(
         &self,
-        collection_key: &CollectionKey,
-        aux_path: &str,
+        collection: &CollectionPath,
+        aux_path: &AuxFilePath,
     ) -> Result<Value, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let params = (collection_key.as_str(), aux_path);
+        let params = (collection, aux_path);
         self.call_rpc("collection.scanAUX", params).await
     }
 
@@ -281,6 +296,7 @@ mod tests {
         use std::{
             io::{Read, Write},
             net::TcpListener,
+            sync::mpsc::{self, Receiver},
         };
 
         use reqwest::Client;
@@ -318,20 +334,36 @@ mod tests {
         /// Runs a one-shot fixture HTTP server for `responses` and returns its
         /// base URL.
         pub(super) fn mock_server(responses: Vec<String>) -> String {
+            mock_server_with_requests(responses).0
+        }
+
+        /// Runs a one-shot fixture HTTP server for `responses`, captures each
+        /// accepted request, and returns the base URL plus request receiver.
+        pub(super) fn mock_server_with_requests(
+            responses: Vec<String>,
+        ) -> (String, Receiver<String>) {
             let listener =
                 TcpListener::bind("127.0.0.1:0").expect("bind listener");
             let addr = listener.local_addr().expect("local addr");
+            let (tx, rx) = mpsc::channel();
             std::thread::spawn(move || {
                 for response in responses {
                     let (mut stream, _) =
                         listener.accept().expect("accept connection");
-                    let mut buf = [0_u8; 1024];
-                    let _ = stream.read(&mut buf);
+                    let mut buf = [0_u8; 4096];
+                    let n = stream.read(&mut buf).expect("read request");
+                    let _ = tx
+                        .send(String::from_utf8_lossy(&buf[..n]).into_owned());
                     let _ = stream.write_all(response.as_bytes());
                 }
             });
-            format!("http://{addr}")
+            (format!("http://{addr}"), rx)
         }
+    }
+
+    fn request_json(request: &str) -> serde_json::Value {
+        let body = request.split("\r\n\r\n").nth(1).expect("request body");
+        serde_json::from_str(body).expect("json request body")
     }
 
     mod call_rpc {
@@ -351,7 +383,10 @@ mod tests {
 
             // Act
             let err = BetterBibtexClient::new(&state)
-                .export_items(&["KEY1"], "Better BibTeX")
+                .export_items(
+                    &[CitationKey::from("KEY1")],
+                    &TranslatorName::from("Better BibTeX"),
+                )
                 .await
                 .unwrap_err();
 
@@ -374,7 +409,10 @@ mod tests {
 
             // Act
             let err = BetterBibtexClient::new(&state)
-                .export_items(&["KEY1"], "Better BibTeX")
+                .export_items(
+                    &[CitationKey::from("KEY1")],
+                    &TranslatorName::from("Better BibTeX"),
+                )
                 .await
                 .unwrap_err();
 
@@ -396,7 +434,10 @@ mod tests {
 
             // Act
             let err = BetterBibtexClient::new(&state)
-                .export_items(&["KEY1"], "Better BibTeX")
+                .export_items(
+                    &[CitationKey::from("KEY1")],
+                    &TranslatorName::from("Better BibTeX"),
+                )
                 .await
                 .unwrap_err();
 
@@ -413,7 +454,11 @@ mod tests {
 
         use super::{
             super::*,
-            fixtures::{http_response, mock_server, test_state},
+            fixtures::{
+                http_response, mock_server, mock_server_with_requests,
+                test_state,
+            },
+            request_json,
         };
 
         #[tokio::test]
@@ -427,12 +472,97 @@ mod tests {
 
             // Act
             let exported = BetterBibtexClient::new(&state)
-                .export_items(&["KEY1"], "Better BibTeX")
+                .export_items(
+                    &[CitationKey::from("KEY1")],
+                    &TranslatorName::from("Better BibTeX"),
+                )
                 .await
                 .unwrap();
 
             // Assert
             assert_eq!(exported, "@article{foo,}");
+        }
+
+        #[tokio::test]
+        async fn sends_citekeys_and_translator() {
+            // Arrange
+            let (base, requests) =
+                mock_server_with_requests(vec![http_response(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","result":"@article{foo,}"}"#,
+                )]);
+            let state = test_state(base, false);
+
+            // Act
+            BetterBibtexClient::new(&state)
+                .export_items(
+                    &[CitationKey::from("citekey1")],
+                    &TranslatorName::from("Better BibTeX"),
+                )
+                .await
+                .unwrap();
+
+            // Assert
+            let request = requests.recv().expect("captured request");
+            let body = request_json(&request);
+            assert_eq!(body["method"], "item.export");
+            assert_eq!(
+                body["params"],
+                serde_json::json!([["citekey1"], "Better BibTeX"])
+            );
+        }
+    }
+
+    mod bibliography {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::{
+                super::models::{BibliographyContentType, CslStyleId, Locale},
+                *,
+            },
+            fixtures::{http_response, mock_server_with_requests, test_state},
+            request_json,
+        };
+
+        #[tokio::test]
+        async fn sends_bibliography_format_object() {
+            // Arrange
+            let (base, requests) =
+                mock_server_with_requests(vec![http_response(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","result":"Bibliography"}"#,
+                )]);
+            let state = test_state(base, false);
+            let format = BibliographyFormat {
+                content_type: Some(BibliographyContentType::Html),
+                id: Some(CslStyleId::from("apa")),
+                locale: Some(Locale::from("en-US")),
+                quick_copy: Some(false),
+            };
+
+            // Act
+            BetterBibtexClient::new(&state)
+                .bibliography(&[CitationKey::from("citekey1")], Some(&format))
+                .await
+                .unwrap();
+
+            // Assert
+            let request = requests.recv().expect("captured request");
+            let body = request_json(&request);
+            assert_eq!(body["method"], "item.bibliography");
+            assert_eq!(
+                body["params"],
+                serde_json::json!([
+                    ["citekey1"],
+                    {
+                        "contentType": "html",
+                        "id": "apa",
+                        "locale": "en-US",
+                        "quickCopy": false
+                    }
+                ])
+            );
         }
     }
 
@@ -451,7 +581,7 @@ mod tests {
 
             // Act
             let err = BetterBibtexClient::new(&state)
-                .regenerate_keys(&["KEY1"])
+                .regenerate_keys(&[CitationKey::from("KEY1")])
                 .await
                 .unwrap_err();
 
@@ -470,14 +600,14 @@ mod tests {
 
             // Act
             let result = BetterBibtexClient::new(&state)
-                .regenerate_keys(&["KEY1"])
+                .regenerate_keys(&[CitationKey::from("KEY1")])
                 .await
                 .unwrap();
 
             // Assert
             assert_eq!(
-                result.get("KEY1"),
-                Some(&Value::String("newkey1".to_owned()))
+                result.get(&CitationKey::from("KEY1")),
+                Some(&Some(CitationKey::from("newkey1")))
             );
         }
     }

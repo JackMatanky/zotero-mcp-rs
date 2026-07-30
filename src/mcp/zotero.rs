@@ -6,6 +6,8 @@ use serde::Deserialize;
 
 use crate::{
     ZoteroMcpServer,
+    better_bibtex::{BetterBibtexClient, TranslatorName},
+    errors::ZoteroMcpError,
     pdf::extract_pdf_pages,
     zotero::{
         AnnotationDraft, AnnotationType, CitationKey, CollectionItemAction,
@@ -412,13 +414,27 @@ impl ZoteroMcpServer {
         args: GetItemMetadataArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         if args.format.unwrap_or_default() == MetadataFormat::Bibtex {
-            let bbt_client =
-                crate::better_bibtex::BetterBibtexClient::new(&self.state);
-            Ok(super::text_result(
+            let bbt_client = BetterBibtexClient::new(&self.state);
+            let translator = TranslatorName::from("bibtex");
+            let result = async {
+                let citekeys = bbt_client
+                    .get_citekeys(std::slice::from_ref(&args.item_key))
+                    .await?;
+                let citekey = citekeys
+                    .get(&args.item_key)
+                    .and_then(Option::as_ref)
+                    .ok_or_else(|| {
+                        ZoteroMcpError::BetterBibTeX(format!(
+                            "no citation key for item {}",
+                            args.item_key
+                        ))
+                    })?;
                 bbt_client
-                    .export_items(&[args.item_key.as_str()], "bibtex")
-                    .await,
-            ))
+                    .export_items(std::slice::from_ref(citekey), &translator)
+                    .await
+            }
+            .await;
+            Ok(super::text_result(result))
         } else {
             let client = ZoteroClient::new(&self.state);
             Ok(super::json_result(client.get_item(&args.item_key).await))
