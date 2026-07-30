@@ -1,8 +1,48 @@
 //! Metadata resolution for adding items by DOI, arXiv ID, or ISBN.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::{errors::ZoteroMcpError, state::AppState};
+use crate::{
+    errors::ZoteroMcpError,
+    state::AppState,
+    zotero::models::{CollectionKey, CreatorType, ItemType, ZoteroCreator},
+};
+
+/// A Zotero item ready for creation, resolved from a public identifier
+/// lookup (DOI, arXiv ID, or ISBN).
+///
+/// Typed in place of a raw `serde_json::Value` so a typo in a field name
+/// fails to compile instead of silently producing a malformed Zotero item.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ItemDraft {
+    #[serde(rename = "itemType")]
+    pub(crate) item_type: ItemType,
+    pub(crate) title: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) creators: Vec<ZoteroCreator>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) date: String,
+    #[serde(rename = "DOI", default, skip_serializing_if = "String::is_empty")]
+    pub(crate) doi: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) url: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) publication_title: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) abstract_note: String,
+    #[serde(
+        rename = "ISBN",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub(crate) isbn: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) publisher: String,
+    /// Collections to file the created item into.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) collections: Vec<CollectionKey>,
+}
 
 /// Public-identifier type for [`resolve_metadata`].
 #[derive(Debug, Clone, Copy, Deserialize, schemars::JsonSchema)]
@@ -13,11 +53,8 @@ pub(crate) enum IdentifierKind {
     Isbn,
 }
 
-/// Resolves a public identifier against its metadata API and returns a Zotero
-/// item draft.
-///
-/// Returns a JSON object structured for Zotero item creation (`itemType`,
-/// `title`, `creators`, `date`, `url`, and `DOI`/`ISBN` as applicable).
+/// Resolves a public identifier against its metadata API and returns a
+/// Zotero item draft ready for creation.
 ///
 /// # Arguments
 ///
@@ -43,7 +80,7 @@ pub(crate) async fn resolve_metadata(
     state: &AppState,
     kind: IdentifierKind,
     id: &str,
-) -> Result<serde_json::Value, ZoteroMcpError> {
+) -> Result<ItemDraft, ZoteroMcpError> {
     match kind {
         IdentifierKind::Doi => resolve_doi(state, id).await,
         IdentifierKind::Arxiv => resolve_arxiv(state, id).await,
@@ -101,77 +138,95 @@ fn i64_at(value: &serde_json::Value, path: &[&str]) -> Option<i64> {
 async fn resolve_doi(
     state: &AppState,
     doi: &str,
-) -> Result<serde_json::Value, ZoteroMcpError> {
+) -> Result<ItemDraft, ZoteroMcpError> {
     let url =
         format!("{}/works/{}", state.crossref_url, urlencoding::encode(doi));
     let body = fetch_json(state, &url).await?;
     let msg = body.get("message").cloned().unwrap_or_default();
-    let title = str_at(&msg, &["title", "0"]).unwrap_or_default();
-    let creators: Vec<serde_json::Value> = msg
+    let title = str_at(&msg, &["title", "0"]).unwrap_or_default().to_owned();
+    let creators = msg
         .get("author")
         .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default()
-        .iter()
-        .map(|a| {
-            serde_json::json!({
-                "creatorType": "author",
-                "firstName": str_at(a, &["given"]).unwrap_or_default(),
-                "lastName": str_at(a, &["family"]).unwrap_or_default(),
-            })
+        .into_iter()
+        .flatten()
+        .map(|a| ZoteroCreator {
+            creator_type: Some(CreatorType::Author),
+            first_name: Some(
+                str_at(a, &["given"]).unwrap_or_default().to_owned(),
+            ),
+            last_name: Some(
+                str_at(a, &["family"]).unwrap_or_default().to_owned(),
+            ),
+            name: None,
         })
         .collect();
     let year = i64_at(&msg, &["published", "date-parts", "0", "0"])
         .or_else(|| i64_at(&msg, &["issued", "date-parts", "0", "0"]));
-    Ok(serde_json::json!({
-        "itemType": "journalArticle",
-        "title": title,
-        "creators": creators,
-        "date": year.map(|y| y.to_string()).unwrap_or_default(),
-        "DOI": str_at(&msg, &["DOI"]).unwrap_or(doi),
-        "url": str_at(&msg, &["URL"]).unwrap_or_default(),
-        "publicationTitle": str_at(&msg, &["container-title", "0"]).unwrap_or_default(),
-    }))
+    Ok(ItemDraft {
+        item_type: ItemType::JournalArticle,
+        title,
+        creators,
+        date: year.map(|y| y.to_string()).unwrap_or_default(),
+        doi: str_at(&msg, &["DOI"]).unwrap_or(doi).to_owned(),
+        url: str_at(&msg, &["URL"]).unwrap_or_default().to_owned(),
+        publication_title: str_at(&msg, &["container-title", "0"])
+            .unwrap_or_default()
+            .to_owned(),
+        ..ItemDraft::default()
+    })
 }
 
 async fn resolve_arxiv(
     state: &AppState,
     arxiv_id: &str,
-) -> Result<serde_json::Value, ZoteroMcpError> {
+) -> Result<ItemDraft, ZoteroMcpError> {
     let url = format!(
         "{}/graph/v1/paper/arXiv:{}?fields=title,authors,year,abstract,\
          externalIds,venue",
         state.semantic_scholar_url, arxiv_id
     );
     let body = fetch_json(state, &url).await?;
-    let title = str_at(&body, &["title"]).unwrap_or_default();
-    let creators: Vec<serde_json::Value> = body
+    let title = str_at(&body, &["title"]).unwrap_or_default().to_owned();
+    let creators = body
         .get("authors")
         .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default()
-        .iter()
-        .map(|a| {
-            serde_json::json!({"creatorType": "author", "name": str_at(a, &["name"]).unwrap_or_default()})
+        .into_iter()
+        .flatten()
+        .map(|a| ZoteroCreator {
+            creator_type: Some(CreatorType::Author),
+            first_name: None,
+            last_name: None,
+            name: Some(str_at(a, &["name"]).unwrap_or_default().to_owned()),
         })
         .collect();
     let doi = str_at(&body, &["externalIds", "DOI"]);
-    Ok(serde_json::json!({
-        "itemType": if doi.is_some() { "journalArticle" } else { "preprint" },
-        "title": title,
-        "creators": creators,
-        "date": i64_at(&body, &["year"]).map(|y| y.to_string()).unwrap_or_default(),
-        "DOI": doi.unwrap_or_default(),
-        "url": format!("https://arxiv.org/abs/{arxiv_id}"),
-        "abstractNote": str_at(&body, &["abstract"]).unwrap_or_default(),
-        "publicationTitle": str_at(&body, &["venue"]).unwrap_or_default(),
-    }))
+    Ok(ItemDraft {
+        item_type: if doi.is_some() {
+            ItemType::JournalArticle
+        } else {
+            ItemType::Preprint
+        },
+        title,
+        creators,
+        date: i64_at(&body, &["year"])
+            .map(|y| y.to_string())
+            .unwrap_or_default(),
+        doi: doi.unwrap_or_default().to_owned(),
+        url: format!("https://arxiv.org/abs/{arxiv_id}"),
+        abstract_note: str_at(&body, &["abstract"])
+            .unwrap_or_default()
+            .to_owned(),
+        publication_title: str_at(&body, &["venue"])
+            .unwrap_or_default()
+            .to_owned(),
+        ..ItemDraft::default()
+    })
 }
 
 async fn resolve_isbn(
     state: &AppState,
     isbn: &str,
-) -> Result<serde_json::Value, ZoteroMcpError> {
+) -> Result<ItemDraft, ZoteroMcpError> {
     let url = format!(
         "{}/api/books?bibkeys=ISBN:{}&jscmd=data&format=json",
         state.open_library_url, isbn
@@ -183,26 +238,32 @@ async fn resolve_isbn(
             "No book found for ISBN {isbn}"
         )));
     };
-    let title = str_at(record, &["title"]).unwrap_or_default();
-    let creators: Vec<serde_json::Value> = record
+    let title = str_at(record, &["title"]).unwrap_or_default().to_owned();
+    let creators = record
         .get("authors")
         .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default()
-        .iter()
-        .map(|a| serde_json::json!({"creatorType": "author", "name": str_at(a, &["name"]).unwrap_or_default()}))
+        .into_iter()
+        .flatten()
+        .map(|a| ZoteroCreator {
+            creator_type: Some(CreatorType::Author),
+            first_name: None,
+            last_name: None,
+            name: Some(str_at(a, &["name"]).unwrap_or_default().to_owned()),
+        })
         .collect();
-    let publisher =
-        str_at(record, &["publishers", "0", "name"]).unwrap_or_default();
-    Ok(serde_json::json!({
-        "itemType": "book",
-        "title": title,
-        "creators": creators,
-        "date": str_at(record, &["publish_date"]).unwrap_or_default(),
-        "ISBN": isbn,
-        "publisher": publisher,
-        "url": str_at(record, &["url"]).unwrap_or_default(),
-    }))
+    let publisher = str_at(record, &["publishers", "0", "name"])
+        .unwrap_or_default()
+        .to_owned();
+    Ok(ItemDraft {
+        item_type: ItemType::Book,
+        title,
+        creators,
+        date: str_at(record, &["publish_date"]).unwrap_or_default().to_owned(),
+        isbn: isbn.to_owned(),
+        publisher,
+        url: str_at(record, &["url"]).unwrap_or_default().to_owned(),
+        ..ItemDraft::default()
+    })
 }
 
 #[cfg(test)]
@@ -245,13 +306,13 @@ mod tests {
         let draft = resolve_metadata(&state, IdentifierKind::Doi, "10.1/xyz")
             .await
             .unwrap();
-        assert_eq!(str_at(&draft, &["title"]), Some("A Great Paper"));
-        assert_eq!(str_at(&draft, &["itemType"]), Some("journalArticle"));
+        assert_eq!(draft.title, "A Great Paper");
+        assert_eq!(draft.item_type, ItemType::JournalArticle);
         assert_eq!(
-            str_at(&draft, &["creators", "0", "lastName"]),
+            draft.creators.first().and_then(|c| c.last_name.as_deref()),
             Some("McAuthor")
         );
-        assert_eq!(str_at(&draft, &["date"]), Some("2021"));
+        assert_eq!(draft.date, "2021");
     }
 
     #[tokio::test]
@@ -283,15 +344,9 @@ mod tests {
             resolve_metadata(&state, IdentifierKind::Arxiv, "1706.03762")
                 .await
                 .unwrap();
-        assert_eq!(
-            str_at(&draft, &["title"]),
-            Some("Attention Is All You Need")
-        );
-        assert_eq!(str_at(&draft, &["itemType"]), Some("preprint"));
-        assert_eq!(
-            str_at(&draft, &["url"]),
-            Some("https://arxiv.org/abs/1706.03762")
-        );
+        assert_eq!(draft.title, "Attention Is All You Need");
+        assert_eq!(draft.item_type, ItemType::Preprint);
+        assert_eq!(draft.url, "https://arxiv.org/abs/1706.03762");
     }
 
     #[tokio::test]
@@ -310,8 +365,8 @@ mod tests {
             resolve_metadata(&state, IdentifierKind::Isbn, "9780134685991")
                 .await
                 .unwrap();
-        assert_eq!(str_at(&draft, &["title"]), Some("Effective Java"));
-        assert_eq!(str_at(&draft, &["itemType"]), Some("book"));
-        assert_eq!(str_at(&draft, &["publisher"]), Some("Addison-Wesley"));
+        assert_eq!(draft.title, "Effective Java");
+        assert_eq!(draft.item_type, ItemType::Book);
+        assert_eq!(draft.publisher, "Addison-Wesley");
     }
 }

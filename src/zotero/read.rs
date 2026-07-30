@@ -4,7 +4,10 @@ use reqwest::StatusCode;
 
 use crate::{
     errors::ZoteroMcpError,
-    zotero::{ZoteroClient, ZoteroCollection, ZoteroItem},
+    zotero::{
+        ZoteroClient, ZoteroCollection, ZoteroItem,
+        models::{CollectionKey, ItemKey, ItemType},
+    },
 };
 
 impl ZoteroClient<'_> {
@@ -46,7 +49,7 @@ impl ZoteroClient<'_> {
     pub(crate) async fn search_items(
         &self,
         query: &str,
-        collection_key: Option<&str>,
+        collection_key: Option<&CollectionKey>,
         limit: usize,
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
         let base = match collection_key {
@@ -73,7 +76,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_item(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         let url =
             format!("{}/users/0/items/{}", self.state.zotero_api_url, item_key);
@@ -133,7 +136,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_collection_items(
         &self,
-        collection_key: &str,
+        collection_key: &CollectionKey,
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/collections/{}/items",
@@ -152,7 +155,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_item_children(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/items/{}/children",
@@ -172,7 +175,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_item_fulltext(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<String, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/items/{}/fulltext",
@@ -285,7 +288,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn find_duplicates(
         &self,
-        collection_key: Option<&str>,
+        collection_key: Option<&CollectionKey>,
     ) -> Result<Vec<serde_json::Value>, ZoteroMcpError> {
         let items = if let Some(col) = collection_key {
             self.get_collection_items(col).await?
@@ -311,7 +314,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn get_library_coverage(
         &self,
-        collection_key: Option<&str>,
+        collection_key: Option<&CollectionKey>,
     ) -> Result<serde_json::Value, ZoteroMcpError> {
         let items = match collection_key {
             Some(col) => self.get_collection_items(col).await?,
@@ -339,7 +342,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn synthesize_annotations(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<String, ZoteroMcpError> {
         use std::fmt::Write as _;
 
@@ -348,7 +351,7 @@ impl ZoteroClient<'_> {
             self.get_item_children(item_key).await.unwrap_or_default();
 
         let mut md = String::new();
-        let title = item.data.title.as_deref().unwrap_or(item_key);
+        let title = item.data.title.as_deref().unwrap_or(item_key.as_str());
         let _ = writeln!(md, "# Annotations & Notes: {title}\n");
 
         if let Some(ref doi) = item.data.doi {
@@ -448,7 +451,9 @@ fn match_condition(item: &ZoteroItem, cond: &serde_json::Value) -> bool {
         }
         _ => {
             let val_matched = match field {
-                "itemType" | "item_type" => item.data.item_type.to_lowercase(),
+                "itemType" | "item_type" => {
+                    item.data.item_type.as_str().to_lowercase()
+                }
                 "doi" => item.data.doi.as_deref().unwrap_or("").to_lowercase(),
                 "citationKey" | "citekey" => item
                     .data
@@ -532,14 +537,15 @@ fn coverage_flags(item: &ZoteroItem, children: &[ZoteroItem]) -> CoverageFlags {
     let has_doi =
         item.data.doi.as_deref().is_some_and(|d| !d.trim().is_empty());
     let has_pdf = children.iter().any(|child| {
-        child.data.item_type == "attachment"
+        child.data.item_type == ItemType::Attachment
             && child
                 .data
                 .content_type
                 .as_deref()
                 .is_some_and(|ct| ct.contains("pdf"))
     });
-    let has_notes = children.iter().any(|child| child.data.item_type == "note");
+    let has_notes =
+        children.iter().any(|child| child.data.item_type == ItemType::Note);
 
     (has_doi, has_pdf, has_notes)
 }
@@ -579,7 +585,7 @@ fn format_annotations_section(children: &[ZoteroItem]) -> String {
     let mut md = String::from("## Highlights & Annotations\n\n");
     let mut has_annotations = false;
     for child in children {
-        if child.data.item_type == "annotation" {
+        if child.data.item_type == ItemType::Annotation {
             has_annotations = true;
             let page =
                 child.data.annotation_page_label.as_deref().unwrap_or("?");
@@ -607,7 +613,7 @@ fn format_notes_section(item: &ZoteroItem, children: &[ZoteroItem]) -> String {
         let _ = writeln!(md, "{note}\n");
     }
     for child in children {
-        if child.data.item_type == "note" {
+        if child.data.item_type == ItemType::Note {
             if let Some(ref note) = child.data.note {
                 has_notes = true;
                 let _ = writeln!(md, "{note}\n");
@@ -654,7 +660,7 @@ mod tests {
         let state = test_state(base, false);
 
         let err = ZoteroClient::new(&state)
-            .get_item("NONEXISTENT")
+            .get_item(&"NONEXISTENT".into())
             .await
             .unwrap_err();
         assert!(matches!(err, ZoteroMcpError::NotFound(_)));
@@ -665,8 +671,10 @@ mod tests {
         let base = mock_server(vec![http_response("200 OK", "{}")]);
         let state = test_state(base, false);
 
-        let text =
-            ZoteroClient::new(&state).get_item_fulltext("ITEM1").await.unwrap();
+        let text = ZoteroClient::new(&state)
+            .get_item_fulltext(&"ITEM1".into())
+            .await
+            .unwrap();
         assert_eq!(text, "");
     }
 
@@ -889,7 +897,7 @@ mod tests {
         let state = test_state(base, false);
 
         let md = ZoteroClient::new(&state)
-            .synthesize_annotations("ITEM1")
+            .synthesize_annotations(&"ITEM1".into())
             .await
             .unwrap();
         assert!(md.contains("# Annotations & Notes: Quantum Physics Paper"));

@@ -937,6 +937,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::zotero::AnnotationType;
 
     mod fixtures {
         use std::{
@@ -1044,7 +1045,7 @@ mod tests {
 
         let res = server
             .zotero_delete_item(Parameters(DeleteItemArgs {
-                item_key: "ITEM1".to_owned(),
+                item_key: "ITEM1".into(),
             }))
             .await
             .unwrap();
@@ -1071,7 +1072,7 @@ mod tests {
 
         let res = server
             .zotero_trash_item(Parameters(TrashItemArgs {
-                item_key: "ITEM1".to_owned(),
+                item_key: "ITEM1".into(),
             }))
             .await
             .unwrap();
@@ -1098,7 +1099,7 @@ mod tests {
 
         let res = server
             .zotero_restore_item(Parameters(TrashItemArgs {
-                item_key: "ITEM1".to_owned(),
+                item_key: "ITEM1".into(),
             }))
             .await
             .unwrap();
@@ -1120,7 +1121,7 @@ mod tests {
 
         let res = server
             .zotero_delete_collection(Parameters(DeleteCollectionArgs {
-                collection_key: "COL1".to_owned(),
+                collection_key: "COL1".into(),
             }))
             .await
             .unwrap();
@@ -1139,7 +1140,7 @@ mod tests {
 
         let res = server
             .zotero_delete_item(Parameters(DeleteItemArgs {
-                item_key: "ITEM1".to_owned(),
+                item_key: "ITEM1".into(),
             }))
             .await
             .unwrap();
@@ -1159,8 +1160,8 @@ mod tests {
 
         let res = server
             .zotero_create_annotation(Parameters(CreateAnnotationArgs {
-                parent_attachment_key: "ATT1".to_owned(),
-                annotation_type: "highlight".to_owned(),
+                parent_attachment_key: "ATT1".into(),
+                annotation_type: AnnotationType::Highlight,
                 text: Some("selected text".to_owned()),
                 comment: None,
                 color: None,
@@ -1287,7 +1288,7 @@ mod tests {
 
         let res = server
             .zotero_update_collection(Parameters(UpdateCollectionArgs {
-                collection_key: "COL1".to_owned(),
+                collection_key: "COL1".into(),
                 name: Some("New Name".to_owned()),
                 parent_key: None,
             }))

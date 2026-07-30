@@ -10,6 +10,7 @@ use crate::{
     },
     errors::ZoteroMcpError,
     state::AppState,
+    zotero::ItemKey,
 };
 
 /// Client for the Better Notes bridge, scoped to a single tool call.
@@ -35,7 +36,7 @@ impl<'a> BetterNotesClient<'a> {
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn to_markdown(
         &self,
-        item_key: Option<&str>,
+        item_key: Option<&ItemKey>,
         html: Option<&str>,
     ) -> Result<String, ZoteroMcpError> {
         let payload = serde_json::json!({
@@ -63,9 +64,9 @@ impl<'a> BetterNotesClient<'a> {
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn convert_from_markdown(
         &self,
-        parent_key: &str,
+        parent_key: &ItemKey,
         markdown: &str,
-    ) -> Result<String, ZoteroMcpError> {
+    ) -> Result<ItemKey, ZoteroMcpError> {
         self.state.check_write_permission()?;
         let payload = serde_json::json!({
             "parentKey": parent_key,
@@ -86,7 +87,7 @@ impl<'a> BetterNotesClient<'a> {
     pub(crate) async fn run_template(
         &self,
         name: &str,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<Value, ZoteroMcpError> {
         let payload = serde_json::json!({
             "name": name,
@@ -107,7 +108,7 @@ impl<'a> BetterNotesClient<'a> {
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn get_relations(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<Value, ZoteroMcpError> {
         let payload = serde_json::json!({
             "itemKey": item_key,
@@ -126,7 +127,7 @@ impl<'a> BetterNotesClient<'a> {
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn get_tree(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<Value, ZoteroMcpError> {
         let payload = serde_json::json!({
             "itemKey": item_key,
@@ -250,7 +251,7 @@ mod tests {
 
             // Act
             let err = BetterNotesClient::new(&state)
-                .to_markdown(Some("NOTE1"), None)
+                .to_markdown(Some(&"NOTE1".into()), None)
                 .await
                 .unwrap_err();
 
@@ -281,7 +282,7 @@ mod tests {
 
             // Act
             let markdown = BetterNotesClient::new(&state)
-                .to_markdown(Some("NOTE1"), None)
+                .to_markdown(Some(&"NOTE1".into()), None)
                 .await
                 .unwrap();
 
@@ -305,7 +306,7 @@ mod tests {
 
             // Act
             let err = BetterNotesClient::new(&state)
-                .convert_from_markdown("PARENT1", "# Hello")
+                .convert_from_markdown(&"PARENT1".into(), "# Hello")
                 .await
                 .unwrap_err();
 
@@ -324,7 +325,7 @@ mod tests {
 
             // Act
             let key = BetterNotesClient::new(&state)
-                .convert_from_markdown("PARENT1", "# Hello")
+                .convert_from_markdown(&"PARENT1".into(), "# Hello")
                 .await
                 .unwrap();
 

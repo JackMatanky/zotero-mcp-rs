@@ -12,6 +12,16 @@ use sqlx::{
 
 use crate::{better_bibtex::models::CitekeyMap, errors::ZoteroMcpError};
 
+/// A row from Better `BibTeX`'s citekey cache table, mapping one Zotero item
+/// key to its pinned citation key.
+#[derive(Debug, sqlx::FromRow)]
+struct CitationRow {
+    #[sqlx(rename = "itemKey")]
+    item_key: String,
+    #[sqlx(rename = "citationKey")]
+    citation_key: String,
+}
+
 /// Reads citation keys for `item_keys` from the Better `BibTeX` `SQLite`
 /// database at `db_path`.
 ///
@@ -47,7 +57,7 @@ pub(crate) async fn read_bbt_citekeys_sqlite(
 
     let mut map = HashMap::new();
     if item_keys.is_empty() {
-        let rows = sqlx::query(
+        let rows: Vec<CitationRow> = sqlx::query_as(
             "SELECT itemKey, citationKey FROM citationkey WHERE citationKey \
              IS NOT NULL",
         )
@@ -55,7 +65,7 @@ pub(crate) async fn read_bbt_citekeys_sqlite(
         .await?;
 
         for row in rows {
-            map.insert(row.try_get("itemKey")?, row.try_get("citationKey")?);
+            map.insert(row.item_key, row.citation_key);
         }
     } else {
         for &key in item_keys {

@@ -3,10 +3,342 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Generates a `String`-backed newtype identifier with the conversions and
+/// comparisons needed to use it as a domain key: `Display`, `From<String>`,
+/// `From<&str>`, `AsRef<str>`, and equality against plain strings.
+macro_rules! string_key {
+    ($name:ident, $doc:expr) => {
+        #[doc = $doc]
+        #[derive(
+            Debug,
+            Clone,
+            PartialEq,
+            Eq,
+            Hash,
+            PartialOrd,
+            Ord,
+            Default,
+            Serialize,
+            Deserialize,
+        )]
+        #[serde(transparent)]
+        pub(crate) struct $name(pub(crate) String);
+
+        impl $name {
+            #[inline]
+            pub(crate) fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            #[inline]
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl From<String> for $name {
+            #[inline]
+            fn from(value: String) -> Self {
+                Self(value)
+            }
+        }
+
+        impl From<&str> for $name {
+            #[inline]
+            fn from(value: &str) -> Self {
+                Self(value.to_owned())
+            }
+        }
+
+        impl AsRef<str> for $name {
+            #[inline]
+            fn as_ref(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl PartialEq<str> for $name {
+            #[inline]
+            fn eq(&self, other: &str) -> bool {
+                self.0 == other
+            }
+        }
+
+        impl PartialEq<&str> for $name {
+            #[inline]
+            fn eq(&self, other: &&str) -> bool {
+                self.0 == *other
+            }
+        }
+
+        impl PartialEq<$name> for str {
+            #[inline]
+            fn eq(&self, other: &$name) -> bool {
+                self == other.0.as_str()
+            }
+        }
+
+        impl schemars::JsonSchema for $name {
+            fn schema_name() -> std::borrow::Cow<'static, str> {
+                stringify!($name).into()
+            }
+
+            fn json_schema(
+                generator: &mut schemars::SchemaGenerator,
+            ) -> schemars::Schema {
+                String::json_schema(generator)
+            }
+        }
+    };
+}
+
+string_key!(
+    ItemKey,
+    "Zotero item key: an 8-character alphanumeric identifier unique within a \
+     library. Distinct from [`CollectionKey`] to prevent the two from being \
+     transposed at call sites."
+);
+string_key!(
+    CollectionKey,
+    "Zotero collection key: an 8-character alphanumeric identifier unique \
+     within a library. Distinct from [`ItemKey`] to prevent the two from \
+     being transposed at call sites."
+);
+
+/// Zotero item type (`itemType`), the closed-ish set of item kinds the
+/// Local API returns.
+///
+/// Only variants this crate branches on are named explicitly; every other
+/// Zotero item type (`webpage`, `bookSection`, `thesis`, ...) round-trips
+/// through [`ItemType::Other`], preserving its original API string exactly
+/// so unrecognized types are never silently corrupted on write-back.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub(crate) enum ItemType {
+    JournalArticle,
+    Book,
+    Preprint,
+    Note,
+    Attachment,
+    Annotation,
+    /// Any Zotero item type not modeled above; carries the API's original
+    /// value.
+    Other(String),
+}
+
+impl ItemType {
+    /// Borrows the API string this variant serializes to.
+    #[inline]
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            Self::JournalArticle => "journalArticle",
+            Self::Book => "book",
+            Self::Preprint => "preprint",
+            Self::Note => "note",
+            Self::Attachment => "attachment",
+            Self::Annotation => "annotation",
+            Self::Other(value) => value,
+        }
+    }
+}
+
+impl Default for ItemType {
+    #[inline]
+    fn default() -> Self {
+        Self::Other(String::new())
+    }
+}
+
+impl From<String> for ItemType {
+    #[inline]
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "journalArticle" => Self::JournalArticle,
+            "book" => Self::Book,
+            "preprint" => Self::Preprint,
+            "note" => Self::Note,
+            "attachment" => Self::Attachment,
+            "annotation" => Self::Annotation,
+            _ => Self::Other(value),
+        }
+    }
+}
+
+impl From<ItemType> for String {
+    #[inline]
+    fn from(value: ItemType) -> Self {
+        match value {
+            ItemType::Other(value) => value,
+            known => known.as_str().to_owned(),
+        }
+    }
+}
+
+/// PDF annotation kind (`annotationType`).
+///
+/// Falls back to [`AnnotationType::Other`] for any annotation kind beyond
+/// the three this crate creates (`image` and `ink` annotations exist in
+/// real Zotero libraries but are never constructed by this crate).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub(crate) enum AnnotationType {
+    Highlight,
+    Underline,
+    Note,
+    /// Any annotation kind not modeled above; carries the API's original
+    /// value.
+    Other(String),
+}
+
+impl AnnotationType {
+    /// Borrows the API string this variant serializes to.
+    #[inline]
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            Self::Highlight => "highlight",
+            Self::Underline => "underline",
+            Self::Note => "note",
+            Self::Other(value) => value,
+        }
+    }
+}
+
+impl schemars::JsonSchema for AnnotationType {
+    #[inline]
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "AnnotationType".into()
+    }
+
+    #[inline]
+    fn json_schema(
+        generator: &mut schemars::SchemaGenerator,
+    ) -> schemars::Schema {
+        String::json_schema(generator)
+    }
+}
+
+impl From<String> for AnnotationType {
+    #[inline]
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "highlight" => Self::Highlight,
+            "underline" => Self::Underline,
+            "note" => Self::Note,
+            _ => Self::Other(value),
+        }
+    }
+}
+
+impl From<AnnotationType> for String {
+    #[inline]
+    fn from(value: AnnotationType) -> Self {
+        match value {
+            AnnotationType::Other(value) => value,
+            known => known.as_str().to_owned(),
+        }
+    }
+}
+
+/// Creator role (`creatorType`), e.g. author or editor.
+///
+/// Zotero defines dozens of item-type-specific creator roles; only the
+/// common cross-item-type ones are named explicitly, with
+/// [`CreatorType::Other`] preserving anything else for round-tripping.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub(crate) enum CreatorType {
+    Author,
+    Editor,
+    Contributor,
+    SeriesEditor,
+    Translator,
+    /// Any creator role not modeled above; carries the API's original
+    /// value.
+    Other(String),
+}
+
+impl CreatorType {
+    /// Borrows the API string this variant serializes to.
+    #[inline]
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            Self::Author => "author",
+            Self::Editor => "editor",
+            Self::Contributor => "contributor",
+            Self::SeriesEditor => "seriesEditor",
+            Self::Translator => "translator",
+            Self::Other(value) => value,
+        }
+    }
+}
+
+impl From<String> for CreatorType {
+    #[inline]
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "author" => Self::Author,
+            "editor" => Self::Editor,
+            "contributor" => Self::Contributor,
+            "seriesEditor" => Self::SeriesEditor,
+            "translator" => Self::Translator,
+            _ => Self::Other(value),
+        }
+    }
+}
+
+impl From<CreatorType> for String {
+    #[inline]
+    fn from(value: CreatorType) -> Self {
+        match value {
+            CreatorType::Other(value) => value,
+            known => known.as_str().to_owned(),
+        }
+    }
+}
+
+/// Tag origin (Zotero's `type` field on a tag object): `0` for a
+/// user-created tag, `1` for one Zotero assigned automatically on import.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize,
+)]
+#[serde(from = "u8", into = "u8")]
+pub(crate) enum TagOrigin {
+    #[default]
+    User,
+    Automatic,
+    /// Any origin value outside Zotero's documented `0`/`1`; carries the
+    /// original integer.
+    Other(u8),
+}
+
+impl From<u8> for TagOrigin {
+    #[inline]
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::User,
+            1 => Self::Automatic,
+            other => Self::Other(other),
+        }
+    }
+}
+
+impl From<TagOrigin> for u8 {
+    #[inline]
+    fn from(value: TagOrigin) -> Self {
+        match value {
+            TagOrigin::User => 0,
+            TagOrigin::Automatic => 1,
+            TagOrigin::Other(other) => other,
+        }
+    }
+}
+
 /// A single Zotero library item as returned by the Local API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroItem {
-    pub(crate) key: String,
+    pub(crate) key: ItemKey,
     pub(crate) version: u64,
     /// Owning library metadata object.
     #[serde(default)]
@@ -27,11 +359,11 @@ pub(crate) struct ZoteroItem {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ZoteroItemData {
-    pub(crate) key: String,
+    pub(crate) key: ItemKey,
     #[serde(default)]
     pub(crate) version: u64,
     #[serde(rename = "itemType", default)]
-    pub(crate) item_type: String,
+    pub(crate) item_type: ItemType,
     pub(crate) title: Option<String>,
     #[serde(default)]
     pub(crate) creators: Vec<ZoteroCreator>,
@@ -68,14 +400,14 @@ pub(crate) struct ZoteroItemData {
     #[serde(default)]
     pub(crate) tags: Vec<ZoteroTag>,
     #[serde(default)]
-    pub(crate) collections: Vec<String>,
+    pub(crate) collections: Vec<CollectionKey>,
     /// Zotero relation URIs map.
     #[serde(default)]
     pub(crate) relations: serde_json::Value,
     pub(crate) date_added: Option<String>,
     pub(crate) date_modified: Option<String>,
     /// Parent item key for attachment and child note items.
-    pub(crate) parent_item: Option<String>,
+    pub(crate) parent_item: Option<ItemKey>,
     /// Attachment storage mode (e.g. `"imported_file"` or `"linked_url"`).
     pub(crate) link_mode: Option<String>,
     /// Attachment MIME content type.
@@ -88,7 +420,7 @@ pub(crate) struct ZoteroItemData {
     pub(crate) note: Option<String>,
     /// PDF annotation kind (e.g. `"highlight"`, `"underline"`, or `"note"`).
     #[serde(rename = "annotationType")]
-    pub(crate) annotation_type: Option<String>,
+    pub(crate) annotation_type: Option<AnnotationType>,
     /// Selected text for PDF highlight/underline annotations.
     #[serde(rename = "annotationText")]
     pub(crate) annotation_text: Option<String>,
@@ -111,7 +443,7 @@ pub(crate) struct ZoteroItemData {
 pub(crate) struct ZoteroCreator {
     /// Creator role (e.g. `"author"`, `"editor"`).
     #[serde(rename = "creatorType")]
-    pub(crate) creator_type: Option<String>,
+    pub(crate) creator_type: Option<CreatorType>,
     #[serde(rename = "firstName")]
     pub(crate) first_name: Option<String>,
     #[serde(rename = "lastName")]
@@ -124,15 +456,15 @@ pub(crate) struct ZoteroCreator {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroTag {
     pub(crate) tag: String,
-    /// Tag origin (0 = user tag, 1 = automatic tag).
-    #[serde(default)]
-    pub(crate) type_num: u8,
+    /// Tag origin: user-created vs. automatically assigned on import.
+    #[serde(rename = "type", default)]
+    pub(crate) origin: TagOrigin,
 }
 
 /// A Zotero collection as returned by the Local API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroCollection {
-    pub(crate) key: String,
+    pub(crate) key: CollectionKey,
     pub(crate) version: u64,
     pub(crate) data: ZoteroCollectionData,
 }
@@ -140,7 +472,7 @@ pub(crate) struct ZoteroCollection {
 /// Metadata payload for a [`ZoteroCollection`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroCollectionData {
-    pub(crate) key: String,
+    pub(crate) key: CollectionKey,
     pub(crate) name: String,
     /// Key of parent collection, or `false` if top-level.
     #[serde(rename = "parentCollection")]
@@ -197,7 +529,7 @@ mod tests {
 
         let creator: ZoteroCreator = serde_json::from_value(raw_json).unwrap();
 
-        assert_eq!(creator.creator_type.as_deref(), Some("author"));
+        assert_eq!(creator.creator_type, Some(CreatorType::Author));
         assert_eq!(creator.first_name.as_deref(), Some("Ada"));
         assert_eq!(creator.last_name.as_deref(), Some("Lovelace"));
     }

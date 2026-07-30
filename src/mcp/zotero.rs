@@ -7,7 +7,10 @@ use serde::Deserialize;
 use crate::{
     ZoteroMcpServer,
     pdf::extract_pdf_pages,
-    zotero::{ZoteroClient, ZoteroItem},
+    zotero::{
+        AnnotationType, CollectionKey, ItemKey, ItemType, ZoteroClient,
+        ZoteroItem,
+    },
 };
 
 // --- Argument Schemas ---
@@ -31,7 +34,7 @@ pub(crate) struct SearchItemsArgs {
     /// Search query across title, creator, year, or fulltext.
     pub(crate) query: String,
     /// Optional collection key to search within.
-    pub(crate) collection_key: Option<String>,
+    pub(crate) collection_key: Option<CollectionKey>,
     /// Maximum number of items to return (default: 20).
     pub(crate) limit: Option<usize>,
 }
@@ -40,14 +43,14 @@ pub(crate) struct SearchItemsArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemArgs {
     /// Zotero item key.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_get_item_metadata`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemMetadataArgs {
     /// Zotero item key.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
     /// Format: `"json"` or `"bibtex"` (default: `"json"`).
     pub(crate) format: Option<String>,
 }
@@ -56,28 +59,28 @@ pub(crate) struct GetItemMetadataArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetCollectionItemsArgs {
     /// Zotero collection key.
-    pub(crate) collection_key: String,
+    pub(crate) collection_key: CollectionKey,
 }
 
 /// Arguments for `zotero_get_item_children`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemChildrenArgs {
     /// Zotero item key.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_get_item_fulltext`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemFulltextArgs {
     /// Zotero item key.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_get_pdf_path`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetPdfPathArgs {
     /// Zotero item key (parent item or attachment item).
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_read_pdf_pages`.
@@ -93,7 +96,7 @@ pub(crate) struct ReadPdfPagesArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetNotesArgs {
     /// Zotero item key.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 // --- Zotero Write Operations ---
@@ -102,7 +105,7 @@ pub(crate) struct GetNotesArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateNoteArgs {
     /// Key of the parent item.
-    pub(crate) parent_item_key: String,
+    pub(crate) parent_item_key: ItemKey,
     /// HTML or Markdown content for the note.
     pub(crate) note_content: String,
 }
@@ -113,7 +116,7 @@ pub(crate) struct CreateCollectionArgs {
     /// Name of the collection to create.
     pub(crate) name: String,
     /// Optional key of the parent collection.
-    pub(crate) parent_key: Option<String>,
+    pub(crate) parent_key: Option<CollectionKey>,
 }
 
 /// Arguments for `zotero_search_collections`.
@@ -127,9 +130,9 @@ pub(crate) struct SearchCollectionsArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ManageCollectionsArgs {
     /// Zotero collection key.
-    pub(crate) collection_key: String,
+    pub(crate) collection_key: CollectionKey,
     /// List of item keys to add or remove.
-    pub(crate) item_keys: Vec<String>,
+    pub(crate) item_keys: Vec<ItemKey>,
     /// Set to `true` to remove items instead of adding them.
     pub(crate) remove: Option<bool>,
 }
@@ -138,7 +141,7 @@ pub(crate) struct ManageCollectionsArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct UpdateItemArgs {
     /// Zotero item key.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
     /// JSON object containing fields to update.
     pub(crate) fields: serde_json::Value,
 }
@@ -147,7 +150,7 @@ pub(crate) struct UpdateItemArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AttachFileArgs {
     /// Key of the parent item.
-    pub(crate) parent_item_key: String,
+    pub(crate) parent_item_key: ItemKey,
     /// Display title for the attachment.
     pub(crate) title: String,
     /// File path or URL.
@@ -160,7 +163,7 @@ pub(crate) struct AttachFileArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BatchUpdateTagsArgs {
     /// List of item keys.
-    pub(crate) item_keys: Vec<String>,
+    pub(crate) item_keys: Vec<ItemKey>,
     /// Tags to add.
     pub(crate) add_tags: Option<Vec<String>>,
     /// Tags to remove.
@@ -171,33 +174,33 @@ pub(crate) struct BatchUpdateTagsArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteItemArgs {
     /// Key of the item to permanently delete.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_trash_item` and `zotero_restore_item`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct TrashItemArgs {
     /// Key of the item to move to or restore from trash.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_delete_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteCollectionArgs {
     /// Key of the collection to permanently delete.
-    pub(crate) collection_key: String,
+    pub(crate) collection_key: CollectionKey,
 }
 
 /// Arguments for `zotero_update_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct UpdateCollectionArgs {
     /// Zotero collection key.
-    pub(crate) collection_key: String,
+    pub(crate) collection_key: CollectionKey,
     /// New name for the collection.
     pub(crate) name: Option<String>,
     /// New parent collection key; pass an empty string to move the
     /// collection to the top level.
-    pub(crate) parent_key: Option<String>,
+    pub(crate) parent_key: Option<CollectionKey>,
 }
 
 // --- Zotero Tag Administration ---
@@ -236,7 +239,7 @@ pub(crate) struct AddByIdentifierArgs {
     /// The DOI, arXiv ID, or ISBN to resolve.
     pub(crate) identifier: String,
     /// Optional collection key to file the new item into.
-    pub(crate) collection_key: Option<String>,
+    pub(crate) collection_key: Option<CollectionKey>,
 }
 
 // --- Zotero Discovery & Analysis ---
@@ -245,7 +248,7 @@ pub(crate) struct AddByIdentifierArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FindDuplicatesArgs {
     /// Optional collection key to scope duplicate search.
-    pub(crate) collection_key: Option<String>,
+    pub(crate) collection_key: Option<CollectionKey>,
 }
 
 /// Arguments for `zotero_search_by_tag`.
@@ -278,7 +281,7 @@ pub(crate) struct AdvancedSearchArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct LibraryCoverageArgs {
     /// Optional collection key to scope coverage analysis.
-    pub(crate) collection_key: Option<String>,
+    pub(crate) collection_key: Option<CollectionKey>,
 }
 
 /// Arguments for `zotero_get_unfiled_items`.
@@ -294,16 +297,16 @@ pub(crate) struct GetUnfiledItemsArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SynthesizeAnnotationsArgs {
     /// Zotero item key.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_create_annotation`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateAnnotationArgs {
     /// Key of the parent PDF attachment.
-    pub(crate) parent_attachment_key: String,
+    pub(crate) parent_attachment_key: ItemKey,
     /// Type of annotation: `"highlight"`, `"underline"`, or `"note"`.
-    pub(crate) annotation_type: String,
+    pub(crate) annotation_type: AnnotationType,
     /// Selected text (required for highlight/underline, omit for note).
     pub(crate) text: Option<String>,
     /// Optional user comment attached to the annotation.
@@ -365,11 +368,7 @@ impl ZoteroMcpServer {
         let client = ZoteroClient::new(&self.state);
         Ok(super::json_result(
             client
-                .search_items(
-                    &args.query,
-                    args.collection_key.as_deref(),
-                    limit,
-                )
+                .search_items(&args.query, args.collection_key.as_ref(), limit)
                 .await,
         ))
     }
@@ -402,9 +401,10 @@ impl ZoteroMcpServer {
         if format.eq_ignore_ascii_case("bibtex") {
             let bbt_client =
                 crate::better_bibtex::BetterBibtexClient::new(&self.state);
-            let item_keys = vec![args.item_key.as_str()];
             Ok(super::text_result(
-                bbt_client.export_items(&item_keys, "bibtex").await,
+                bbt_client
+                    .export_items(&[args.item_key.as_str()], "bibtex")
+                    .await,
             ))
         } else {
             let client = ZoteroClient::new(&self.state);
@@ -472,7 +472,7 @@ impl ZoteroMcpServer {
             Err(e) => return Ok(super::text_error(&e)),
         };
 
-        let found_path = if item.data.item_type == "attachment" {
+        let found_path = if item.data.item_type == ItemType::Attachment {
             item.data.path
         } else {
             match client.get_item_children(&args.item_key).await {
@@ -502,23 +502,25 @@ impl ZoteroMcpServer {
             args.item_key_or_path.clone()
         } else {
             let client = ZoteroClient::new(&self.state);
-            let item_key = &args.item_key_or_path;
-            let item = match client.get_item(item_key).await {
+            let item_key_str = &args.item_key_or_path;
+            let item_key = ItemKey::from(item_key_str.as_str());
+            let item = match client.get_item(&item_key).await {
                 Ok(item) => item,
                 Err(e) => {
                     return Ok(CallToolResult::error(vec![
                         rmcp::model::Content::text(format!(
-                            "Failed to locate PDF for key '{item_key}': {e}"
+                            "Failed to locate PDF for key '{item_key_str}': \
+                             {e}"
                         )),
                     ]));
                 }
             };
 
-            let found_path = if item.data.item_type == "attachment" {
+            let found_path = if item.data.item_type == ItemType::Attachment {
                 item.data.path
             } else {
                 client
-                    .get_item_children(item_key)
+                    .get_item_children(&item_key)
                     .await
                     .ok()
                     .and_then(|children| find_pdf_path(&children))
@@ -529,7 +531,7 @@ impl ZoteroMcpServer {
                 None => {
                     return Ok(CallToolResult::error(vec![
                         rmcp::model::Content::text(format!(
-                            "No PDF file path found for key: {item_key}"
+                            "No PDF file path found for key: {item_key_str}"
                         )),
                     ]));
                 }
@@ -558,7 +560,7 @@ impl ZoteroMcpServer {
             Ok(children) => {
                 let notes: Vec<_> = children
                     .into_iter()
-                    .filter(|c| c.data.item_type == "note")
+                    .filter(|c| c.data.item_type == ItemType::Note)
                     .collect();
                 Ok(super::json_success(&notes))
             }
@@ -595,7 +597,7 @@ impl ZoteroMcpServer {
         let client = ZoteroClient::new(&self.state);
         Ok(super::json_result(
             client
-                .create_collection(&args.name, args.parent_key.as_deref())
+                .create_collection(&args.name, args.parent_key.as_ref())
                 .await,
         ))
     }
@@ -779,7 +781,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
         Ok(super::json_result(
-            client.find_duplicates(args.collection_key.as_deref()).await,
+            client.find_duplicates(args.collection_key.as_ref()).await,
         ))
     }
 
@@ -843,7 +845,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
         Ok(super::json_result(
-            client.get_library_coverage(args.collection_key.as_deref()).await,
+            client.get_library_coverage(args.collection_key.as_ref()).await,
         ))
     }
 
@@ -893,7 +895,7 @@ impl ZoteroMcpServer {
             client
                 .create_annotation(
                     &args.parent_attachment_key,
-                    &args.annotation_type,
+                    args.annotation_type,
                     args.text.as_deref(),
                     args.comment.as_deref(),
                     args.color.as_deref(),
@@ -930,18 +932,13 @@ impl ZoteroMcpServer {
             Err(e) => return Ok(super::text_error(&e)),
         };
 
-        let title = draft
-            .get("title")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_owned();
-        if !title.is_empty() {
+        if !draft.title.is_empty() {
             let existing = client
                 .advanced_search(
                     vec![serde_json::json!({
                         "field": "title",
                         "operator": "equals",
-                        "value": title,
+                        "value": &draft.title,
                     })],
                     1,
                 )
@@ -953,10 +950,8 @@ impl ZoteroMcpServer {
             }
         }
 
-        if let Some(col) = &args.collection_key {
-            if let Some(obj) = draft.as_object_mut() {
-                obj.insert("collections".to_owned(), serde_json::json!([col]));
-            }
+        if let Some(col) = args.collection_key {
+            draft.collections.push(col);
         }
         Ok(super::json_result(client.create_item_from_metadata(draft).await))
     }
@@ -977,7 +972,7 @@ impl ZoteroMcpServer {
                 .update_collection(
                     &args.collection_key,
                     args.name.as_deref(),
-                    args.parent_key.as_deref(),
+                    args.parent_key.as_ref(),
                 )
                 .await,
         ))
@@ -1036,7 +1031,7 @@ impl ZoteroMcpServer {
 }
 fn find_pdf_path(children: &[ZoteroItem]) -> Option<String> {
     children.iter().find_map(|child| {
-        let is_pdf = child.data.item_type == "attachment"
+        let is_pdf = child.data.item_type == ItemType::Attachment
             && child
                 .data
                 .content_type

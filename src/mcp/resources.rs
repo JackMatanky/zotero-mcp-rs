@@ -2,7 +2,10 @@
 
 use serde::Serialize;
 
-use crate::{ZoteroMcpServer, zotero::ZoteroClient};
+use crate::{
+    ZoteroMcpServer,
+    zotero::{ItemKey, ZoteroClient},
+};
 
 impl ZoteroMcpServer {
     /// Lists MCP resources exposed by the server as a [`ListResourcesResult`].
@@ -46,7 +49,8 @@ impl ZoteroMcpServer {
                 }
             }
         } else if let Some(item_key) = uri.strip_prefix("zotero://items/") {
-            match client.get_item(item_key).await {
+            let item_key = ItemKey::from(item_key);
+            match client.get_item(&item_key).await {
                 Ok(item) => Ok(json_resource(uri, &item)),
                 Err(e) => {
                     Err(rmcp::ErrorData::internal_error(e.to_string(), None))

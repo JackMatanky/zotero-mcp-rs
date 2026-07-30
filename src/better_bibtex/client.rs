@@ -14,6 +14,7 @@ use crate::{
     },
     errors::ZoteroMcpError,
     state::AppState,
+    zotero::CollectionKey,
 };
 
 /// Client for the Better `BibTeX` JSON-RPC API, scoped to a single tool call.
@@ -174,12 +175,12 @@ impl<'a> BetterBibtexClient<'a> {
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn autoexport_add(
         &self,
-        collection_key: &str,
+        collection_key: &CollectionKey,
         translator: &str,
         path: &str,
     ) -> Result<Value, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let params = (collection_key, translator, path);
+        let params = (collection_key.as_str(), translator, path);
         self.call_rpc("autoexport.add", params).await
     }
 
@@ -199,11 +200,11 @@ impl<'a> BetterBibtexClient<'a> {
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn scan_aux(
         &self,
-        collection_key: &str,
+        collection_key: &CollectionKey,
         aux_path: &str,
     ) -> Result<Value, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let params = (collection_key, aux_path);
+        let params = (collection_key.as_str(), aux_path);
         self.call_rpc("collection.scanAUX", params).await
     }
 

@@ -4,7 +4,9 @@ use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::{ZoteroMcpServer, better_notes::BetterNotesClient};
+use crate::{
+    ZoteroMcpServer, better_notes::BetterNotesClient, zotero::ItemKey,
+};
 
 // --- Argument Schemas ---
 
@@ -12,7 +14,7 @@ use crate::{ZoteroMcpServer, better_notes::BetterNotesClient};
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ToMarkdownArgs {
     /// Note item key to export.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
     /// Output format (`"html"` or `"markdown"`), defaulting to `"markdown"`
     /// when [`None`].
     pub(crate) format: Option<String>,
@@ -22,7 +24,7 @@ pub(crate) struct ToMarkdownArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FromMarkdownArgs {
     /// Parent item key to attach the converted note to.
-    pub(crate) parent_key: String,
+    pub(crate) parent_key: ItemKey,
     /// Markdown string content to convert into HTML.
     pub(crate) markdown: String,
 }
@@ -33,21 +35,21 @@ pub(crate) struct RunTemplateArgs {
     /// Name of the template to execute.
     pub(crate) template_name: String,
     /// Target Zotero item key for template execution.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for retrieving Better Notes note relations.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct NoteRelationsArgs {
     /// Note item key to retrieve relations for.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for retrieving a Better Notes note tree structure.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct NoteTreeArgs {
     /// Note item key to retrieve tree structure for.
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 // --- Handler Implementations ---
@@ -86,7 +88,8 @@ impl ZoteroMcpServer {
         Ok(super::text_result(
             client
                 .convert_from_markdown(&args.parent_key, &args.markdown)
-                .await,
+                .await
+                .map(|key| key.to_string()),
         ))
     }
 

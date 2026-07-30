@@ -60,7 +60,7 @@ impl ZoteroMcpServer {
         args: FetchArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_get_item_metadata_impl(GetItemMetadataArgs {
-            item_key: args.id,
+            item_key: args.id.into(),
             format: Some("json".to_owned()),
         })
         .await

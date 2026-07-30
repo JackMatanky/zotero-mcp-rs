@@ -2,7 +2,11 @@
 
 use crate::{
     errors::ZoteroMcpError,
-    zotero::{ZoteroClient, ZoteroCollection, ZoteroItem, models::ZoteroTag},
+    zotero::{
+        ZoteroClient, ZoteroCollection, ZoteroItem,
+        identifiers::ItemDraft,
+        models::{AnnotationType, CollectionKey, ItemKey, ItemType, ZoteroTag},
+    },
 };
 
 impl ZoteroClient<'_> {
@@ -18,13 +22,13 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn create_note(
         &self,
-        parent_item_key: &str,
+        parent_item_key: &ItemKey,
         note_content: &str,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         self.state.check_write_permission()?;
         let url = format!("{}/users/0/items", self.state.zotero_api_url);
         let payload = serde_json::json!([{
-            "itemType": "note",
+            "itemType": ItemType::Note,
             "parentItem": parent_item_key,
             "note": note_content,
         }]);
@@ -45,12 +49,12 @@ impl ZoteroClient<'_> {
     pub(crate) async fn create_collection(
         &self,
         name: &str,
-        parent_key: Option<&str>,
+        parent_key: Option<&CollectionKey>,
     ) -> Result<ZoteroCollection, ZoteroMcpError> {
         self.state.check_write_permission()?;
         let url = format!("{}/users/0/collections", self.state.zotero_api_url);
         let parent_val = match parent_key {
-            Some(k) => serde_json::Value::String(k.to_owned()),
+            Some(k) => serde_json::Value::String(k.to_string()),
             None => serde_json::Value::String("false".to_owned()),
         };
         let payload = serde_json::json!([{
@@ -84,8 +88,8 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn manage_collection_items(
         &self,
-        collection_key: &str,
-        item_keys: &[String],
+        collection_key: &CollectionKey,
+        item_keys: &[ItemKey],
         remove: bool,
     ) -> Result<(), ZoteroMcpError> {
         self.state.check_write_permission()?;
@@ -93,7 +97,8 @@ impl ZoteroClient<'_> {
             "{}/users/0/collections/{}/items",
             self.state.zotero_api_url, collection_key
         );
-        let body_str = item_keys.join(" ");
+        let body_str =
+            item_keys.iter().map(ItemKey::as_str).collect::<Vec<_>>().join(" ");
 
         let req = if remove {
             self.state.client.delete(&url).body(body_str)
@@ -117,7 +122,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn update_item(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
         fields: serde_json::Value,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         self.state.check_write_permission()?;
@@ -153,7 +158,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn attach_file_link(
         &self,
-        parent_item_key: &str,
+        parent_item_key: &ItemKey,
         title: &str,
         file_path_or_url: &str,
         content_type: Option<&str>,
@@ -161,7 +166,7 @@ impl ZoteroClient<'_> {
         self.state.check_write_permission()?;
         let url = format!("{}/users/0/items", self.state.zotero_api_url);
         let payload = serde_json::json!([{
-            "itemType": "attachment",
+            "itemType": ItemType::Attachment,
             "parentItem": parent_item_key,
             "title": title,
             "linkMode": "imported_file",
@@ -194,7 +199,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn batch_update_tags(
         &self,
-        item_keys: &[String],
+        item_keys: &[ItemKey],
         add_tags: &[String],
         remove_tags: &[String],
     ) -> Result<usize, ZoteroMcpError> {
@@ -225,7 +230,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn delete_item(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<(), ZoteroMcpError> {
         self.state.check_write_permission()?;
         let item = self.get_item(item_key).await?;
@@ -247,7 +252,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn set_item_deleted(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
         deleted: bool,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         self.state.check_write_permission()?;
@@ -271,7 +276,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn delete_collection(
         &self,
-        collection_key: &str,
+        collection_key: &CollectionKey,
     ) -> Result<(), ZoteroMcpError> {
         self.state.check_write_permission()?;
         let url = format!(
@@ -315,8 +320,8 @@ impl ZoteroClient<'_> {
     )]
     pub(crate) async fn create_annotation(
         &self,
-        parent_attachment_key: &str,
-        annotation_type: &str,
+        parent_attachment_key: &ItemKey,
+        annotation_type: AnnotationType,
         text: Option<&str>,
         comment: Option<&str>,
         color: Option<&str>,
@@ -327,7 +332,7 @@ impl ZoteroClient<'_> {
         let position: serde_json::Value = serde_json::from_str(position_json)?;
         let url = format!("{}/users/0/items", self.state.zotero_api_url);
         let payload = serde_json::json!([{
-            "itemType": "annotation",
+            "itemType": ItemType::Annotation,
             "parentItem": parent_attachment_key,
             "annotationType": annotation_type,
             "annotationText": text,
@@ -356,7 +361,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn create_item_from_metadata(
         &self,
-        draft: serde_json::Value,
+        draft: ItemDraft,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         self.state.check_write_permission()?;
         let url = format!("{}/users/0/items", self.state.zotero_api_url);
@@ -382,9 +387,9 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn update_collection(
         &self,
-        collection_key: &str,
+        collection_key: &CollectionKey,
         name: Option<&str>,
-        parent_key: Option<&str>,
+        parent_key: Option<&CollectionKey>,
     ) -> Result<ZoteroCollection, ZoteroMcpError> {
         self.state.check_write_permission()?;
         let url = format!(
@@ -400,8 +405,8 @@ impl ZoteroClient<'_> {
 
         let new_name = name.unwrap_or(&current.data.name);
         let new_parent = match parent_key {
-            Some("") => serde_json::Value::Bool(false),
-            Some(k) => serde_json::Value::String(k.to_owned()),
+            Some(k) if k.as_str().is_empty() => serde_json::Value::Bool(false),
+            Some(k) => serde_json::Value::String(k.to_string()),
             None => current
                 .data
                 .parent_collection
@@ -519,7 +524,7 @@ mod tests {
     async fn create_note_rejects_when_write_is_disabled() {
         let state = test_state(String::new(), false);
         let err = ZoteroClient::new(&state)
-            .create_note("PARENT1", "note body")
+            .create_note(&"PARENT1".into(), "note body")
             .await
             .unwrap_err();
         assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
@@ -537,7 +542,7 @@ mod tests {
         let state = test_state(base, true);
 
         let item = ZoteroClient::new(&state)
-            .create_note("PARENT1", "note body")
+            .create_note(&"PARENT1".into(), "note body")
             .await
             .unwrap();
         assert_eq!(item.key, "NOTE1");
@@ -571,15 +576,15 @@ mod tests {
 
         let res_add = ZoteroClient::new(&state)
             .manage_collection_items(
-                "COL1",
-                &["ITEM1".to_owned(), "ITEM2".to_owned()],
+                &"COL1".into(),
+                &["ITEM1".into(), "ITEM2".into()],
                 false,
             )
             .await;
         assert!(res_add.is_ok());
 
         let res_rem = ZoteroClient::new(&state)
-            .manage_collection_items("COL1", &["ITEM1".to_owned()], true)
+            .manage_collection_items(&"COL1".into(), &["ITEM1".into()], true)
             .await;
         assert!(res_rem.is_ok());
     }
@@ -596,7 +601,7 @@ mod tests {
         let state = test_state(base, true);
 
         let res = ZoteroClient::new(&state)
-            .update_item("ITEM1", json!({"title": "Updated Title"}))
+            .update_item(&"ITEM1".into(), json!({"title": "Updated Title"}))
             .await
             .unwrap();
         assert_eq!(res.key, "ITEM1");
@@ -614,7 +619,12 @@ mod tests {
         let state = test_state(base, true);
 
         let item = ZoteroClient::new(&state)
-            .attach_file_link("ITEM1", "PDF Attachment", "/path/file.pdf", None)
+            .attach_file_link(
+                &"ITEM1".into(),
+                "PDF Attachment",
+                "/path/file.pdf",
+                None,
+            )
             .await
             .unwrap();
         assert_eq!(item.key, "ATT1");
@@ -639,11 +649,9 @@ mod tests {
         let state = test_state(base, true);
 
         let count = ZoteroClient::new(&state)
-            .batch_update_tags(
-                &["ITEM1".to_owned()],
-                &["new_tag".to_owned()],
-                &["old_tag".to_owned()],
-            )
+            .batch_update_tags(&["ITEM1".into()], &["new_tag".to_owned()], &[
+                "old_tag".to_owned(),
+            ])
             .await
             .unwrap();
         assert_eq!(count, 1);
@@ -652,8 +660,10 @@ mod tests {
     #[tokio::test]
     async fn delete_item_rejects_when_write_is_disabled() {
         let state = test_state(String::new(), false);
-        let err =
-            ZoteroClient::new(&state).delete_item("ITEM1").await.unwrap_err();
+        let err = ZoteroClient::new(&state)
+            .delete_item(&"ITEM1".into())
+            .await
+            .unwrap_err();
         assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
     }
 
@@ -670,7 +680,8 @@ mod tests {
         ]);
         let state = test_state(base, true);
 
-        let result = ZoteroClient::new(&state).delete_item("ITEM1").await;
+        let result =
+            ZoteroClient::new(&state).delete_item(&"ITEM1".into()).await;
         assert!(result.is_ok());
     }
 
@@ -693,7 +704,7 @@ mod tests {
         let state = test_state(base, true);
 
         let trashed = ZoteroClient::new(&state)
-            .set_item_deleted("ITEM1", true)
+            .set_item_deleted(&"ITEM1".into(), true)
             .await
             .unwrap();
         assert!(trashed.data.deleted);
@@ -718,7 +729,7 @@ mod tests {
         let state = test_state(base, true);
 
         let restored = ZoteroClient::new(&state)
-            .set_item_deleted("ITEM1", false)
+            .set_item_deleted(&"ITEM1".into(), false)
             .await
             .unwrap();
         assert!(!restored.data.deleted);
@@ -728,7 +739,7 @@ mod tests {
     async fn delete_collection_rejects_when_write_is_disabled() {
         let state = test_state(String::new(), false);
         let err = ZoteroClient::new(&state)
-            .delete_collection("COL1")
+            .delete_collection(&"COL1".into())
             .await
             .unwrap_err();
         assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
@@ -747,7 +758,8 @@ mod tests {
         ]);
         let state = test_state(base, true);
 
-        let result = ZoteroClient::new(&state).delete_collection("COL1").await;
+        let result =
+            ZoteroClient::new(&state).delete_collection(&"COL1".into()).await;
         assert!(result.is_ok());
     }
 
@@ -756,8 +768,8 @@ mod tests {
         let state = test_state(String::new(), false);
         let err = ZoteroClient::new(&state)
             .create_annotation(
-                "ATT1",
-                "highlight",
+                &"ATT1".into(),
+                AnnotationType::Highlight,
                 Some("selected text"),
                 None,
                 None,
@@ -782,8 +794,8 @@ mod tests {
 
         let item = ZoteroClient::new(&state)
             .create_annotation(
-                "ATT1",
-                "highlight",
+                &"ATT1".into(),
+                AnnotationType::Highlight,
                 Some("selected text"),
                 None,
                 None,
@@ -801,8 +813,8 @@ mod tests {
 
         let err = ZoteroClient::new(&state)
             .create_annotation(
-                "ATT1",
-                "highlight",
+                &"ATT1".into(),
+                AnnotationType::Highlight,
                 Some("selected text"),
                 None,
                 None,
@@ -818,9 +830,11 @@ mod tests {
     async fn create_item_from_metadata_rejects_when_write_is_disabled() {
         let state = test_state(String::new(), false);
         let err = ZoteroClient::new(&state)
-            .create_item_from_metadata(
-                json!({"itemType": "book", "title": "A Book"}),
-            )
+            .create_item_from_metadata(ItemDraft {
+                item_type: ItemType::Book,
+                title: "A Book".to_owned(),
+                ..ItemDraft::default()
+            })
             .await
             .unwrap_err();
         assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
@@ -838,9 +852,11 @@ mod tests {
         let state = test_state(base, true);
 
         let item = ZoteroClient::new(&state)
-            .create_item_from_metadata(
-                json!({"itemType": "book", "title": "A Book"}),
-            )
+            .create_item_from_metadata(ItemDraft {
+                item_type: ItemType::Book,
+                title: "A Book".to_owned(),
+                ..ItemDraft::default()
+            })
             .await
             .unwrap();
         assert_eq!(item.key, "NEWITEM1");
@@ -850,7 +866,7 @@ mod tests {
     async fn update_collection_rejects_when_write_is_disabled() {
         let state = test_state(String::new(), false);
         let err = ZoteroClient::new(&state)
-            .update_collection("COL1", Some("New Name"), None)
+            .update_collection(&"COL1".into(), Some("New Name"), None)
             .await
             .unwrap_err();
         assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
@@ -875,7 +891,7 @@ mod tests {
         let state = test_state(base, true);
 
         let collection = ZoteroClient::new(&state)
-            .update_collection("COL1", Some("New Name"), None)
+            .update_collection(&"COL1".into(), Some("New Name"), None)
             .await
             .unwrap();
         assert_eq!(collection.data.name, "New Name");
@@ -900,7 +916,7 @@ mod tests {
         let state = test_state(base, true);
 
         let collection = ZoteroClient::new(&state)
-            .update_collection("COL1", None, Some("PARENT1"))
+            .update_collection(&"COL1".into(), None, Some(&"PARENT1".into()))
             .await
             .unwrap();
         assert_eq!(collection.data.parent_collection, Some(json!("PARENT1")));
@@ -926,7 +942,7 @@ mod tests {
         let state = test_state(base, true);
 
         let collection = ZoteroClient::new(&state)
-            .update_collection("COL1", None, Some(""))
+            .update_collection(&"COL1".into(), None, Some(&"".into()))
             .await
             .unwrap();
         assert_eq!(collection.data.parent_collection, Some(json!(false)));

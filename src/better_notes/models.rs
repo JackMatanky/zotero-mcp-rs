@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::zotero::ItemKey;
+
 /// Response body of the Markdown-conversion endpoints.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct MarkdownResponse {
@@ -14,7 +16,7 @@ pub(crate) struct MarkdownResponse {
 pub(crate) struct NoteItemResponse {
     /// Item key of the created note.
     #[serde(rename = "itemKey")]
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
 }
 
 /// Response body of the template-run endpoint.
