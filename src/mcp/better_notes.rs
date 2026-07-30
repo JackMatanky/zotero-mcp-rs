@@ -25,8 +25,9 @@ pub(crate) struct NoteExportArgs {
 /// Arguments for importing Markdown into a Better Notes note.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FromMarkdownArgs {
-    /// Parent item key to attach the converted note to.
-    pub(crate) parent_key: ItemKey,
+    /// Parent item key to attach the converted note to. Omit for a top-level
+    /// note.
+    pub(crate) parent_key: Option<ItemKey>,
     /// Markdown string content to convert into HTML.
     pub(crate) markdown: String,
 }
@@ -86,7 +87,7 @@ impl ZoteroMcpServer {
         let client = BetterNotesClient::new(&self.state);
         Ok(super::text_result(
             client
-                .convert_from_markdown(&args.parent_key, &args.markdown)
+                .convert_from_markdown(args.parent_key.as_ref(), &args.markdown)
                 .await
                 .map(|key| key.to_string()),
         ))
@@ -104,7 +105,7 @@ impl ZoteroMcpServer {
         args: RunTemplateArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterNotesClient::new(&self.state);
-        Ok(super::json_result(
+        Ok(super::text_result(
             client.run_template(&args.template_name, &args.item_key).await,
         ))
     }

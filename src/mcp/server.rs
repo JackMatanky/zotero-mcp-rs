@@ -1071,6 +1071,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn better_notes_run_template_tool_returns_text_success() {
+        let base = mock_server(vec![http_response(
+            "200 OK",
+            r##"{"result":"# Rendered"}"##,
+        )]);
+        let server = ZoteroMcpServer::new(better_notes_state(base));
+
+        let res = server
+            .better_notes_run_template(Parameters(RunTemplateArgs {
+                template_name: "Export".to_owned(),
+                item_key: "NOTE1".into(),
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(false));
+        assert_eq!(
+            res.content
+                .first()
+                .and_then(|c| c.as_text())
+                .map(|t| t.text.as_str()),
+            Some("# Rendered")
+        );
+    }
+
+    #[tokio::test]
     async fn zotero_get_recent_tool_returns_success() {
         let items = json!([{
             "key": "ITEM1",

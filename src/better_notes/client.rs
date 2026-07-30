@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{
     better_notes::models::{
-        NoteExportFormat, NoteExportResponse, NoteItemResponse,
+        NoteExportFormat, NoteExportResponse, NoteItemResponse, NoteRelations,
         NoteTreeResponse, RelationsResponse, TemplateResponse,
     },
     errors::ZoteroMcpError,
@@ -65,14 +65,22 @@ impl<'a> BetterNotesClient<'a> {
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn convert_from_markdown(
         &self,
-        parent_key: &ItemKey,
+        parent_key: Option<&ItemKey>,
         markdown: &str,
     ) -> Result<ItemKey, ZoteroMcpError> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Payload<'a> {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            parent_key: Option<&'a ItemKey>,
+            markdown: &'a str,
+        }
+
         self.state.check_write_permission()?;
-        let payload = serde_json::json!({
-            "parentKey": parent_key,
-            "markdown": markdown,
-        });
+        let payload = Payload {
+            parent_key,
+            markdown,
+        };
         let res: NoteItemResponse =
             self.post_json("/notes/from-markdown", payload).await?;
         Ok(res.item_key)
@@ -89,7 +97,7 @@ impl<'a> BetterNotesClient<'a> {
         &self,
         name: &str,
         item_key: &ItemKey,
-    ) -> Result<Value, ZoteroMcpError> {
+    ) -> Result<String, ZoteroMcpError> {
         let payload = serde_json::json!({
             "name": name,
             "itemKey": item_key,
@@ -110,7 +118,7 @@ impl<'a> BetterNotesClient<'a> {
     pub(crate) async fn get_relations(
         &self,
         item_key: &ItemKey,
-    ) -> Result<Value, ZoteroMcpError> {
+    ) -> Result<NoteRelations, ZoteroMcpError> {
         let payload = serde_json::json!({
             "itemKey": item_key,
         });
@@ -375,7 +383,7 @@ mod tests {
 
         use super::{
             super::*,
-            fixtures::{http_response, mock_server, test_state},
+            fixtures::{http_response, mock_server_with_requests, test_state},
         };
 
         #[tokio::test]
@@ -385,7 +393,7 @@ mod tests {
 
             // Act
             let err = BetterNotesClient::new(&state)
-                .convert_from_markdown(&"PARENT1".into(), "# Hello")
+                .convert_from_markdown(None, "# Hello")
                 .await
                 .unwrap_err();
 
@@ -394,22 +402,123 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn returns_created_item_key_when_write_is_enabled() {
+        async fn sends_parent_key_when_present() {
             // Arrange
-            let base = mock_server(vec![http_response(
-                "200 OK",
-                r#"{"itemKey":"NOTE1"}"#,
-            )]);
+            let (base, requests) =
+                mock_server_with_requests(vec![http_response(
+                    "200 OK",
+                    r#"{"itemKey":"NOTE1"}"#,
+                )]);
             let state = test_state(base, true);
+            let parent_key = ItemKey::from("PARENT1");
 
             // Act
             let key = BetterNotesClient::new(&state)
-                .convert_from_markdown(&"PARENT1".into(), "# Hello")
+                .convert_from_markdown(Some(&parent_key), "# Hello")
                 .await
                 .unwrap();
 
             // Assert
             assert_eq!(key, "NOTE1");
+            let request = requests.recv().expect("captured request");
+            assert!(request.contains(r#""parentKey":"PARENT1""#));
+            assert!(request.contains(r##""markdown":"# Hello""##));
+        }
+
+        #[tokio::test]
+        async fn omits_parent_key_for_top_level_note() {
+            // Arrange
+            let (base, requests) =
+                mock_server_with_requests(vec![http_response(
+                    "200 OK",
+                    r#"{"itemKey":"NOTE1"}"#,
+                )]);
+            let state = test_state(base, true);
+
+            // Act
+            let key = BetterNotesClient::new(&state)
+                .convert_from_markdown(None, "# Hello")
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(key, "NOTE1");
+            let request = requests.recv().expect("captured request");
+            assert!(!request.contains("parentKey"));
+            assert!(request.contains(r##""markdown":"# Hello""##));
+        }
+    }
+
+    mod run_template {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn returns_rendered_text() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r##"{"result":"# Rendered"}"##,
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let result = BetterNotesClient::new(&state)
+                .run_template("Export", &"NOTE1".into())
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(result, "# Rendered");
+        }
+    }
+
+    mod get_relations {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server, test_state},
+        };
+
+        #[tokio::test]
+        async fn returns_typed_relation_links() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                concat!(
+                    r#"{"relations":{"outbound":[{"#,
+                    r#""fromLibID":1,"fromKey":"NOTE1","#,
+                    r#""toLibID":2,"toKey":"NOTE2","#,
+                    r#""fromLine":3,"toLine":null,"#,
+                    r#""toSection":"Intro","#,
+                    r#""url":"zotero://note/u/NOTE2"}],"inbound":[]}}"#
+                ),
+            )]);
+            let state = test_state(base, false);
+
+            // Act
+            let relations = BetterNotesClient::new(&state)
+                .get_relations(&"NOTE1".into())
+                .await
+                .unwrap();
+
+            // Assert
+            assert!(relations.inbound.is_empty());
+            assert_eq!(relations.outbound.len(), 1);
+            let link = &relations.outbound[0];
+            assert_eq!(link.from_lib_id, 1);
+            assert_eq!(link.from_key, "NOTE1");
+            assert_eq!(link.to_lib_id, 2);
+            assert_eq!(link.to_key, "NOTE2");
+            assert_eq!(link.from_line, 3);
+            assert_eq!(link.to_line, None);
+            assert_eq!(link.to_section.as_deref(), Some("Intro"));
+            assert_eq!(link.url, "zotero://note/u/NOTE2");
         }
     }
 }
