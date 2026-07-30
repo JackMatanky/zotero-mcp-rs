@@ -24,7 +24,7 @@ use crate::{
             FromMarkdownArgs, NoteExportArgs, NoteRelationsArgs, NoteTreeArgs,
             RunTemplateArgs,
         },
-        chatgpt::{FetchArgs, SearchArgs},
+        connector_tools::{FetchArgs, SearchArgs},
         zotero::{
             AddByIdentifierArgs, AdvancedSearchArgs, AttachFileArgs,
             BatchUpdateTagsArgs, CreateAnnotationArgs, CreateCollectionArgs,
@@ -907,38 +907,37 @@ impl ZoteroMcpServer {
         self.better_notes_get_tree_impl(args).await
     }
 
-    // --- ChatGPT Connector Compatibility Tools ---
+    // --- Connector-Compatible Tools ---
 
     #[tool(
         name = "search",
-        description = "ChatGPT Connector search tool - search Zotero items by \
-                       query"
+        description = "Connector search tool - search Zotero items by query"
     )]
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn chatgpt_search(
+    pub(crate) async fn connector_search(
         &self,
         Parameters(args): Parameters<SearchArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.chatgpt_search_impl(args).await
+        self.connector_search_impl(args).await
     }
 
     #[tool(
         name = "fetch",
-        description = "ChatGPT Connector fetch tool - get item metadata by \
+        description = "Connector fetch tool - get Zotero item metadata by \
                        item ID/key"
     )]
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn chatgpt_fetch(
+    pub(crate) async fn connector_fetch(
         &self,
         Parameters(args): Parameters<FetchArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.chatgpt_fetch_impl(args).await
+        self.connector_fetch_impl(args).await
     }
 }
 
@@ -1537,7 +1536,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn chatgpt_connector_search_and_fetch_tools() {
+    async fn connector_search_and_fetch_tools() {
         let item = json!({
             "key": "ITEM1",
             "version": 1,
@@ -1550,7 +1549,7 @@ mod tests {
         let server = ZoteroMcpServer::new(zotero_state(base));
 
         let search_res = server
-            .chatgpt_search(Parameters(SearchArgs {
+            .connector_search(Parameters(SearchArgs {
                 query: "quantum".to_owned(),
             }))
             .await
@@ -1558,7 +1557,7 @@ mod tests {
         assert!(!search_res.is_error.unwrap_or(false));
 
         let fetch_res = server
-            .chatgpt_fetch(Parameters(FetchArgs {
+            .connector_fetch(Parameters(FetchArgs {
                 id: "ITEM1".to_owned(),
             }))
             .await

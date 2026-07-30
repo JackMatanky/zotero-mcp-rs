@@ -2,7 +2,7 @@
 
 mod better_bibtex;
 mod better_notes;
-mod chatgpt;
+mod connector_tools;
 mod resources;
 mod server;
 mod zotero;
