@@ -742,5 +742,27 @@ mod tests {
                 serde_json::from_value(raw_json).unwrap();
             assert_eq!(data.citation_key.as_deref(), Some("smith2020deep"));
         }
+        #[test]
+        fn deserializes_collection_with_parent_collection_key() {
+            let raw_json = serde_json::json!({
+                "key": "COL12345",
+                "version": 10,
+                "data": {
+                    "key": "COL12345",
+                    "version": 10,
+                    "name": "Machine Learning",
+                    "parentCollection": "PARENT01"
+                }
+            });
+
+            let col: ZoteroCollection =
+                serde_json::from_value(raw_json).unwrap();
+            assert_eq!(col.key, "COL12345");
+            assert_eq!(col.data.name, "Machine Learning");
+            assert_eq!(
+                col.data.parent_collection.as_ref().and_then(|v| v.as_str()),
+                Some("PARENT01")
+            );
+        }
     }
 }

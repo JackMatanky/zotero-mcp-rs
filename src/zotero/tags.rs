@@ -161,19 +161,60 @@ pub(crate) fn diff_tags(
 mod tests {
     use super::*;
     use crate::zotero::models::TagOrigin;
-    #[test]
-    fn test_diff_tags() {
-        let existing = vec![ZoteroTag {
-            tag: "old".to_owned(),
-            origin: TagOrigin::default(),
-        }];
-        let add = vec![TagName::from("new")];
-        let remove = vec![TagName::from("old")];
-        let result = diff_tags(existing, &add, &remove);
-        assert_eq!(result.len(), 1);
-        assert_eq!(
-            result.first().and_then(|v| v.get("tag")),
-            Some(&serde_json::Value::String("new".to_owned()))
-        );
+
+    mod diff_tags {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+        #[test]
+        fn adds_new_tags_and_removes_specified_existing_tags() {
+            let existing = vec![ZoteroTag {
+                tag: "old".to_owned(),
+                origin: TagOrigin::default(),
+            }];
+            let add = vec![TagName::from("new")];
+            let remove = vec![TagName::from("old")];
+
+            let result = super::diff_tags(existing, &add, &remove);
+
+            assert_eq!(result.len(), 1);
+            assert_eq!(
+                result.first().and_then(|v| v.get("tag")),
+                Some(&serde_json::Value::String("new".to_owned()))
+            );
+        }
+
+        #[test]
+        fn handles_empty_add_and_remove_tag_lists() {
+            let existing = vec![ZoteroTag {
+                tag: "keep_me".to_owned(),
+                origin: TagOrigin::default(),
+            }];
+
+            let result = super::diff_tags(existing, &[], &[]);
+
+            assert_eq!(result.len(), 1);
+            assert_eq!(
+                result.first().and_then(|v| v.get("tag")),
+                Some(&serde_json::Value::String("keep_me".to_owned()))
+            );
+        }
+
+        #[test]
+        fn deduplicates_added_tags_when_already_present() {
+            let existing = vec![ZoteroTag {
+                tag: "rust".to_owned(),
+                origin: TagOrigin::default(),
+            }];
+            let add = vec![TagName::from("rust")];
+
+            let result = super::diff_tags(existing, &add, &[]);
+
+            assert_eq!(result.len(), 1);
+            assert_eq!(
+                result.first().and_then(|v| v.get("tag")),
+                Some(&serde_json::Value::String("rust".to_owned()))
+            );
+        }
     }
 }

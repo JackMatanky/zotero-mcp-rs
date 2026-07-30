@@ -223,17 +223,109 @@ fn match_condition(item: &ZoteroItem, cond: &SearchCondition) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::zotero::models::{ItemKey, ItemType, ZoteroItemData};
 
-    #[test]
-    fn test_search_condition_deserialize() {
-        let json = serde_json::json!({
-            "field": "title",
-            "operator": "contains",
-            "value": "Rust"
-        });
-        let cond: SearchCondition = serde_json::from_value(json).unwrap();
-        assert_eq!(cond.field, SearchField::Title);
-        assert_eq!(cond.operator, SearchOperator::Contains);
-        assert_eq!(cond.value, "Rust");
+    mod deserialization {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+        #[test]
+        fn deserializes_search_condition_json() {
+            let json = serde_json::json!({
+                "field": "title",
+                "operator": "contains",
+                "value": "Rust"
+            });
+            let cond: SearchCondition = serde_json::from_value(json).unwrap();
+            assert_eq!(cond.field, SearchField::Title);
+            assert_eq!(cond.operator, SearchOperator::Contains);
+            assert_eq!(cond.value, "Rust");
+        }
+
+        #[test]
+        fn deserializes_unknown_field_into_other_variant() {
+            let json = serde_json::json!({
+                "field": "customField",
+                "operator": "is",
+                "value": "val"
+            });
+            let cond: SearchCondition = serde_json::from_value(json).unwrap();
+            assert_eq!(
+                cond.field,
+                SearchField::Other("customField".to_owned())
+            );
+        }
+    }
+
+    mod match_condition {
+
+        use super::*;
+
+        fn make_item(
+            title: Option<&str>,
+            date: Option<&str>,
+            doi: Option<&str>,
+        ) -> ZoteroItem {
+            ZoteroItem {
+                key: ItemKey::from("ITEM0001"),
+                version: 1,
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from("ITEM0001"),
+                    version: 1,
+                    item_type: ItemType::JournalArticle,
+                    title: title.map(ToOwned::to_owned),
+                    date: date.map(ToOwned::to_owned),
+                    doi: doi.map(ToOwned::to_owned),
+                    ..Default::default()
+                },
+            }
+        }
+
+        #[test]
+        fn matches_title_field_with_contains_operator_case_insensitively() {
+            let item = make_item(Some("Programming in Rust"), None, None);
+            let cond = SearchCondition {
+                field: SearchField::Title,
+                operator: SearchOperator::Contains,
+                value: "rust".to_owned(),
+            };
+            assert!(match_condition(&item, &cond));
+        }
+
+        #[test]
+        fn matches_date_field_with_is_operator() {
+            let item = make_item(None, Some("2024"), None);
+            let cond = SearchCondition {
+                field: SearchField::Date,
+                operator: SearchOperator::Is,
+                value: "2024".to_owned(),
+            };
+            assert!(match_condition(&item, &cond));
+        }
+
+        #[test]
+        fn matches_doi_field_with_starts_with_operator() {
+            let item = make_item(None, None, Some("10.1000/182"));
+            let cond = SearchCondition {
+                field: SearchField::Doi,
+                operator: SearchOperator::StartsWith,
+                value: "10.1000/".to_owned(),
+            };
+            assert!(match_condition(&item, &cond));
+        }
+
+        #[test]
+        fn returns_false_when_condition_value_does_not_match() {
+            let item = make_item(Some("Learning Go"), None, None);
+            let cond = SearchCondition {
+                field: SearchField::Title,
+                operator: SearchOperator::Contains,
+                value: "Rust".to_owned(),
+            };
+            assert!(!match_condition(&item, &cond));
+        }
     }
 }

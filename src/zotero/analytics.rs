@@ -338,11 +338,263 @@ fn format_notes_section(item: &ZoteroItem, children: &[ZoteroItem]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::zotero::models::{AnnotationType, ZoteroItemData};
 
-    #[test]
-    #[allow(clippy::float_cmp, reason = "exact float percentages in test")]
-    fn test_compute_percentage() {
-        assert_eq!(compute_percentage(1, 2), 50.0);
-        assert_eq!(compute_percentage(0, 5), 0.0);
+    mod compute_percentage {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+        #[test]
+        #[allow(clippy::float_cmp, reason = "exact float percentages in test")]
+        fn returns_percentage_ratio_for_given_counts() {
+            assert_eq!(compute_percentage(1, 2), 50.0);
+            assert_eq!(compute_percentage(3, 4), 75.0);
+        }
+
+        #[test]
+        #[allow(clippy::float_cmp, reason = "exact float percentages in test")]
+        fn returns_zero_when_total_is_zero() {
+            assert_eq!(compute_percentage(0, 0), 0.0);
+            assert_eq!(compute_percentage(5, 0), 0.0);
+        }
+    }
+    mod duplicate_groups {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        fn make_item(
+            key: &str,
+            title: Option<&str>,
+            doi: Option<&str>,
+        ) -> ZoteroItem {
+            ZoteroItem {
+                key: ItemKey::from(key),
+                version: 1,
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from(key),
+                    version: 1,
+                    item_type: ItemType::JournalArticle,
+                    title: title.map(ToOwned::to_owned),
+                    doi: doi.map(ToOwned::to_owned),
+                    ..Default::default()
+                },
+            }
+        }
+
+        #[test]
+        fn groups_items_by_matching_doi_case_insensitively() {
+            let item1 =
+                make_item("ITEM0001", Some("Paper A"), Some("10.1234/XYZ"));
+            let item2 =
+                make_item("ITEM0002", Some("Paper B"), Some("10.1234/xyz "));
+
+            let groups = find_duplicate_groups(&vec![item1, item2]);
+            assert_eq!(groups.len(), 1);
+            let first_group = groups.first().expect("group exists");
+            assert_eq!(first_group.match_type, DuplicateType::Doi);
+            assert_eq!(first_group.match_value, "10.1234/xyz");
+            assert_eq!(first_group.item_keys, vec![
+                ItemKey::from("ITEM0001"),
+                ItemKey::from("ITEM0002")
+            ]);
+        }
+
+        #[test]
+        fn groups_items_by_matching_title_case_insensitively() {
+            let item1 =
+                make_item("ITEM0001", Some("Quantum Computing Advances"), None);
+            let item2 =
+                make_item("ITEM0002", Some("quantum computing advances"), None);
+
+            let groups = find_duplicate_groups(&vec![item1, item2]);
+            assert_eq!(groups.len(), 1);
+            let first_group = groups.first().expect("group exists");
+            assert_eq!(first_group.match_type, DuplicateType::Title);
+            assert_eq!(first_group.match_value, "quantum computing advances");
+        }
+
+        #[test]
+        fn returns_empty_when_no_duplicates_exist() {
+            let item1 =
+                make_item("ITEM0001", Some("Paper 1"), Some("10.1000/1"));
+            let item2 =
+                make_item("ITEM0002", Some("Paper 2"), Some("10.1000/2"));
+
+            let groups = find_duplicate_groups(&vec![item1, item2]);
+            assert!(groups.is_empty());
+        }
+    }
+
+    mod coverage {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn evaluates_item_coverage_flags_correctly() {
+            let item = ZoteroItem {
+                key: ItemKey::from("ITEM0001"),
+                version: 1,
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from("ITEM0001"),
+                    version: 1,
+                    item_type: ItemType::JournalArticle,
+                    doi: Some("10.1000/1".to_owned()),
+                    note: Some("Self note".to_owned()),
+                    ..Default::default()
+                },
+            };
+            let attachment = ZoteroItem {
+                key: ItemKey::from("ATTACH01"),
+                version: 1,
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from("ATTACH01"),
+                    version: 1,
+                    item_type: ItemType::Attachment,
+                    content_type: Some("application/pdf".to_owned()),
+                    ..Default::default()
+                },
+            };
+            let note = ZoteroItem {
+                key: ItemKey::from("NOTE0001"),
+                version: 1,
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from("NOTE0001"),
+                    version: 1,
+                    item_type: ItemType::Note,
+                    note: Some("Child note".to_owned()),
+                    ..Default::default()
+                },
+            };
+
+            let flags = coverage_flags(&item, &vec![attachment, note]);
+            assert!(flags.has_doi);
+            assert!(flags.has_pdf);
+            assert!(flags.has_notes);
+        }
+
+        #[test]
+        #[allow(clippy::float_cmp, reason = "exact float percentages in test")]
+        fn aggregates_library_coverage_statistics_and_percentages() {
+            let flags1 = ItemCoverageFlags {
+                has_pdf: true,
+                has_doi: true,
+                has_notes: false,
+            };
+            let flags2 = ItemCoverageFlags {
+                has_pdf: false,
+                has_doi: true,
+                has_notes: true,
+            };
+
+            let coverage = classify_coverage(&[flags1, flags2]);
+            assert_eq!(coverage.total_items, 2);
+            assert_eq!(coverage.with_pdf, 1);
+            assert_eq!(coverage.with_doi, 2);
+            assert_eq!(coverage.with_notes, 1);
+            assert_eq!(coverage.pdf_percentage, 50.0);
+            assert_eq!(coverage.doi_percentage, 100.0);
+            assert_eq!(coverage.notes_percentage, 50.0);
+        }
+    }
+
+    mod formatting {
+        use super::*;
+        #[test]
+        fn formats_annotations_section_with_highlights_and_notes() {
+            let annotation = ZoteroItem {
+                key: ItemKey::from("ANN00001"),
+                version: 1,
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from("ANN00001"),
+                    version: 1,
+                    item_type: ItemType::Annotation,
+                    annotation_type: Some(AnnotationType::Highlight),
+                    annotation_text: Some("Important concept".to_owned()),
+                    annotation_comment: Some("Check this out".to_owned()),
+                    annotation_page_label: Some("42".to_owned()),
+                    ..Default::default()
+                },
+            };
+
+            let result = format_annotations_section(&vec![annotation]);
+            assert!(result.contains("## PDF Annotations"));
+            assert!(result.contains("> \"Important concept\" (p. 42)"));
+            assert!(result.contains("Comment: Check this out"));
+        }
+
+        #[test]
+        fn formats_standalone_note_section() {
+            let note_item = ZoteroItem {
+                key: ItemKey::from("NOTE0001"),
+                version: 1,
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from("NOTE0001"),
+                    version: 1,
+                    item_type: ItemType::Note,
+                    note: Some("<p>Main note text</p>".to_owned()),
+                    ..Default::default()
+                },
+            };
+
+            let result = format_notes_section(&note_item, &[]);
+            assert!(result.contains("## Note Content"));
+            assert!(result.contains("<p>Main note text</p>"));
+        }
+
+        #[test]
+        fn formats_child_notes_section() {
+            let main_item = ZoteroItem {
+                key: ItemKey::from("ITEM0001"),
+                version: 1,
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from("ITEM0001"),
+                    version: 1,
+                    item_type: ItemType::JournalArticle,
+                    ..Default::default()
+                },
+            };
+            let child_note = ZoteroItem {
+                key: ItemKey::from("NOTE0001"),
+                version: 1,
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from("NOTE0001"),
+                    version: 1,
+                    item_type: ItemType::Note,
+                    note: Some("<p>Child note text</p>".to_owned()),
+                    ..Default::default()
+                },
+            };
+
+            let result = format_notes_section(&main_item, &vec![child_note]);
+            assert!(result.contains("## Child Notes"));
+            assert!(result.contains("### Note 1"));
+            assert!(result.contains("<p>Child note text</p>"));
+        }
     }
 }
