@@ -1,4 +1,17 @@
 //! Analytics, duplicate detection, and annotation synthesis operations.
+//!
+//! Implements methods on [`ZoteroClient`] for scanning duplicate items,
+//! computing library PDF/DOI/note coverage metrics, and synthesizing item
+//! annotations into formatted Markdown.
+//!
+//! # Key Types & Operations
+//!
+//! - [`ZoteroClient::find_duplicates`] - Group duplicate items into
+//!   [`DuplicateGroup`] by DOI or title
+//! - [`ZoteroClient::get_library_coverage`] - Compute [`LibraryCoverage`]
+//!   statistics
+//! - [`ZoteroClient::synthesize_annotations`] - Extract PDF annotations and
+//!   notes into Markdown
 
 use serde::{Deserialize, Serialize};
 
@@ -142,6 +155,7 @@ impl ZoteroClient<'_> {
     }
 }
 
+/// Group items by matching DOI or title to identify potential duplicate items.
 fn find_duplicate_groups(items: &[ZoteroItem]) -> Vec<DuplicateGroup> {
     let mut doi_map: std::collections::BTreeMap<String, Vec<&ZoteroItem>> =
         std::collections::BTreeMap::new();
@@ -188,6 +202,7 @@ fn find_duplicate_groups(items: &[ZoteroItem]) -> Vec<DuplicateGroup> {
     duplicates
 }
 
+/// Evaluates PDF, DOI, and note availability flags for a single `item`.
 fn coverage_flags(
     item: &ZoteroItem,
     children: &[ZoteroItem],
@@ -211,6 +226,7 @@ fn coverage_flags(
     }
 }
 
+/// Aggregates coverage flags across library items into [`LibraryCoverage`].
 fn classify_coverage(flags: &[ItemCoverageFlags]) -> LibraryCoverage {
     let total = flags.len();
     if total == 0 {
@@ -245,6 +261,7 @@ fn classify_coverage(flags: &[ItemCoverageFlags]) -> LibraryCoverage {
     clippy::cast_precision_loss,
     reason = "percentages calculation requires float conversion"
 )]
+/// Calculates percentage ratio of `count` out of `total`.
 fn compute_percentage(count: usize, total: usize) -> f64 {
     if total == 0 {
         0.0
@@ -253,6 +270,7 @@ fn compute_percentage(count: usize, total: usize) -> f64 {
     }
 }
 
+/// Formats PDF annotations attached to child items into a Markdown section.
 fn format_annotations_section(children: &[ZoteroItem]) -> String {
     use std::fmt::Write as _;
 
@@ -288,6 +306,7 @@ fn format_annotations_section(children: &[ZoteroItem]) -> String {
     section
 }
 
+/// Formats child notes and standalone item notes into a Markdown section.
 fn format_notes_section(item: &ZoteroItem, children: &[ZoteroItem]) -> String {
     use std::fmt::Write as _;
 

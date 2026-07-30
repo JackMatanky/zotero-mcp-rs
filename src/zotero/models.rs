@@ -1,5 +1,21 @@
 //! Serde models mirroring the Zotero Local API's JSON item and collection
 //! shapes.
+//!
+//! Defines strongly-typed representations for Zotero items, collections, tags,
+//! creators, and version counters to prevent string transposition and ensure
+//! schema safety.
+//!
+//! # Key Types
+//!
+//! - [`ItemKey`] & [`CollectionKey`] - Type-safe alphanumeric 8-character
+//!   identifiers
+//! - [`LibraryVersion`] - Strongly-typed wrapper around Zotero library version
+//!   counters
+//! - [`ZoteroItem`] & [`ZoteroItemData`] - Bibliographic items, notes,
+//!   attachments, and annotations
+//! - [`ZoteroCollection`] - Collection tree nodes and parent metadata
+//! - [`ItemType`], [`AnnotationType`], & [`CreatorType`] - Extensible domain
+//!   enums preserving raw strings
 
 use serde::{Deserialize, Serialize};
 

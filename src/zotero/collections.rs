@@ -1,4 +1,17 @@
 //! Collection operations for the Zotero Local HTTP API.
+//!
+//! Implements methods on [`ZoteroClient`] for navigating collection trees,
+//! creating and updating collections, and managing item memberships within
+//! collections.
+//!
+//! # Key Operations & Types
+//!
+//! - [`ZoteroClient::get_collections`] & [`ZoteroClient::search_collections`] -
+//!   Browse or search collections
+//! - [`ZoteroClient::create_collection`] & [`ZoteroClient::update_collection`]
+//!   - Create, rename, or move collections
+//! - [`ZoteroClient::manage_collection_items`] - Add or remove items using
+//!   [`CollectionItemAction`]
 
 use serde::{Deserialize, Serialize};
 
@@ -112,11 +125,10 @@ impl ZoteroClient<'_> {
     ///
     /// # Arguments
     ///
-    /// - `collection_key`: Key of the target collection.
-    /// - `item_keys`: Slice of item keys to add or remove.
-    /// - `action`: Action to perform (`CollectionItemAction::Add` or
-    ///   `CollectionItemAction::Remove`).
-    ///
+    /// * `collection_key` - Key of the target collection
+    /// * `item_keys` - Slice of item keys to add or remove
+    /// * `action` - Action to perform ([`CollectionItemAction::Add`] or
+    ///   [`CollectionItemAction::Remove`])
     /// # Errors
     ///
     /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
@@ -181,6 +193,12 @@ impl ZoteroClient<'_> {
 
     /// Renames and/or moves a collection identified by `collection_key`.
     ///
+    /// # Arguments
+    ///
+    /// * `collection_key` - Key of the collection to update
+    /// * `name` - Optional new collection name
+    /// * `parent_key` - Optional new parent collection key (empty string for
+    ///   top-level)
     /// # Errors
     ///
     /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled

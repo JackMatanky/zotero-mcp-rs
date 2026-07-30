@@ -1,4 +1,16 @@
 //! Search and query operations for the Zotero Local HTTP API.
+//!
+//! Implements methods on [`ZoteroClient`] for free-text search, tag queries,
+//! citation key matching, and structured multi-condition advanced search.
+//!
+//! # Key Types & Operations
+//!
+//! - [`ZoteroClient::search_items`] - Free-text search matching title, creator,
+//!   year, or fulltext
+//! - [`ZoteroClient::search_by_citation_key`] - Lookup by native or legacy
+//!   citation key
+//! - [`ZoteroClient::advanced_search`] - Multi-condition search using
+//!   [`SearchCondition`], [`SearchField`], and [`SearchOperator`]
 
 use serde::{Deserialize, Serialize};
 
@@ -53,10 +65,9 @@ impl ZoteroClient<'_> {
     ///
     /// # Arguments
     ///
-    /// - `query`: Free-text query matching title, creator, year, or fulltext.
-    /// - `collection_key`: Optional collection key to scope the search.
-    /// - `limit`: Maximum number of items to return.
-    ///
+    /// * `query` - Free-text query matching title, creator, year, or fulltext
+    /// * `collection_key` - Optional collection key to scope the search
+    /// * `limit` - Maximum number of items to return
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
@@ -167,6 +178,7 @@ impl ZoteroClient<'_> {
     }
 }
 
+/// Evaluates whether `item` satisfies a single search `cond`.
 fn match_condition(item: &ZoteroItem, cond: &SearchCondition) -> bool {
     let val = cond.value.to_lowercase();
     let matches_str = |s: &str| match cond.operator {

@@ -1,4 +1,16 @@
 //! Metadata resolution for adding items by DOI, arXiv ID, or ISBN.
+//!
+//! Resolves external academic identifiers against Crossref, Semantic Scholar,
+//! and Open Library APIs into strongly-typed [`ItemDraft`] objects ready for
+//! item creation in Zotero.
+//!
+//! # Key Types & Functions
+//!
+//! - [`resolve_metadata`] - Primary entry point for identifier resolution
+//! - [`IdentifierKind`] - Enum selector for identifier types
+//!   ([`IdentifierKind::Doi`], [`IdentifierKind::Arxiv`],
+//!   [`IdentifierKind::Isbn`])
+//! - [`ItemDraft`] - Strongly-typed item payload for creation
 
 use serde::{Deserialize, Serialize};
 
@@ -88,6 +100,7 @@ pub(crate) async fn resolve_metadata(
     }
 }
 
+/// Issues a GET request to `url` and decodes the JSON response body.
 async fn fetch_json(
     state: &AppState,
     url: &str,
@@ -124,6 +137,8 @@ fn str_at<'a>(value: &'a serde_json::Value, path: &[&str]) -> Option<&'a str> {
     current.as_str()
 }
 
+/// Reads a nested 64-bit integer field via a `.`-separated path of object keys
+/// and array indices.
 fn i64_at(value: &serde_json::Value, path: &[&str]) -> Option<i64> {
     let mut current = value;
     for segment in path {
@@ -135,6 +150,7 @@ fn i64_at(value: &serde_json::Value, path: &[&str]) -> Option<i64> {
     current.as_i64()
 }
 
+/// Resolves a DOI via Crossref API into an [`ItemDraft`].
 async fn resolve_doi(
     state: &AppState,
     doi: &str,
@@ -176,6 +192,7 @@ async fn resolve_doi(
     })
 }
 
+/// Resolves an arXiv ID via Semantic Scholar API into an [`ItemDraft`].
 async fn resolve_arxiv(
     state: &AppState,
     arxiv_id: &str,

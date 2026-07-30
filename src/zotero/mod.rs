@@ -1,4 +1,14 @@
 //! Bridge to the Zotero Local HTTP API.
+//!
+//! Provides the main client [`ZoteroClient`] and submodules for domain models,
+//! item mutations, collection hierarchy management, tag operations, search,
+//! library analytics, and public identifier resolution.
+//!
+//! # Submodules & Key Types
+//!
+//! - [`ZoteroClient`] - Main async HTTP client scoped to tool calls
+//! - [`models`] - Strongly-typed domain models, item shapes, and key newtypes
+//! - [`identifiers`] - Metadata resolution for DOI, arXiv, and ISBN lookups
 
 mod analytics;
 mod client;

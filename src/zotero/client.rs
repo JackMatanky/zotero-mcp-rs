@@ -1,4 +1,13 @@
 //! Async client for the Zotero Local HTTP API.
+//!
+//! Provides the core [`ZoteroClient`] wrapper around reqwest, handling
+//! authentication, request retries, error conversion, and response
+//! deserialization.
+//!
+//! # Key Types
+//!
+//! - [`ZoteroClient`] - Main API client borrowing shared application state
+//! - [`LocalApiStatus`] - Health check status report payload
 
 use reqwest::Response;
 use serde::{Serialize, de::DeserializeOwned};

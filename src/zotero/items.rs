@@ -1,5 +1,19 @@
 //! Item, note, attachment, and annotation operations for the Zotero Local HTTP
 //! API.
+//!
+//! Implements methods on [`ZoteroClient`] for querying items, creating notes
+//! and attachments, updating bibliographic fields, handling trash state, and
+//! creating PDF annotations.
+//!
+//! # Key Operations
+//!
+//! - [`ZoteroClient::get_recent_items`] & [`ZoteroClient::get_item`] - Query
+//!   items and child nodes
+//! - [`ZoteroClient::create_note`] & [`ZoteroClient::attach_file_link`] -
+//!   Attach notes and file links
+//! - [`ZoteroClient::update_item`] & [`ZoteroClient::set_item_deleted`] -
+//!   Update fields or move to trash
+//! - [`ZoteroClient::create_annotation`] - Create PDF annotations
 
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -210,6 +224,13 @@ impl ZoteroClient<'_> {
 
     /// Attaches a linked file to a parent item.
     ///
+    /// # Arguments
+    ///
+    /// * `parent_item_key` - Key of the parent item to attach to
+    /// * `title` - Title for the attachment
+    /// * `file_path_or_url` - File path or URL to link
+    /// * `content_type` - Optional MIME content type (defaults to
+    ///   `"application/pdf"`)
     /// # Errors
     ///
     /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
