@@ -41,141 +41,149 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
             }
             return item;
         }
-        /** Maps each supported bridge endpoint path to its request handler. */
-        const handlers = {
-            /**
-             * Reports whether the Better Notes API is loaded and ready.
-             *
-             * @returns `{ online: true, ready: true }`.
-             */
-            "/status": async () => ({
+        /**
+         * Reports whether the Better Notes API is loaded and ready.
+         *
+         * @returns `{ online: true, ready: true }`.
+         */
+        async function handleStatus() {
+            return {
                 online: true,
                 // Better Notes doesn't expose a version field on `api`; report
                 // readiness instead of fabricating a version string.
                 ready: true,
-            }),
-            /**
-             * Converts a note (`body.itemKey`) or raw HTML (`body.html`) to
-             * Markdown.
-             *
-             * @param body - `{ itemKey?: string; html?: string }`.
-             * @returns `{ markdown: string }`.
-             * @throws Error if neither `itemKey` nor `html` is given, or
-             * `itemKey` does not resolve to an item.
-             */
-            "/notes/to-markdown": async (body) => {
-                const itemKey = body.itemKey;
-                const html = body.html;
-                if (itemKey) {
-                    const item = await requireItem(itemKey);
-                    // No sync folder in this headless context, so pass an empty `dir`
-                    // and skip writing embedded images to disk.
-                    const markdown = await api.convert.note2md(item, "", {
-                        skipSavingImages: true,
-                    });
-                    return { markdown };
-                }
-                if (html) {
-                    return { markdown: await api.convert.html2md(html) };
-                }
-                throw new Error("Missing itemKey or html");
-            },
-            /**
-             * Creates a note from `body.markdown`, optionally as a child of
-             * `body.parentKey`.
-             *
-             * @param body - `{ parentKey?: string; markdown: string }`.
-             * @returns `{ itemKey: string }`, the key of the created note.
-             * @throws Error if `markdown` is missing, `parentKey` does not
-             * resolve to an item, or the new note's status cannot be read
-             * back after saving.
-             */
-            "/notes/from-markdown": async (body) => {
-                const parentKey = body.parentKey;
-                const markdown = body.markdown;
-                if (!markdown) {
-                    throw new Error("Missing markdown");
-                }
-                const noteItem = new Zotero.Item("note");
-                if (parentKey) {
-                    const parent = await requireItem(parentKey);
-                    noteItem.parentID = parent.id;
-                    noteItem.libraryID = parent.libraryID;
-                }
-                noteItem.setNote("");
-                await noteItem.saveTx();
-                const noteStatus = api.sync.getNoteStatus(noteItem.id);
-                if (!noteStatus) {
-                    throw new Error(`Failed to read note status for ${noteItem.key}`);
-                }
-                const mdStatus = api.sync.getMDStatusFromContent(markdown);
-                const parsedContent = await api.convert.md2note(mdStatus, noteItem, {
-                    isImport: true,
+            };
+        }
+        /**
+         * Converts a note (`body.itemKey`) or raw HTML (`body.html`) to
+         * Markdown.
+         *
+         * @param body - `{ itemKey?: string; html?: string }`.
+         * @returns `{ markdown: string }`.
+         * @throws Error if neither `itemKey` nor `html` is given, or
+         * `itemKey` does not resolve to an item.
+         */
+        async function handleNoteToMarkdown(body) {
+            const itemKey = body.itemKey;
+            const html = body.html;
+            if (itemKey) {
+                const item = await requireItem(itemKey);
+                // No sync folder in this headless context, so pass an empty `dir`
+                // and skip writing embedded images to disk.
+                const markdown = await api.convert.note2md(item, "", {
+                    skipSavingImages: true,
                 });
-                noteItem.setNote(noteStatus.meta + parsedContent + noteStatus.tail);
-                await noteItem.saveTx();
-                return { itemKey: noteItem.key };
-            },
-            /**
-             * Runs template `body.name` against the item identified by
-             * `body.itemKey`.
-             *
-             * @param body - `{ name: string; itemKey: string }`.
-             * @returns `{ result: string }`, the rendered template output.
-             * @throws Error if `name` or `itemKey` is missing, or `itemKey`
-             * does not resolve to an item.
-             */
-            "/templates/run": async (body) => {
-                const name = body.name;
-                const itemKey = body.itemKey;
-                if (!name || !itemKey) {
-                    throw new Error("Missing name or itemKey");
-                }
-                const item = await requireItem(itemKey);
-                const result = await api.template.runItemTemplate(name, {
-                    itemIds: [item.id],
-                });
-                return { result };
-            },
-            /**
-             * Fetches inbound and outbound note-link relations for
-             * `body.itemKey`.
-             *
-             * @param body - `{ itemKey: string }`.
-             * @returns `{ relations: { outbound: BetterNotesRelationLink[];
-             * inbound: BetterNotesRelationLink[] } }`.
-             * @throws Error if `itemKey` is missing or does not resolve to an
-             * item.
-             */
-            "/relations/get": async (body) => {
-                const itemKey = body.itemKey;
-                if (!itemKey) {
-                    throw new Error("Missing itemKey");
-                }
-                const item = await requireItem(itemKey);
-                const [outbound, inbound] = await Promise.all([
-                    api.relation.getNoteLinkOutboundRelation(item.id),
-                    api.relation.getNoteLinkInboundRelation(item.id),
-                ]);
-                return { relations: { outbound, inbound } };
-            },
-            /**
-             * Builds the heading/note-link tree for `body.itemKey`.
-             *
-             * @param body - `{ itemKey: string }`.
-             * @returns `{ tree: unknown }`, the tree produced by
-             * `note.getNoteTree`.
-             * @throws Error if `itemKey` is missing or does not resolve to an
-             * item.
-             */
-            "/notes/tree": async (body) => {
-                const itemKey = body.itemKey;
-                if (!itemKey) {
-                    throw new Error("Missing itemKey");
-                }
-                const item = await requireItem(itemKey);
-                return { tree: await api.note.getNoteTree(item) };
-            },
+                return { markdown };
+            }
+            if (html) {
+                return { markdown: await api.convert.html2md(html) };
+            }
+            throw new Error("Missing itemKey or html");
+        }
+        /**
+         * Creates a note from `body.markdown`, optionally as a child of
+         * `body.parentKey`.
+         *
+         * @param body - `{ parentKey?: string; markdown: string }`.
+         * @returns `{ itemKey: string }`, the key of the created note.
+         * @throws Error if `markdown` is missing, `parentKey` does not
+         * resolve to an item, or the new note's status cannot be read back
+         * after saving.
+         */
+        async function handleNoteFromMarkdown(body) {
+            const parentKey = body.parentKey;
+            const markdown = body.markdown;
+            if (!markdown) {
+                throw new Error("Missing markdown");
+            }
+            const noteItem = new Zotero.Item("note");
+            if (parentKey) {
+                const parent = await requireItem(parentKey);
+                noteItem.parentID = parent.id;
+                noteItem.libraryID = parent.libraryID;
+            }
+            noteItem.setNote("");
+            await noteItem.saveTx();
+            const noteStatus = api.sync.getNoteStatus(noteItem.id);
+            if (!noteStatus) {
+                throw new Error(`Failed to read note status for ${noteItem.key}`);
+            }
+            const mdStatus = api.sync.getMDStatusFromContent(markdown);
+            const parsedContent = await api.convert.md2note(mdStatus, noteItem, {
+                isImport: true,
+            });
+            noteItem.setNote(noteStatus.meta + parsedContent + noteStatus.tail);
+            await noteItem.saveTx();
+            return { itemKey: noteItem.key };
+        }
+        /**
+         * Runs template `body.name` against the item identified by
+         * `body.itemKey`.
+         *
+         * @param body - `{ name: string; itemKey: string }`.
+         * @returns `{ result: string }`, the rendered template output.
+         * @throws Error if `name` or `itemKey` is missing, or `itemKey` does
+         * not resolve to an item.
+         */
+        async function handleRunTemplate(body) {
+            const name = body.name;
+            const itemKey = body.itemKey;
+            if (!name || !itemKey) {
+                throw new Error("Missing name or itemKey");
+            }
+            const item = await requireItem(itemKey);
+            const result = await api.template.runItemTemplate(name, {
+                itemIds: [item.id],
+            });
+            return { result };
+        }
+        /**
+         * Fetches inbound and outbound note-link relations for
+         * `body.itemKey`.
+         *
+         * @param body - `{ itemKey: string }`.
+         * @returns `{ relations: { outbound: BetterNotesRelationLink[];
+         * inbound: BetterNotesRelationLink[] } }`.
+         * @throws Error if `itemKey` is missing or does not resolve to an
+         * item.
+         */
+        async function handleGetRelations(body) {
+            const itemKey = body.itemKey;
+            if (!itemKey) {
+                throw new Error("Missing itemKey");
+            }
+            const item = await requireItem(itemKey);
+            const [outbound, inbound] = await Promise.all([
+                api.relation.getNoteLinkOutboundRelation(item.id),
+                api.relation.getNoteLinkInboundRelation(item.id),
+            ]);
+            return { relations: { outbound, inbound } };
+        }
+        /**
+         * Builds the heading/note-link tree for `body.itemKey`.
+         *
+         * @param body - `{ itemKey: string }`.
+         * @returns `{ tree: unknown }`, the tree produced by
+         * `note.getNoteTree`.
+         * @throws Error if `itemKey` is missing or does not resolve to an
+         * item.
+         */
+        async function handleGetNoteTree(body) {
+            const itemKey = body.itemKey;
+            if (!itemKey) {
+                throw new Error("Missing itemKey");
+            }
+            const item = await requireItem(itemKey);
+            return { tree: await api.note.getNoteTree(item) };
+        }
+        /** Maps each supported bridge endpoint path to its request handler. */
+        const handlers = {
+            "/status": handleStatus,
+            "/notes/to-markdown": handleNoteToMarkdown,
+            "/notes/from-markdown": handleNoteFromMarkdown,
+            "/templates/run": handleRunTemplate,
+            "/relations/get": handleGetRelations,
+            "/notes/tree": handleGetNoteTree,
         };
         Zotero.BetterNotesBridge = {
             /**
