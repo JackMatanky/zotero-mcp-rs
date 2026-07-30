@@ -36,10 +36,6 @@ pub(crate) enum ZoteroMcpError {
     #[error("PDF extraction error: {0}")]
     PdfExtract(String),
 
-    /// `SQLite` database query or connection failure from `sqlx`.
-    #[error("SQLite error: {0}")]
-    Sqlite(#[from] sqlx::Error),
-
     /// Input/output failure from [`std::io`].
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

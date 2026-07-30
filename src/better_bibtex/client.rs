@@ -8,13 +8,10 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::{
-    better_bibtex::{
-        models::{
-            AutoExportAddRequest, AuxFilePath, BibliographyFormat, CitekeyMap,
-            CollectionPath, JsonRpcRequest, JsonRpcResponse, RegenerateKeyMap,
-            SearchQuery, TranslatorName,
-        },
-        sqlite::{get_default_bbt_db_path, read_bbt_citekeys_sqlite},
+    better_bibtex::models::{
+        AutoExportAddRequest, AuxFilePath, BibliographyFormat, CitekeyMap,
+        CollectionPath, JsonRpcRequest, JsonRpcResponse, RegenerateKeyMap,
+        SearchQuery, TranslatorName,
     },
     errors::ZoteroMcpError,
     state::AppState,
@@ -35,32 +32,18 @@ impl<'a> BetterBibtexClient<'a> {
         }
     }
 
-    /// Maps Zotero `item_keys` to their Better `BibTeX` citation keys in a
-    /// [`CitekeyMap`].
-    ///
-    /// Tries the local `SQLite` citekey cache first (fast path, no HTTP round
-    /// trip); falls back to the JSON-RPC `item.citationkey` call if the cache
-    /// is missing, unreadable, or yields no matches.
+    /// Maps Zotero `item_keys` to their current Better `BibTeX` citation keys
+    /// through the plugin JSON-RPC API.
     ///
     /// # Errors
     ///
-    /// - [`BetterBibTeX`] if the JSON-RPC fallback fails
+    /// - [`BetterBibTeX`] if the JSON-RPC call fails
     ///
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn get_citekeys(
         &self,
         item_keys: &[ItemKey],
     ) -> Result<CitekeyMap, ZoteroMcpError> {
-        // Fast path: Try reading from ~/Zotero/better-bibtex.migrated SQLite DB
-        // (~0.01ms)
-        let db_path = get_default_bbt_db_path();
-        if let Ok(map) = read_bbt_citekeys_sqlite(&db_path, item_keys).await {
-            if map.values().any(Option::is_some) {
-                return Ok(map);
-            }
-        }
-
-        // Fallback: Query Better BibTeX JSON-RPC API
         let params = vec![item_keys];
         self.call_rpc("item.citationkey", params).await
     }
@@ -446,6 +429,51 @@ mod tests {
                 &err,
                 ZoteroMcpError::BetterBibTeX(msg) if msg.contains("null result")
             ));
+        }
+    }
+
+    mod get_citekeys {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server_with_requests, test_state},
+            request_json,
+        };
+
+        #[tokio::test]
+        async fn sends_item_keys_to_json_rpc() {
+            // Arrange
+            let (base, requests) = mock_server_with_requests(vec![
+                http_response(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","result":{"ITEM1":"citekey1","MISSING":null}}"#,
+                ),
+            ]);
+            let state = test_state(base, false);
+
+            // Act
+            let result = BetterBibtexClient::new(&state)
+                .get_citekeys(&[
+                    ItemKey::from("ITEM1"),
+                    ItemKey::from("MISSING"),
+                ])
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(
+                result.get(&ItemKey::from("ITEM1")),
+                Some(&Some(CitationKey::from("citekey1")))
+            );
+            assert_eq!(result.get(&ItemKey::from("MISSING")), Some(&None));
+            let request = requests.recv().expect("captured request");
+            let body = request_json(&request);
+            assert_eq!(body["method"], "item.citationkey");
+            assert_eq!(
+                body["params"],
+                serde_json::json!([["ITEM1", "MISSING"]])
+            );
         }
     }
 
