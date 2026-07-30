@@ -3,12 +3,12 @@
  *
  * Exposes a slice of `Zotero.BetterNotes.api` over the Zotero MCP server's
  * loopback HTTP interface (`/better-notes/*`) so the Rust MCP server
- * (`src/better_notes/client.rs`) can convert notes, run templates, and read
- * note relations/trees.
+ * (`src/better_notes/client.rs`) can export notes, convert Markdown/HTML,
+ * run templates, and read note relations/trees.
  *
  * @remarks
  * `Zotero.BetterNotes.api` is an in-process JavaScript object that only
- * exists inside Zotero's own Firefox/Gecko-based extension runtime -- unlike
+ * exists inside Zotero's own Firefox/Gecko-based extension runtime — unlike
  * Better BibTeX, Better Notes exposes no HTTP or RPC endpoint of its own.
  * Reaching it requires executing JS in that same process, sharing its
  * `Zotero`/`Zotero.Items` globals, Web Workers, and IndexedDB-backed note
@@ -18,18 +18,20 @@
  * the Rust MCP server talking to it over HTTP like any other Zotero
  * companion bridge.
  *
- * Compiled from `zotero-better-notes-bridge.ts` -- see `bridge/README.md`
+ * Compiled from `zotero-better-notes-bridge.ts` — see `bridge/README.md`
  * for the build command. Do not edit the emitted `.js` directly.
  */
 
-/** JSON request body posted to a bridge endpoint. */
+/** Parsed JSON object posted to a bridge endpoint. */
 type BridgeBody = Record<string, unknown>;
 
 /**
- * Handles one bridge endpoint's request body and resolves the JSON payload
- * to send back as the response.
+ * Handles one bridge endpoint request and returns the JSON-serializable
+ * response body.
  */
 type BridgeHandler = (body: BridgeBody) => Promise<unknown>;
+/** Output format accepted by `/notes/export`. */
+type NoteExportFormat = "markdown" | "html";
 
 if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
     Zotero.debug("[BetterNotesBridge] Initializing HTTP endpoint handlers...");
@@ -38,12 +40,11 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
         const api = Zotero.BetterNotes.api;
 
         /**
-         * Looks up a note or attachment item by key in the user's library.
+         * Looks up a Zotero library item by key.
          *
          * @param itemKey - Zotero item key to resolve.
-         * @returns The resolved item.
-         * @throws Error if no item with `itemKey` exists in the user's
-         * library.
+         * @returns The resolved user-library item.
+         * @throws Error if no user-library item exists for `itemKey`.
          */
         async function requireItem(itemKey: string): Promise<Zotero.Item> {
             const item = await Zotero.Items.getByLibraryAndKeyAsync(
@@ -71,50 +72,102 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
         }
 
         /**
-         * Converts a note (`body.itemKey`) or raw HTML (`body.html`) to
-         * Markdown.
+         * Reads a string field from a bridge request body.
          *
-         * @param body - `{ itemKey?: string; html?: string }`.
+         * @param body - Parsed JSON request body.
+         * @param field - Field name to read.
+         * @returns The string value, or `undefined` when the field is absent.
+         * @throws Error if `field` is present but is not a string.
+         */
+        function readStringBodyField(
+            body: BridgeBody,
+            field: string,
+        ): string | undefined {
+            const value = body[field];
+            if (value === undefined) {
+                return undefined;
+            }
+            if (typeof value === "string") {
+                return value;
+            }
+            throw new Error(`Invalid ${field}`);
+        }
+
+        /**
+         * Reads and validates `body.format` for note export.
+         *
+         * @param body - Parsed JSON request body.
+         * @returns The requested export format, defaulting to `"markdown"`.
+         * @throws Error if `format` is not a string or is unsupported.
+         */
+        function readNoteExportFormat(body: BridgeBody): NoteExportFormat {
+            const format = readStringBodyField(body, "format") ?? "markdown";
+            if (format === "markdown" || format === "html") {
+                return format;
+            }
+            throw new Error(
+                `Unsupported note export format: ${String(format)}`,
+            );
+        }
+
+        /**
+         * Exports a note (`body.itemKey`) as Markdown or HTML.
+         *
+         * @param body - `{ itemKey: string; format?: "markdown" | "html" }`;
+         * `format` defaults to `"markdown"`.
+         * @returns `{ content: string }`.
+         * @throws Error if `itemKey` is missing or invalid, the item does not
+         * exist, or `format` is invalid or unsupported.
+         */
+        async function handleNoteExport(body: BridgeBody): Promise<unknown> {
+            const itemKey = readStringBodyField(body, "itemKey");
+            if (!itemKey) {
+                throw new Error("Missing itemKey");
+            }
+            const item = await requireItem(itemKey);
+            const format = readNoteExportFormat(body);
+            if (format === "html") {
+                return { content: await api.convert.note2html(item) };
+            }
+            const content = await api.convert.note2md(item, "", {
+                skipSavingImages: true,
+            });
+            return { content };
+        }
+
+        /**
+         * Converts raw HTML (`body.html`) to Markdown.
+         *
+         * @param body - `{ html: string }`.
          * @returns `{ markdown: string }`.
-         * @throws Error if neither `itemKey` nor `html` is given, or
-         * `itemKey` does not resolve to an item.
+         * @throws Error if `html` is missing or invalid.
          */
         async function handleNoteToMarkdown(
             body: BridgeBody,
         ): Promise<unknown> {
-            const itemKey = body.itemKey as string | undefined;
-            const html = body.html as string | undefined;
-            if (itemKey) {
-                const item = await requireItem(itemKey);
-                // No sync folder in this headless context, so pass an empty `dir`
-                // and skip writing embedded images to disk.
-                const markdown = await api.convert.note2md(item, "", {
-                    skipSavingImages: true,
-                });
-                return { markdown };
-            }
-            if (html) {
+            const html = readStringBodyField(body, "html");
+            if (html !== undefined) {
                 return { markdown: await api.convert.html2md(html) };
             }
-            throw new Error("Missing itemKey or html");
+            throw new Error("Missing html");
         }
 
         /**
-         * Creates a note from `body.markdown`, optionally as a child of
+         * Creates a note from `body.markdown`, optionally under
          * `body.parentKey`.
          *
          * @param body - `{ parentKey?: string; markdown: string }`.
-         * @returns `{ itemKey: string }`, the key of the created note.
-         * @throws Error if `markdown` is missing, `parentKey` does not
-         * resolve to an item, or the new note's status cannot be read back
-         * after saving.
+         * @returns `{ itemKey: string }`, the created note item's key.
+         * @throws Error if `markdown` is missing or invalid, `parentKey` is
+         * invalid or does not resolve to an item, or the new note's status
+         * cannot be read back after saving.
          */
         async function handleNoteFromMarkdown(
             body: BridgeBody,
         ): Promise<unknown> {
-            const parentKey = body.parentKey as string | undefined;
-            const markdown = body.markdown as string | undefined;
-            if (!markdown) {
+            const parentKey = readStringBodyField(body, "parentKey");
+            const markdown = readStringBodyField(body, "markdown");
+            if (markdown === undefined) {
                 throw new Error("Missing markdown");
             }
 
@@ -141,26 +194,23 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
                     isImport: true,
                 },
             );
-            noteItem.setNote(
-                noteStatus.meta + parsedContent + noteStatus.tail,
-            );
+            noteItem.setNote(noteStatus.meta + parsedContent + noteStatus.tail);
             await noteItem.saveTx();
 
             return { itemKey: noteItem.key };
         }
 
         /**
-         * Runs template `body.name` against the item identified by
-         * `body.itemKey`.
+         * Runs Better Notes template `body.name` against `body.itemKey`.
          *
          * @param body - `{ name: string; itemKey: string }`.
          * @returns `{ result: string }`, the rendered template output.
-         * @throws Error if `name` or `itemKey` is missing, or `itemKey` does
-         * not resolve to an item.
+         * @throws Error if `name` or `itemKey` is missing or invalid, or
+         * `itemKey` does not resolve to an item.
          */
         async function handleRunTemplate(body: BridgeBody): Promise<unknown> {
-            const name = body.name as string | undefined;
-            const itemKey = body.itemKey as string | undefined;
+            const name = readStringBodyField(body, "name");
+            const itemKey = readStringBodyField(body, "itemKey");
             if (!name || !itemKey) {
                 throw new Error("Missing name or itemKey");
             }
@@ -172,19 +222,16 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
         }
 
         /**
-         * Fetches inbound and outbound note-link relations for
-         * `body.itemKey`.
+         * Fetches inbound and outbound note-link relations for `body.itemKey`.
          *
          * @param body - `{ itemKey: string }`.
-         * @returns `{ relations: { outbound: BetterNotesRelationLink[];
-         * inbound: BetterNotesRelationLink[] } }`.
-         * @throws Error if `itemKey` is missing or does not resolve to an
-         * item.
+         * @returns `{ relations }`, where `relations.outbound` and
+         * `relations.inbound` contain note-link relation arrays.
+         * @throws Error if `itemKey` is missing, invalid, or does not resolve
+         * to an item.
          */
-        async function handleGetRelations(
-            body: BridgeBody,
-        ): Promise<unknown> {
-            const itemKey = body.itemKey as string | undefined;
+        async function handleGetRelations(body: BridgeBody): Promise<unknown> {
+            const itemKey = readStringBodyField(body, "itemKey");
             if (!itemKey) {
                 throw new Error("Missing itemKey");
             }
@@ -200,15 +247,12 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
          * Builds the heading/note-link tree for `body.itemKey`.
          *
          * @param body - `{ itemKey: string }`.
-         * @returns `{ tree: unknown }`, the tree produced by
-         * `note.getNoteTree`.
-         * @throws Error if `itemKey` is missing or does not resolve to an
-         * item.
+         * @returns `{ tree: unknown }`, the note tree returned by Better Notes.
+         * @throws Error if `itemKey` is missing, invalid, or does not resolve
+         * to an item.
          */
-        async function handleGetNoteTree(
-            body: BridgeBody,
-        ): Promise<unknown> {
-            const itemKey = body.itemKey as string | undefined;
+        async function handleGetNoteTree(body: BridgeBody): Promise<unknown> {
+            const itemKey = readStringBodyField(body, "itemKey");
             if (!itemKey) {
                 throw new Error("Missing itemKey");
             }
@@ -216,9 +260,10 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
             return { tree: await api.note.getNoteTree(item) };
         }
 
-        /** Maps each supported bridge endpoint path to its request handler. */
-        const handlers: Record<string, BridgeHandler> = {
+        /** Supported bridge endpoint handlers, keyed by request path. */
+        const handlers: Readonly<Partial<Record<string, BridgeHandler>>> = {
             "/status": handleStatus,
+            "/notes/export": handleNoteExport,
             "/notes/to-markdown": handleNoteToMarkdown,
             "/notes/from-markdown": handleNoteFromMarkdown,
             "/templates/run": handleRunTemplate,
@@ -232,10 +277,10 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
              * for `path`.
              *
              * @param _method - HTTP method of the originating request
-             * (unused; every endpoint here is invoked the same way
-             * regardless of method).
-             * @param path - Bridge endpoint path, e.g.
-             * `"/notes/to-markdown"`.
+             * (unused; every endpoint here is invoked the same way regardless
+             * of method).
+             * @param path - Bridge endpoint path, e.g. `"/notes/export"` for
+             * note export or `"/notes/to-markdown"` for raw HTML conversion.
              * @param body - Parsed JSON request body.
              * @returns The handler's JSON-serializable result.
              * @throws Error if no handler is registered for `path`.

@@ -6,20 +6,20 @@ use serde::Deserialize;
 
 use crate::{
     ZoteroMcpServer,
-    better_notes::{BetterNotesClient, BetterNotesFormat},
+    better_notes::{BetterNotesClient, NoteExportFormat},
     zotero::ItemKey,
 };
 
 // --- Argument Schemas ---
 
-/// Arguments for exporting a Better Notes note to Markdown.
+/// Arguments for exporting a Better Notes note to Markdown or HTML.
 #[derive(Deserialize, JsonSchema)]
-pub(crate) struct ToMarkdownArgs {
+pub(crate) struct NoteExportArgs {
     /// Note item key to export.
     pub(crate) item_key: ItemKey,
     /// Output format (`"html"` or `"markdown"`), defaulting to `"markdown"`
     /// when [`None`].
-    pub(crate) format: Option<BetterNotesFormat>,
+    pub(crate) format: Option<NoteExportFormat>,
 }
 
 /// Arguments for importing Markdown into a Better Notes note.
@@ -61,17 +61,15 @@ impl ZoteroMcpServer {
     ///
     /// # Errors
     ///
-    /// - [`ErrorData`] if Markdown export fails at the protocol level
+    /// - [`ErrorData`] if note export fails at the protocol level
     ///
     /// [`ErrorData`]: rmcp::ErrorData
-    pub(crate) async fn better_notes_to_markdown_impl(
+    pub(crate) async fn better_notes_export_impl(
         &self,
-        args: ToMarkdownArgs,
+        args: NoteExportArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterNotesClient::new(&self.state);
-        Ok(super::text_result(
-            client.to_markdown(Some(&args.item_key), args.format).await,
-        ))
+        Ok(super::text_result(client.export(&args.item_key, args.format).await))
     }
 
     /// Converts Markdown content into a Better Notes note using `args`.

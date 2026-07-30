@@ -18,7 +18,7 @@ use crate::zotero::ItemKey;
     JsonSchema,
 )]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum BetterNotesFormat {
+pub(crate) enum NoteExportFormat {
     /// Return Markdown content.
     #[default]
     Markdown,
@@ -26,7 +26,7 @@ pub(crate) enum BetterNotesFormat {
     Html,
 }
 
-impl BetterNotesFormat {
+impl NoteExportFormat {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Markdown => "markdown",
@@ -35,11 +35,11 @@ impl BetterNotesFormat {
     }
 }
 
-/// Response body of the Markdown-conversion endpoints.
+/// Response body of the note-export endpoint.
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct MarkdownResponse {
-    /// Converted Markdown text content.
-    pub(crate) markdown: String,
+pub(crate) struct NoteExportResponse {
+    /// Exported note content.
+    pub(crate) content: String,
 }
 
 /// Response body of the note-creation endpoint.

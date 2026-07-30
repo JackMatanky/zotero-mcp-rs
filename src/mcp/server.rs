@@ -21,8 +21,8 @@ use crate::{
             RegenerateKeysArgs, ScanAuxArgs,
         },
         better_notes::{
-            FromMarkdownArgs, NoteRelationsArgs, NoteTreeArgs, RunTemplateArgs,
-            ToMarkdownArgs,
+            FromMarkdownArgs, NoteExportArgs, NoteRelationsArgs, NoteTreeArgs,
+            RunTemplateArgs,
         },
         chatgpt::{FetchArgs, SearchArgs},
         zotero::{
@@ -829,18 +829,19 @@ impl ZoteroMcpServer {
     // --- Better Notes Operations ---
 
     #[tool(
-        name = "better_notes_to_markdown",
-        description = "Convert a Zotero note item to Markdown via Better Notes"
+        name = "better_notes_export",
+        description = "Export a Zotero note item as Markdown or HTML via \
+                       Better Notes"
     )]
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn better_notes_to_markdown(
+    pub(crate) async fn better_notes_export(
         &self,
-        Parameters(args): Parameters<ToMarkdownArgs>,
+        Parameters(args): Parameters<NoteExportArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.better_notes_to_markdown_impl(args).await
+        self.better_notes_export_impl(args).await
     }
 
     #[tool(
@@ -947,7 +948,10 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::zotero::AnnotationType;
+    use crate::{
+        better_notes::NoteExportFormat, mcp::better_notes::NoteExportArgs,
+        zotero::AnnotationType,
+    };
 
     mod fixtures {
         use std::{
@@ -963,6 +967,20 @@ mod tests {
                 zotero_api_url,
                 better_bibtex_url: String::new(),
                 better_notes_url: String::new(),
+                crossref_url: String::new(),
+                semantic_scholar_url: String::new(),
+                open_library_url: String::new(),
+                write_enabled: true,
+                ..AppState::from_env()
+            }
+        }
+
+        /// Builds an [`AppState`] fixture for Better Notes MCP handler tests.
+        pub(super) fn better_notes_state(better_notes_url: String) -> AppState {
+            AppState {
+                zotero_api_url: String::new(),
+                better_bibtex_url: String::new(),
+                better_notes_url,
                 crossref_url: String::new(),
                 semantic_scholar_url: String::new(),
                 open_library_url: String::new(),
@@ -999,6 +1017,58 @@ mod tests {
     }
 
     use fixtures::*;
+
+    #[tokio::test]
+    async fn better_notes_export_tool_returns_markdown_success() {
+        let base = mock_server(vec![http_response(
+            "200 OK",
+            r##"{"content":"# Exported"}"##,
+        )]);
+        let server = ZoteroMcpServer::new(better_notes_state(base));
+
+        let res = server
+            .better_notes_export(Parameters(NoteExportArgs {
+                item_key: "NOTE1".into(),
+                format: Some(NoteExportFormat::Markdown),
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(false));
+        assert_eq!(
+            res.content
+                .first()
+                .and_then(|c| c.as_text())
+                .map(|t| t.text.as_str()),
+            Some("# Exported")
+        );
+    }
+
+    #[tokio::test]
+    async fn better_notes_export_tool_returns_html_success() {
+        let base = mock_server(vec![http_response(
+            "200 OK",
+            r#"{"content":"<h1>Exported</h1>"}"#,
+        )]);
+        let server = ZoteroMcpServer::new(better_notes_state(base));
+
+        let res = server
+            .better_notes_export(Parameters(NoteExportArgs {
+                item_key: "NOTE1".into(),
+                format: Some(NoteExportFormat::Html),
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(false));
+        assert_eq!(
+            res.content
+                .first()
+                .and_then(|c| c.as_text())
+                .map(|t| t.text.as_str()),
+            Some("<h1>Exported</h1>")
+        );
+    }
 
     #[tokio::test]
     async fn zotero_get_recent_tool_returns_success() {

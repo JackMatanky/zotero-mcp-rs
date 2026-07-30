@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{
     better_notes::models::{
-        BetterNotesFormat, MarkdownResponse, NoteItemResponse,
+        NoteExportFormat, NoteExportResponse, NoteItemResponse,
         NoteTreeResponse, RelationsResponse, TemplateResponse,
     },
     errors::ZoteroMcpError,
@@ -26,27 +26,27 @@ impl<'a> BetterNotesClient<'a> {
         }
     }
 
-    /// Converts an existing Zotero note to Markdown through the Better Notes
-    /// bridge.
+    /// Exports an existing Zotero note through the Better Notes bridge as
+    /// Markdown or HTML.
     ///
     /// # Errors
     ///
     /// - [`BetterNotes`] if the bridge call fails
     ///
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
-    pub(crate) async fn to_markdown(
+    pub(crate) async fn export(
         &self,
-        item_key: Option<&ItemKey>,
-        format: Option<BetterNotesFormat>,
+        item_key: &ItemKey,
+        format: Option<NoteExportFormat>,
     ) -> Result<String, ZoteroMcpError> {
-        let format = format.map(BetterNotesFormat::as_str);
+        let format = format.unwrap_or_default();
         let payload = serde_json::json!({
             "itemKey": item_key,
-            "html": format,
+            "format": format.as_str(),
         });
-        let res: MarkdownResponse =
-            self.post_json("/notes/to-markdown", payload).await?;
-        Ok(res.markdown)
+        let res: NoteExportResponse =
+            self.post_json("/notes/export", payload).await?;
+        Ok(res.content)
     }
 
     /// Creates a note attached to `parent_key` from `markdown`, returning the
@@ -169,8 +169,8 @@ impl<'a> BetterNotesClient<'a> {
             )));
         }
 
-        let res: R = resp.json().await?;
-        Ok(res)
+        let body = resp.text().await?;
+        Ok(serde_json::from_str(&body)?)
     }
 }
 
@@ -182,6 +182,7 @@ mod tests {
         use std::{
             io::{Read, Write},
             net::TcpListener,
+            sync::mpsc::{self, Receiver},
         };
 
         use reqwest::Client;
@@ -233,6 +234,34 @@ mod tests {
             });
             format!("http://{addr}")
         }
+
+        /// Runs a fixture HTTP server, captures each accepted request, and
+        /// returns its base URL plus the request receiver.
+        pub(super) fn mock_server_with_requests(
+            responses: Vec<String>,
+        ) -> (String, Receiver<String>) {
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind listener");
+            let addr = listener.local_addr().expect("local addr");
+            let (requests_tx, requests_rx) = mpsc::channel();
+            std::thread::spawn(move || {
+                for response in responses {
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
+                    let mut buf = [0_u8; 1024];
+                    let bytes_read =
+                        stream.read(&mut buf).expect("read request");
+                    requests_tx
+                        .send(
+                            String::from_utf8_lossy(&buf[..bytes_read])
+                                .into_owned(),
+                        )
+                        .expect("send request");
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            });
+            (format!("http://{addr}"), requests_rx)
+        }
     }
 
     mod post_json {
@@ -241,8 +270,8 @@ mod tests {
             fixtures::{http_response, mock_server, test_state},
         };
 
-        // Exercised indirectly through `to_markdown`, the simplest caller of
-        // the shared `post_json` envelope handling.
+        // Exercised indirectly through `export`, the simplest caller of the
+        // shared `post_json` envelope handling.
 
         #[tokio::test]
         async fn returns_better_notes_error_when_response_is_non_success() {
@@ -252,43 +281,92 @@ mod tests {
 
             // Act
             let err = BetterNotesClient::new(&state)
-                .to_markdown(Some(&"NOTE1".into()), None)
+                .export(&"NOTE1".into(), None)
                 .await
                 .unwrap_err();
 
             // Assert
             assert!(matches!(
                 &err,
-                ZoteroMcpError::BetterNotes(msg) if msg.contains("400") && msg.contains("/notes/to-markdown")
+                ZoteroMcpError::BetterNotes(msg) if msg.contains("400") && msg.contains("/notes/export")
             ));
         }
     }
 
-    mod to_markdown {
+    mod export {
         use pretty_assertions::assert_eq;
 
         use super::{
             super::*,
-            fixtures::{http_response, mock_server, test_state},
+            fixtures::{http_response, mock_server_with_requests, test_state},
         };
 
         #[tokio::test]
-        async fn returns_markdown_on_success() {
+        async fn exports_markdown_by_default() {
             // Arrange
-            let base = mock_server(vec![http_response(
-                "200 OK",
-                r##"{"markdown":"# Hello"}"##,
-            )]);
+            let (base, requests) =
+                mock_server_with_requests(vec![http_response(
+                    "200 OK",
+                    r##"{"content":"# Hello"}"##,
+                )]);
             let state = test_state(base, false);
 
             // Act
             let markdown = BetterNotesClient::new(&state)
-                .to_markdown(Some(&"NOTE1".into()), None)
+                .export(&"NOTE1".into(), None)
                 .await
                 .unwrap();
 
             // Assert
             assert_eq!(markdown, "# Hello");
+            let request = requests.recv().expect("captured request");
+            assert!(request.starts_with("POST /notes/export HTTP/1.1"));
+            assert!(request.contains(r#""itemKey":"NOTE1""#));
+            assert!(request.contains(r#""format":"markdown""#));
+        }
+
+        #[tokio::test]
+        async fn exports_html_when_requested() {
+            // Arrange
+            let (base, requests) =
+                mock_server_with_requests(vec![http_response(
+                    "200 OK",
+                    r#"{"content":"<h1>Hello</h1>"}"#,
+                )]);
+            let state = test_state(base, false);
+
+            // Act
+            let html = BetterNotesClient::new(&state)
+                .export(&"NOTE1".into(), Some(NoteExportFormat::Html))
+                .await
+                .unwrap();
+
+            // Assert
+            assert_eq!(html, "<h1>Hello</h1>");
+            let request = requests.recv().expect("captured request");
+            assert!(request.starts_with("POST /notes/export HTTP/1.1"));
+            assert!(request.contains(r#""itemKey":"NOTE1""#));
+            assert!(request.contains(r#""format":"html""#));
+        }
+
+        #[tokio::test]
+        async fn returns_json_error_when_export_response_lacks_content() {
+            // Arrange
+            let (base, _requests) =
+                mock_server_with_requests(vec![http_response(
+                    "200 OK",
+                    r##"{"markdown":"# Old shape"}"##,
+                )]);
+            let state = test_state(base, false);
+
+            // Act
+            let err = BetterNotesClient::new(&state)
+                .export(&"NOTE1".into(), Some(NoteExportFormat::Markdown))
+                .await
+                .unwrap_err();
+
+            // Assert
+            assert!(matches!(err, ZoteroMcpError::Json(_)));
         }
     }
 

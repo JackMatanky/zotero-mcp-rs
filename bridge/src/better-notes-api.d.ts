@@ -1,6 +1,6 @@
 /**
  * Ambient typings for the Better Notes plugin's public API surface
- * (`Zotero.BetterNotes.api`), covering only the members this bridge calls.
+ * (`Zotero.BetterNotes.api`), limited to members this bridge calls.
  *
  * @remarks
  * Better Notes ships no type definitions of its own; these are hand-written
@@ -11,25 +11,36 @@
  */
 
 /**
- * Parsed Markdown source, as returned by
+ * Parsed Markdown source returned by
  * {@link BetterNotesApi.sync.getMDStatusFromContent}.
  */
 interface BetterNotesMDStatus {
-    /** Parsed YAML front-matter, or `{ $version: -1 }` if the source had none. */
+    /**
+     * Parsed YAML front-matter, or `{ $version: -1 }` if the source had none.
+     */
     meta: { $version?: number; [key: string]: unknown } | null;
     /** Markdown body with the YAML front-matter block (if any) stripped. */
     content: string;
-    /** Directory the Markdown was read from, if it came from a file. Empty when built from a raw string. */
+    /**
+     * Directory the Markdown was read from, if it came from a file. Empty when
+     * built from a raw string.
+     */
     filedir: string;
-    /** File name the Markdown was read from, if it came from a file. Empty when built from a raw string. */
+    /**
+     * File name the Markdown was read from, if it came from a file. Empty when
+     * built from a raw string.
+     */
     filename: string;
-    /** Last-modified timestamp of the source file, or the Unix epoch when built from a raw string. */
+    /**
+     * Last-modified timestamp of the source file, or the Unix epoch when built
+     * from a raw string.
+     */
     lastmodify: Date;
 }
 
 /**
- * A note's stored HTML content split into its schema-version wrapper and
- * inner body, as returned by {@link BetterNotesApi.sync.getNoteStatus}.
+ * Stored note HTML split into its schema-version wrapper and inner body, as
+ * returned by {@link BetterNotesApi.sync.getNoteStatus}.
  */
 interface BetterNotesNoteStatus {
     /** Opening `<div data-schema-version="...">` wrapper tag. */
@@ -43,8 +54,8 @@ interface BetterNotesNoteStatus {
 }
 
 /**
- * One directed note-link relation, as returned by
- * {@link BetterNotesApi.relation.getNoteLinkOutboundRelation} and
+ * One directed note-link relation returned by
+ * {@link BetterNotesApi.relation.getNoteLinkOutboundRelation} or
  * {@link BetterNotesApi.relation.getNoteLinkInboundRelation}.
  */
 interface BetterNotesRelationLink {
@@ -58,28 +69,34 @@ interface BetterNotesRelationLink {
     toKey: string;
     /** Line index of the link within the source note's content. */
     fromLine: number;
-    /** Line index the link targets within the destination note, or `null` if it targets the whole note. */
+    /**
+     * Line index the link targets within the destination note, or `null` if it
+     * targets the whole note.
+     */
     toLine: number | null;
-    /** Heading section name the link targets within the destination note, or `null` if it targets the whole note. */
+    /**
+     * Heading section name the link targets within the destination note, or
+     * `null` if it targets the whole note.
+     */
     toSection: string | null;
     /** Raw `zotero://note/...` link URL. */
     url: string;
 }
 
 /**
- * The slice of `Zotero.BetterNotes.api` this bridge calls.
+ * The subset of `Zotero.BetterNotes.api` used by this bridge.
  *
  * @remarks
  * See {@link BetterNotesMDStatus}, {@link BetterNotesNoteStatus}, and
- * {@link BetterNotesRelationLink} for the shapes these methods exchange.
+ * {@link BetterNotesRelationLink} for shared response shapes.
  */
 interface BetterNotesApi {
     convert: {
         /**
-         * Converts a note's content to Markdown.
+         * Converts a note item's content to Markdown.
          *
          * @param noteItem - Note item to convert.
-         * @param dir - Directory embedded images are saved to; ignored when
+         * @param dir - Directory for embedded images; ignored when
          * `options.skipSavingImages` is `true`.
          * @param options - Conversion options.
          * @returns The converted Markdown text.
@@ -93,6 +110,21 @@ interface BetterNotesApi {
                 skipSavingImages?: boolean;
                 skipTemplate?: boolean;
                 noteContent?: string;
+            },
+        ): Promise<string>;
+        /**
+         * Converts note item content to rendered HTML.
+         *
+         * @param noteItems - Note item or note items to convert.
+         * @param options - Conversion options.
+         * @returns The converted HTML content.
+         */
+        note2html(
+            noteItems: Zotero.Item | Zotero.Item[],
+            options?: {
+                targetNoteItem?: Zotero.Item;
+                html?: string;
+                dryRun?: boolean;
             },
         ): Promise<string>;
         /**
@@ -128,8 +160,8 @@ interface BetterNotesApi {
          */
         getMDStatusFromContent(content: string): BetterNotesMDStatus;
         /**
-         * Splits a note's stored HTML into its schema-version wrapper
-         * (`meta`), inner `content`, and closing `tail`.
+         * Splits a note's stored HTML into its schema-version wrapper, inner
+         * `content`, and closing `tail`.
          *
          * @param noteId - `Zotero.Item.id` of the note.
          * @returns The note's {@link BetterNotesNoteStatus}, or `undefined` if
@@ -199,8 +231,8 @@ declare namespace Zotero {
     }
 
     /**
-     * Set by `zotero-better-notes-bridge.ts` once loaded, to guard against
-     * double-registration if the script is run more than once.
+     * Registered by `zotero-better-notes-bridge.ts` after initialization to
+     * prevent duplicate bridge setup when the script runs more than once.
      */
     let BetterNotesBridge:
         | {
