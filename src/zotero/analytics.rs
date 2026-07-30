@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Type of duplication criterion matched.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum DuplicateType {
     Doi,
@@ -19,7 +19,7 @@ pub(crate) enum DuplicateType {
 }
 
 /// Group of items identified as potential duplicates.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct DuplicateGroup {
     pub(crate) match_type: DuplicateType,
     pub(crate) match_value: String,
@@ -27,7 +27,7 @@ pub(crate) struct DuplicateGroup {
 }
 
 /// Coverage indicators for a single library item.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 #[allow(
     clippy::struct_excessive_bools,
     reason = "domain model tracks 3 distinct boolean flags"
@@ -39,7 +39,7 @@ pub(crate) struct ItemCoverageFlags {
 }
 
 /// Library or collection statistics for PDF, DOI, and note coverage.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct LibraryCoverage {
     pub(crate) total_items: usize,
     pub(crate) with_pdf: usize,

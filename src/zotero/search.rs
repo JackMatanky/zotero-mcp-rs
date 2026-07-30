@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Searchable item field in structured searches.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum SearchField {
     Title,
@@ -27,7 +27,7 @@ pub(crate) enum SearchField {
 }
 
 /// Comparison operator in structured searches.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum SearchOperator {
     #[default]
@@ -40,7 +40,7 @@ pub(crate) enum SearchOperator {
 }
 
 /// Structured search condition matching a specific item field.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct SearchCondition {
     pub(crate) field: SearchField,
     #[serde(default)]

@@ -13,7 +13,7 @@ use crate::{
 ///
 /// Typed in place of a raw `serde_json::Value` so a typo in a field name
 /// fails to compile instead of silently producing a malformed Zotero item.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ItemDraft {
     #[serde(rename = "itemType")]
@@ -45,7 +45,7 @@ pub(crate) struct ItemDraft {
 }
 
 /// Public-identifier type for [`resolve_metadata`].
-#[derive(Debug, Clone, Copy, Deserialize, schemars::JsonSchema)]
+#[derive(Copy, Clone, Debug, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum IdentifierKind {
     Doi,

@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Parameters for creating a PDF annotation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct AnnotationDraft {
     pub(crate) parent_attachment_key: ItemKey,
     pub(crate) annotation_type: AnnotationType,
@@ -26,7 +26,7 @@ pub(crate) struct AnnotationDraft {
 }
 
 /// Action for setting an item's trash state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub(crate) enum TrashAction {
     MoveToTrash,
     Restore,

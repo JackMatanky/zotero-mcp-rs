@@ -10,16 +10,16 @@ macro_rules! string_key {
     ($name:ident, $doc:expr) => {
         #[doc = $doc]
         #[derive(
-            Debug,
             Clone,
-            PartialEq,
+            Debug,
+            Default,
             Eq,
             Hash,
-            PartialOrd,
             Ord,
-            Default,
-            Serialize,
+            PartialEq,
+            PartialOrd,
             Deserialize,
+            Serialize,
         )]
         #[serde(transparent)]
         pub(crate) struct $name(pub(crate) String);
@@ -119,17 +119,17 @@ string_key!(
 
 /// Zotero library version counter.
 #[derive(
-    Debug,
-    Clone,
     Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
+    Clone,
+    Debug,
     Default,
-    Serialize,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
     Deserialize,
+    Serialize,
 )]
 #[serde(transparent)]
 pub(crate) struct LibraryVersion(pub(crate) u64);

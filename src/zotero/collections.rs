@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Action for adding or removing items to or from a collection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub(crate) enum CollectionItemAction {
     Add,
     Remove,
