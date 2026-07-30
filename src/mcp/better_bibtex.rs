@@ -170,7 +170,8 @@ impl ZoteroMcpServer {
         Ok(super::json_result(client.scan_aux(col, &args.aux_path).await))
     }
 
-    /// Processes citation keys through the Better `BibTeX` Pandoc filter using `args`.
+    /// Processes citation keys through the Better `BibTeX` Pandoc filter using
+    /// `args`.
     ///
     /// # Errors
     ///

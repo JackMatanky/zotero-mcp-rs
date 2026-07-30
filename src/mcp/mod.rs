@@ -9,7 +9,6 @@ mod zotero;
 
 use rmcp::model::{CallToolResult, Content};
 use serde::Serialize;
-
 pub(crate) use server::ZoteroMcpServer;
 
 fn text_success(text: impl Into<String>) -> CallToolResult {

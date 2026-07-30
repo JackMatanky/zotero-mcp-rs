@@ -230,7 +230,8 @@ pub(crate) struct DeleteTagsArgs {
 /// Arguments for `zotero_add_by_identifier`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AddByIdentifierArgs {
-    /// Kind of identifier ([`IdentifierKind`](crate::zotero::IdentifierKind): `"doi"`, `"arxiv"`, or `"isbn"`).
+    /// Kind of identifier ([`IdentifierKind`](crate::zotero::IdentifierKind):
+    /// `"doi"`, `"arxiv"`, or `"isbn"`).
     pub(crate) kind: crate::zotero::IdentifierKind,
     /// The DOI, arXiv ID, or ISBN to resolve.
     pub(crate) identifier: String,

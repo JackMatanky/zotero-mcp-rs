@@ -187,7 +187,8 @@ impl ZoteroClient<'_> {
         Ok(content)
     }
 
-    /// Searches items by `tag` name, returning at most `limit` items (excluding notes).
+    /// Searches items by `tag` name, returning at most `limit` items (excluding
+    /// notes).
     ///
     /// # Errors
     ///
@@ -286,7 +287,8 @@ impl ZoteroClient<'_> {
         Ok(find_duplicate_groups(&items))
     }
 
-    /// Computes library or optional `collection_key` coverage statistics for PDF, DOI, and notes.
+    /// Computes library or optional `collection_key` coverage statistics for
+    /// PDF, DOI, and notes.
     ///
     /// # Errors
     ///
@@ -313,7 +315,8 @@ impl ZoteroClient<'_> {
         Ok(classify_coverage(&flags))
     }
 
-    /// Extracts and synthesizes annotations and notes for `item_key` into structured Markdown.
+    /// Extracts and synthesizes annotations and notes for `item_key` into
+    /// structured Markdown.
     ///
     /// # Errors
     ///
@@ -373,7 +376,8 @@ impl ZoteroClient<'_> {
             .collect())
     }
 
-    /// Lists top-level items not belonging to any collection, up to `limit` items.
+    /// Lists top-level items not belonging to any collection, up to `limit`
+    /// items.
     ///
     /// # Errors
     ///

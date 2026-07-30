@@ -16,8 +16,8 @@ use crate::{better_bibtex::models::CitekeyMap, errors::ZoteroMcpError};
 /// database at `db_path`.
 ///
 /// An empty `item_keys` slice fetches every citekey in the database.
-/// Returns a [`CitekeyMap`] from Zotero item key to citation key; items with no pinned
-/// citekey are simply absent from the result, not an error.
+/// Returns a [`CitekeyMap`] from Zotero item key to citation key; items with no
+/// pinned citekey are simply absent from the result, not an error.
 ///
 /// # Errors
 ///
@@ -76,8 +76,8 @@ pub(crate) async fn read_bbt_citekeys_sqlite(
     Ok(map)
 }
 
-/// Resolves the default [`PathBuf`](std::path::PathBuf) path to Better `BibTeX`'s `better-bibtex.migrated`
-/// `SQLite` database.
+/// Resolves the default [`PathBuf`](std::path::PathBuf) path to Better
+/// `BibTeX`'s `better-bibtex.migrated` `SQLite` database.
 ///
 /// Probes `~/Zotero/better-bibtex.migrated`, then
 /// `~/Zotero/zotero/better-bibtex.migrated`, returning the first path that

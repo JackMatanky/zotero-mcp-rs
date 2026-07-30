@@ -13,21 +13,25 @@ pub(crate) enum IdentifierKind {
     Isbn,
 }
 
-/// Resolves a public identifier against its metadata API and returns a Zotero item draft.
+/// Resolves a public identifier against its metadata API and returns a Zotero
+/// item draft.
 ///
-/// Returns a JSON object structured for Zotero item creation (`itemType`, `title`,
-/// `creators`, `date`, `url`, and `DOI`/`ISBN` as applicable).
+/// Returns a JSON object structured for Zotero item creation (`itemType`,
+/// `title`, `creators`, `date`, `url`, and `DOI`/`ISBN` as applicable).
 ///
 /// # Arguments
 ///
 /// * `state` - Shared application state containing metadata API endpoints
-/// * `kind` - Public identifier type ([`IdentifierKind::Doi`], [`IdentifierKind::Arxiv`], or [`IdentifierKind::Isbn`])
+/// * `kind` - Public identifier type ([`IdentifierKind::Doi`],
+///   [`IdentifierKind::Arxiv`], or [`IdentifierKind::Isbn`])
 /// * `id` - Identifier string to resolve
 ///
 /// # Errors
 ///
-/// - [`NotFound`] if the identifier cannot be resolved (404 status from the source API)
-/// - [`LocalApi`] if the source API responds with a non-2xx status other than 404
+/// - [`NotFound`] if the identifier cannot be resolved (404 status from the
+///   source API)
+/// - [`LocalApi`] if the source API responds with a non-2xx status other than
+///   404
 /// - [`Network`] if the request fails at the transport level
 /// - [`Json`] if the metadata response cannot be decoded
 ///
@@ -66,10 +70,12 @@ async fn fetch_json(
     Ok(resp.json().await?)
 }
 
-/// Reads a nested string field via a `.`-separated path of object keys and array indices.
+/// Reads a nested string field via a `.`-separated path of object keys and
+/// array indices.
 ///
-/// Returns `Some(&str)` if `path` resolves to a string value in `value`, or `None` otherwise.
-/// Avoids indexing a [`serde_json::Value`] directly to prevent panics on unexpected JSON shapes.
+/// Returns `Some(&str)` if `path` resolves to a string value in `value`, or
+/// `None` otherwise. Avoids indexing a [`serde_json::Value`] directly to
+/// prevent panics on unexpected JSON shapes.
 fn str_at<'a>(value: &'a serde_json::Value, path: &[&str]) -> Option<&'a str> {
     let mut current = value;
     for segment in path {
@@ -133,7 +139,8 @@ async fn resolve_arxiv(
     arxiv_id: &str,
 ) -> Result<serde_json::Value, ZoteroMcpError> {
     let url = format!(
-        "{}/graph/v1/paper/arXiv:{}?fields=title,authors,year,abstract,externalIds,venue",
+        "{}/graph/v1/paper/arXiv:{}?fields=title,authors,year,abstract,\
+         externalIds,venue",
         state.semantic_scholar_url, arxiv_id
     );
     let body = fetch_json(state, &url).await?;

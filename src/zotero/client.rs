@@ -22,9 +22,9 @@ impl<'a> ZoteroClient<'a> {
 
     /// Probes the Zotero Local API for availability.
     ///
-    /// Issues a lightweight `items?limit=1` request. Connection and HTTP status failures
-    /// are captured in the returned [`LocalApiStatus::error`] field rather than being
-    /// propagated as an error.
+    /// Issues a lightweight `items?limit=1` request. Connection and HTTP status
+    /// failures are captured in the returned [`LocalApiStatus::error`]
+    /// field rather than being propagated as an error.
     pub(crate) async fn check_status(&self) -> LocalApiStatus {
         let url =
             format!("{}/users/0/items?limit=1", self.state.zotero_api_url);
@@ -66,7 +66,8 @@ impl<'a> ZoteroClient<'a> {
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if `resp` status is not a successful HTTP status (non-2xx)
+    /// - [`LocalApi`] if `resp` status is not a successful HTTP status
+    ///   (non-2xx)
     ///
     /// [`LocalApi`]: ZoteroMcpError::LocalApi
     pub(super) async fn ensure_success(
@@ -104,17 +105,20 @@ impl<'a> ZoteroClient<'a> {
         Ok(self.ensure_success(resp).await?.json().await?)
     }
 
-    /// Sends a JSON POST request to `url` and returns the first item from the array response.
+    /// Sends a JSON POST request to `url` and returns the first item from the
+    /// array response.
     ///
     /// # Arguments
     ///
     /// * `url` - Target API endpoint URL
     /// * `payload` - JSON-serializable request payload
-    /// * `empty_message` - Error message to return if Zotero returns an empty array
+    /// * `empty_message` - Error message to return if Zotero returns an empty
+    ///   array
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status, or returns an empty array
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status, or returns an
+    ///   empty array
     /// - [`Network`] if the request fails at the transport level
     /// - [`Json`] if the response body cannot be decoded
     ///
@@ -138,7 +142,8 @@ impl<'a> ZoteroClient<'a> {
         })
     }
 
-    /// Sends a `DELETE` request to `url` with an `If-Unmodified-Since-Version` header for `version`.
+    /// Sends a `DELETE` request to `url` with an `If-Unmodified-Since-Version`
+    /// header for `version`.
     ///
     /// # Errors
     ///
@@ -161,13 +166,16 @@ impl<'a> ZoteroClient<'a> {
         Ok(())
     }
 
-    /// Fetches the current library version counter via the `Last-Modified-Version` response header.
+    /// Fetches the current library version counter via the
+    /// `Last-Modified-Version` response header.
     ///
-    /// Issues a lightweight `items?limit=1` request to inspect response headers.
+    /// Issues a lightweight `items?limit=1` request to inspect response
+    /// headers.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status, or the response lacks a valid `Last-Modified-Version` header
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status, or the response
+    ///   lacks a valid `Last-Modified-Version` header
     /// - [`Network`] if the request fails at the transport level
     ///
     /// [`LocalApi`]: ZoteroMcpError::LocalApi
@@ -208,7 +216,8 @@ pub(crate) mod tests {
 
         use super::AppState;
 
-        /// Builds an [`AppState`] fixture for testing with `zotero_api_url` and `write_enabled`.
+        /// Builds an [`AppState`] fixture for testing with `zotero_api_url` and
+        /// `write_enabled`.
         pub(crate) fn test_state(
             zotero_api_url: String,
             write_enabled: bool,
@@ -234,7 +243,8 @@ pub(crate) mod tests {
             )
         }
 
-        /// Spawns a fixture HTTP server returning `responses` and returns its base URL.
+        /// Spawns a fixture HTTP server returning `responses` and returns its
+        /// base URL.
         pub(crate) fn mock_server(responses: Vec<String>) -> String {
             let listener =
                 TcpListener::bind("127.0.0.1:0").expect("bind listener");
@@ -342,10 +352,10 @@ pub(crate) mod tests {
                     listener.accept().expect("accept connection");
                 let mut buf = [0_u8; 1024];
                 let _ = stream.read(&mut buf);
-                let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\
-                                 Content-Type: application/json\r\n\
-                                 Last-Modified-Version: 42\r\n\
-                                 Connection: close\r\n\r\n[]";
+                let response = "HTTP/1.1 200 OK\r\nContent-Length: \
+                                2\r\nContent-Type: \
+                                application/json\r\nLast-Modified-Version: \
+                                42\r\nConnection: close\r\n\r\n[]";
                 let _ = stream.write_all(response.as_bytes());
             });
             let state = test_state(format!("http://{addr}"), false);

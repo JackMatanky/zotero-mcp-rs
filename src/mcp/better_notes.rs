@@ -13,7 +13,8 @@ use crate::{ZoteroMcpServer, better_notes::BetterNotesClient};
 pub(crate) struct ToMarkdownArgs {
     /// Note item key to export.
     pub(crate) item_key: String,
-    /// Output format (`"html"` or `"markdown"`), defaulting to `"markdown"` when [`None`].
+    /// Output format (`"html"` or `"markdown"`), defaulting to `"markdown"`
+    /// when [`None`].
     pub(crate) format: Option<String>,
 }
 

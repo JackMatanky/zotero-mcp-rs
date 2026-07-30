@@ -72,7 +72,8 @@ impl ZoteroClient<'_> {
     ///
     /// - `collection_key`: Key of the target collection.
     /// - `item_keys`: Slice of item keys to add or remove.
-    /// - `remove`: `true` to remove items from the collection, `false` to add them.
+    /// - `remove`: `true` to remove items from the collection, `false` to add
+    ///   them.
     ///
     /// # Errors
     ///
@@ -104,7 +105,8 @@ impl ZoteroClient<'_> {
         Ok(())
     }
 
-    /// Updates fields of an existing item identified by `item_key` with JSON `fields`.
+    /// Updates fields of an existing item identified by `item_key` with JSON
+    /// `fields`.
     ///
     /// # Errors
     ///
@@ -139,7 +141,8 @@ impl ZoteroClient<'_> {
     /// - `parent_item_key`: Key of the parent item to attach to.
     /// - `title`: Display title of the attachment.
     /// - `file_path_or_url`: File path or URL of the file to link.
-    /// - `content_type`: Optional MIME content type (defaults to `"application/pdf"`).
+    /// - `content_type`: Optional MIME content type (defaults to
+    ///   `"application/pdf"`).
     ///
     /// # Errors
     ///
@@ -289,7 +292,8 @@ impl ZoteroClient<'_> {
     /// # Arguments
     ///
     /// - `parent_attachment_key`: Key of the parent PDF attachment.
-    /// - `annotation_type`: Type of annotation (`"highlight"`, `"underline"`, or `"note"`).
+    /// - `annotation_type`: Type of annotation (`"highlight"`, `"underline"`,
+    ///   or `"note"`).
     /// - `text`: Optional selected text for highlight or underline.
     /// - `comment`: Optional user comment text.
     /// - `color`: Optional CSS hex color string (defaults to `"#ffd400"`).
@@ -302,10 +306,12 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
     /// - [`ZoteroMcpError::Network`] if the request fails at the transport
     ///   level
-    /// - [`ZoteroMcpError::Json`] if `position_json` is invalid or response decoding fails
+    /// - [`ZoteroMcpError::Json`] if `position_json` is invalid or response
+    ///   decoding fails
     #[allow(
         clippy::too_many_arguments,
-        reason = "mirrors Zotero's flat annotation field set; grouping into a struct would only move the same fields one layer down"
+        reason = "mirrors Zotero's flat annotation field set; grouping into a \
+                  struct would only move the same fields one layer down"
     )]
     pub(crate) async fn create_annotation(
         &self,
@@ -364,7 +370,8 @@ impl ZoteroClient<'_> {
     ///
     /// - `collection_key`: Key of the collection to update.
     /// - `name`: Optional new name for the collection.
-    /// - `parent_key`: Optional parent key; pass `Some("")` to move to top level.
+    /// - `parent_key`: Optional parent key; pass `Some("")` to move to top
+    ///   level.
     ///
     /// # Errors
     ///
@@ -997,10 +1004,10 @@ mod tests {
                 listener.accept().expect("accept version request");
             let mut buf = [0_u8; 1024];
             let _ = stream.read(&mut buf);
-            let version_resp = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\
-                                 Content-Type: application/json\r\n\
-                                 Last-Modified-Version: 9\r\n\
-                                 Connection: close\r\n\r\n[]";
+            let version_resp = "HTTP/1.1 200 OK\r\nContent-Length: \
+                                2\r\nContent-Type: \
+                                application/json\r\nLast-Modified-Version: \
+                                9\r\nConnection: close\r\n\r\n[]";
             let _ = stream.write_all(version_resp.as_bytes());
 
             let (mut stream2, _) =

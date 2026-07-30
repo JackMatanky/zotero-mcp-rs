@@ -6,8 +6,8 @@
 
 use thiserror::Error;
 
-/// Unifies failures from the Zotero Local API, Better `BibTeX`, Better Notes, or
-/// local file system.
+/// Unifies failures from the Zotero Local API, Better `BibTeX`, Better Notes,
+/// or local file system.
 #[derive(Debug, Error)]
 pub(crate) enum ZoteroMcpError {
     /// Network or HTTP transport failure from [`reqwest`].

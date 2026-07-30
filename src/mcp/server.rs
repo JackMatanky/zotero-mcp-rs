@@ -423,9 +423,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_delete_item",
-        description = "Permanently delete an item (article, note, \
-                       annotation, or attachment) (requires write \
-                       permission)"
+        description = "Permanently delete an item (article, note, annotation, \
+                       or attachment) (requires write permission)"
     )]
     /// # Errors
     ///
@@ -456,8 +455,7 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_restore_item",
-        description = "Restore an item from trash (requires write \
-                       permission)"
+        description = "Restore an item from trash (requires write permission)"
     )]
     /// # Errors
     ///
@@ -472,8 +470,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_delete_collection",
-        description = "Permanently delete a collection; items inside are \
-                       not deleted (requires write permission)"
+        description = "Permanently delete a collection; items inside are not \
+                       deleted (requires write permission)"
     )]
     /// # Errors
     ///
@@ -597,8 +595,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_create_annotation",
-        description = "Create a PDF highlight/underline/note annotation on \
-                       an attachment (requires write permission)"
+        description = "Create a PDF highlight/underline/note annotation on an \
+                       attachment (requires write permission)"
     )]
     /// # Errors
     ///
@@ -615,9 +613,8 @@ impl ZoteroMcpServer {
         name = "zotero_add_by_identifier",
         description = "Resolve a DOI, arXiv ID, or ISBN via public metadata \
                        APIs and add it to the library (returns the existing \
-                       item instead of creating a duplicate if an exact \
-                       title match is already present) (requires write \
-                       permission)"
+                       item instead of creating a duplicate if an exact title \
+                       match is already present) (requires write permission)"
     )]
     /// # Errors
     ///
@@ -632,9 +629,9 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_update_collection",
-        description = "Rename and/or move a collection (pass an empty \
-                       string for parent_key to move to the top level) \
-                       (requires write permission)"
+        description = "Rename and/or move a collection (pass an empty string \
+                       for parent_key to move to the top level) (requires \
+                       write permission)"
     )]
     /// # Errors
     ///
@@ -664,8 +661,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_rename_tag",
-        description = "Rename a tag across every item in the library that \
-                       has it (requires write permission)"
+        description = "Rename a tag across every item in the library that has \
+                       it (requires write permission)"
     )]
     /// # Errors
     ///
@@ -680,8 +677,8 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_delete_tags",
-        description = "Delete up to 50 tags from the entire library \
-                       (requires write permission)"
+        description = "Delete up to 50 tags from the entire library (requires \
+                       write permission)"
     )]
     /// # Errors
     ///
@@ -1357,10 +1354,10 @@ mod tests {
                 listener.accept().expect("accept version request");
             let mut buf = [0_u8; 1024];
             let _ = stream.read(&mut buf);
-            let version_resp = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\
-                                 Content-Type: application/json\r\n\
-                                 Last-Modified-Version: 9\r\n\
-                                 Connection: close\r\n\r\n[]";
+            let version_resp = "HTTP/1.1 200 OK\r\nContent-Length: \
+                                2\r\nContent-Type: \
+                                application/json\r\nLast-Modified-Version: \
+                                9\r\nConnection: close\r\n\r\n[]";
             let _ = stream.write_all(version_resp.as_bytes());
 
             let (mut stream2, _) =

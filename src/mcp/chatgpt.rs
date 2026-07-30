@@ -47,7 +47,8 @@ impl ZoteroMcpServer {
         .await
     }
 
-    /// Fetches Zotero item metadata for `ChatGPT` connector compatibility using `args`.
+    /// Fetches Zotero item metadata for `ChatGPT` connector compatibility using
+    /// `args`.
     ///
     /// # Errors
     ///

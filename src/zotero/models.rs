@@ -22,7 +22,8 @@ pub(crate) struct ZoteroItem {
 
 /// Bibliographic and attachment fields carried by a Zotero item.
 ///
-/// Maps Zotero's `camelCase` JSON field names across all item types (`itemType`).
+/// Maps Zotero's `camelCase` JSON field names across all item types
+/// (`itemType`).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ZoteroItemData {
