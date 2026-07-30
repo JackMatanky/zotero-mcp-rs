@@ -1,3 +1,30 @@
+# -----------------------------------------------------------------------------
+# Filename:     zotero-mcp-rs/.gitignore
+# Docs:         https://git-scm.com/docs/gitignore
+# Description:  Prevents Git from tracking system, environment, editor,
+#               build, and cache files
+# -----------------------------------------------------------------------------
+
+# -------------------- Macos System Files --------------------- #
+DS_Store
+.DS_Store
+__MACOSX/
+._*
+.Spotlight-V100
+.Trashes
+
+# -------------------- Build & Compilation -------------------- #
 /target
-*digest.txt
+
+# ----------------------- Git Worktrees ----------------------- #
+.worktrees/
+
+# ---------------------- Knowledge Graph ---------------------- #
+.gitnexus
+
+# -------------------- Rust Docs MCP Cache -------------------- #
 .rust-docs/
+
+# --------------------- Gitingest Digests --------------------- #
+*digest.txt
+docs/refs/digests/
