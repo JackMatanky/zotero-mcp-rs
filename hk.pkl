@@ -1,41 +1,106 @@
 amends "package://github.com/jdx/hk/releases/download/v1.53.0/hk@1.53.0#/Config.pkl"
 import "package://github.com/jdx/hk/releases/download/v1.53.0/hk@1.53.0#/Builtins.pkl"
 
-local linters = new Mapping<String, Step> {
-    ["cargo_fmt"] = Builtins.cargo_fmt
-    ["cargo_clippy"] = Builtins.cargo_clippy
+fail_fast = false
+jobs = 0
+walk_ignore = true
+stash_backup_count = 20
+
+exclude = List(
+    "target",
+    "vendor",
+    ".direnv",
+    ".venv",
+    "node_modules",
+    "dist",
+    "build",
+    "bridge",
+    "LICENSE"
+)
+
+local hygiene = new Mapping<String, Step> {
+    ["end-of-file-fixer"] = Builtins.newlines
+    ["trailing-whitespace"] = Builtins.trailing_whitespace
+    ["mixed-line-ending"] = Builtins.mixed_line_ending
+}
+
+local config = new Mapping<String, Step> {
+    ["check-json"] = Builtins.jq
+    ["check-yaml"] = Builtins.yamllint
+    ["tombi-format"] = Builtins.tombi_format
+    ["tombi"] = Builtins.tombi
+}
+
+local vcs = new Mapping<String, Step> {
+    ["check-added-large-files"] = (Builtins.check_added_large_files) {
+        check = "hk util check-added-large-files --maxkb 500 {{files}}"
+    }
+    ["check-case-conflict"] = Builtins.check_case_conflict
+    ["check-executables-have-shebangs"] = Builtins.check_executables_have_shebangs
+    ["check-merge-conflict"] = Builtins.check_merge_conflict
+    ["check-symlinks"] = Builtins.check_symlinks
+}
+
+local security = new Mapping<String, Step> {
+    ["detect-private-key"] = Builtins.detect_private_key
+    ["gitleaks"] = (Builtins.gitleaks) {
+        check = "gitleaks git --redact --verbose --no-banner ."
+    }
+}
+
+local rust = new Mapping<String, Step> {
+    ["cargo-fmt"] = (Builtins.cargo_fmt) {
+        check = "cargo fmt --check --manifest-path {{workspace_indicator}}"
+        fix = "cargo fmt --manifest-path {{workspace_indicator}}"
+    }
+    ["cargo-clippy"] = Builtins.cargo_clippy
+    ["cargo-test"] = new Step {
+        glob = List("**/*.rs", "**/Cargo.toml", "**/Cargo.lock")
+        workspace_indicator = "Cargo.toml"
+        check = "cargo test --workspace"
+    }
+    ["cargo-deny"] = new Step {
+        glob = List("**/Cargo.toml", "**/Cargo.lock")
+        workspace_indicator = "Cargo.toml"
+        check = "cargo deny check"
+    }
+}
+
+local formatting = hygiene + config + new Mapping<String, Step> {
+    ["cargo-fmt"] = rust["cargo-fmt"]
+}
+
+local validation = vcs + new Mapping<String, Step> {
+    ["tombi"] = config["tombi"]
+}
+
+local quality = new Mapping<String, Step> {
+    ["cargo-clippy"] = rust["cargo-clippy"]
+    ["cargo-test"] = rust["cargo-test"]
+    ["cargo-deny"] = rust["cargo-deny"]
 }
 
 hooks {
-    ["commit-msg"] {
-        steps {
-            ["conventional_commit"] {
-                check = "hk util check-conventional-commit {{commit_msg_file}}"
-            }
-        }
-    }
     ["pre-commit"] {
         fix = true
         stash = "git"
-        steps {
-            ["cargo_fmt"] = Builtins.cargo_fmt
-            ["cargo_clippy"] = Builtins.cargo_clippy
-        }
+        steps = formatting + validation
     }
     ["pre-push"] {
-        steps {
-            ["cargo_check"] = Builtins.cargo_check
-            ["cargo_test"] {
-                glob = "**/*.rs"
-                check = "cargo test --all-features"
+        steps = validation + security + quality
+    }
+    ["commit-msg"] {
+        steps = new Mapping<String, Step> {
+            ["conventional-commit"] = (Builtins.check_conventional_commit) {
+                check = "hk util check-conventional-commit --verbose {{commit_msg_file}}"
             }
         }
     }
     ["fix"] {
         fix = true
-        steps = linters
+        steps = formatting
     }
     ["check"] {
-        steps = linters
+        steps = formatting + validation + security + quality
     }
 }

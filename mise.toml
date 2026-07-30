@@ -1,40 +1,105 @@
+# -----------------------------------------------------------------------------
+# Filename:    mise.toml
+# Docs:        https://mise.jdx.dev/
+# Description: Project-wide tool versioning and task orchestration
+# -----------------------------------------------------------------------------
+#:schema https://mise.jdx.dev/schema/mise.json
+#:tombi schema.strict = false
+
 [tools]
-rust = { version = "nightly", components = ["rust-src", "rustfmt"] }
+rust = { version = "nightly", profile = "default", components = [
+  "rust-src",
+  "rustfmt",
+] }
 node = "22"
-hk = "1.53.0"
+hk = "latest"
+taplo = "latest"
+gitleaks = "latest"
+"cargo:cargo-deny" = "latest"
+"cargo:cargo-nextest" = "latest"
+"cargo:cargo-tarpaulin" = "latest"
+"cargo:cargo-watch" = "latest"
+"cargo:critcmp" = "latest"
 "cargo:https://github.com/snowmead/rust-docs-mcp" = { version = "branch:main", crate = "rust-docs-mcp" }
+"cargo:adrs" = { version = "latest", install_env = { RUSTUP_TOOLCHAIN = "nightly" } }
 
 [env]
+HK_MISE = "1"
 RUST_BACKTRACE = "1"
+ADR_DIRECTORY = "docs/adr/"
+
+[tasks.check]
+description = "Fast compilation check"
+run = "cargo check --workspace"
+alias = "c"
 
 [tasks.build]
-description = "Compile the crate"
+description = "Debug build"
 run = "cargo build"
+alias = "b"
 
 [tasks.run]
 description = "Run the server"
 run = "cargo run"
 
 [tasks.test]
-description = "Run tests"
+description = "Run tests with nextest"
+run = "cargo nextest run"
+depends = ["check"]
+alias = "t"
+
+[tasks."test-all"]
+description = "Run all tests including doc-tests"
 run = "cargo test --all-features"
 
-[tasks.fmt]
-description = "Format code"
-run = "cargo fmt"
-
 [tasks.lint]
-description = "Lint with clippy"
-run = "cargo clippy --all-targets --all-features -- -D warnings"
+description = "Run all hk linters"
+run = "hk check"
 
-[tasks.check]
-description = "Run all CI checks"
-depends = ["bridge:typecheck"]
-run = [
-  "cargo fmt --check",
-  "cargo clippy --all-targets --all-features -- -D warnings",
-  "cargo test --all-features",
-]
+[tasks.fix]
+description = "Auto-fix all hk lint issues"
+run = "hk fix"
+
+[tasks.fmt]
+description = "Format all Rust code (nightly)"
+run = "cargo fmt --all"
+
+[tasks.clippy]
+description = "Run clippy with deny warnings"
+run = "cargo clippy --workspace -- -D warnings"
+
+[tasks.doc]
+description = "Build documentation"
+run = "cargo doc --no-deps"
+
+[tasks.audit]
+description = "Run cargo deny audit"
+run = "cargo deny check"
+
+[tasks.ci]
+description = "Full CI pipeline"
+depends = ["check", "clippy", "test", "audit"]
+
+[tasks.coverage]
+description = "Code coverage with tarpaulin"
+run = "cargo tarpaulin --workspace --out html"
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "cargo clean"
+
+[tasks.watch]
+description = "Watch and auto-check on changes"
+run = "cargo watch -x check -x test"
+
+[tasks.setup]
+description = "Install git hooks via hk"
+run = "hk install --mise"
+
+[tasks.release]
+description = "Release build"
+run = "cargo build --release"
+alias = "r"
 
 [tasks."bridge:install"]
 description = "Install the Better Notes bridge's npm dependencies"
@@ -52,3 +117,6 @@ description = "Compile the Better Notes bridge to zotero-better-notes-bridge.js"
 dir = "bridge"
 depends = ["bridge:install"]
 run = "npm run build"
+
+[hooks]
+postinstall = "hk install --mise"
