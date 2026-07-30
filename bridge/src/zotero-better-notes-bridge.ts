@@ -27,128 +27,136 @@ type BridgeBody = Record<string, unknown>;
 type BridgeHandler = (body: BridgeBody) => Promise<unknown>;
 
 if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
-  Zotero.debug("[BetterNotesBridge] Initializing HTTP endpoint handlers...");
+    Zotero.debug("[BetterNotesBridge] Initializing HTTP endpoint handlers...");
 
-  if (!Zotero.BetterNotesBridge) {
-    const api = Zotero.BetterNotes.api;
+    if (!Zotero.BetterNotesBridge) {
+        const api = Zotero.BetterNotes.api;
 
-    /** Looks up a note/attachment item by key in the user's library, or throws. */
-    async function requireItem(itemKey: string): Promise<Zotero.Item> {
-      const item = await Zotero.Items.getByLibraryAndKeyAsync(
-        Zotero.Libraries.userLibraryID,
-        itemKey,
-      );
-      if (!item) {
-        throw new Error(`Item ${itemKey} not found`);
-      }
-      return item;
+        /** Looks up a note/attachment item by key in the user's library, or throws. */
+        async function requireItem(itemKey: string): Promise<Zotero.Item> {
+            const item = await Zotero.Items.getByLibraryAndKeyAsync(
+                Zotero.Libraries.userLibraryID,
+                itemKey,
+            );
+            if (!item) {
+                throw new Error(`Item ${itemKey} not found`);
+            }
+            return item;
+        }
+
+        const handlers: Record<string, BridgeHandler> = {
+            "/status": async () => ({
+                online: true,
+                // Better Notes doesn't expose a version field on `api`; report
+                // readiness instead of fabricating a version string.
+                ready: true,
+            }),
+
+            "/notes/to-markdown": async (body) => {
+                const itemKey = body.itemKey as string | undefined;
+                const html = body.html as string | undefined;
+                if (itemKey) {
+                    const item = await requireItem(itemKey);
+                    // No sync folder in this headless context, so pass an empty `dir`
+                    // and skip writing embedded images to disk.
+                    const markdown = await api.convert.note2md(item, "", {
+                        skipSavingImages: true,
+                    });
+                    return { markdown };
+                }
+                if (html) {
+                    return { markdown: await api.convert.html2md(html) };
+                }
+                throw new Error("Missing itemKey or html");
+            },
+
+            "/notes/from-markdown": async (body) => {
+                const parentKey = body.parentKey as string | undefined;
+                const markdown = body.markdown as string | undefined;
+                if (!markdown) {
+                    throw new Error("Missing markdown");
+                }
+
+                const noteItem = new Zotero.Item("note");
+                if (parentKey) {
+                    const parent = await requireItem(parentKey);
+                    noteItem.parentID = parent.id;
+                    noteItem.libraryID = parent.libraryID;
+                }
+                noteItem.setNote("");
+                await noteItem.saveTx();
+
+                const noteStatus = api.sync.getNoteStatus(noteItem.id);
+                if (!noteStatus) {
+                    throw new Error(
+                        `Failed to read note status for ${noteItem.key}`,
+                    );
+                }
+                const mdStatus = api.sync.getMDStatusFromContent(markdown);
+                const parsedContent = await api.convert.md2note(
+                    mdStatus,
+                    noteItem,
+                    {
+                        isImport: true,
+                    },
+                );
+                noteItem.setNote(
+                    noteStatus.meta + parsedContent + noteStatus.tail,
+                );
+                await noteItem.saveTx();
+
+                return { itemKey: noteItem.key };
+            },
+
+            "/templates/run": async (body) => {
+                const name = body.name as string | undefined;
+                const itemKey = body.itemKey as string | undefined;
+                if (!name || !itemKey) {
+                    throw new Error("Missing name or itemKey");
+                }
+                const item = await requireItem(itemKey);
+                const result = await api.template.runItemTemplate(name, {
+                    itemIds: [item.id],
+                });
+                return { result };
+            },
+
+            "/relations/get": async (body) => {
+                const itemKey = body.itemKey as string | undefined;
+                if (!itemKey) {
+                    throw new Error("Missing itemKey");
+                }
+                const item = await requireItem(itemKey);
+                const [outbound, inbound] = await Promise.all([
+                    api.relation.getNoteLinkOutboundRelation(item.id),
+                    api.relation.getNoteLinkInboundRelation(item.id),
+                ]);
+                return { relations: { outbound, inbound } };
+            },
+
+            "/notes/tree": async (body) => {
+                const itemKey = body.itemKey as string | undefined;
+                if (!itemKey) {
+                    throw new Error("Missing itemKey");
+                }
+                const item = await requireItem(itemKey);
+                return { tree: await api.note.getNoteTree(item) };
+            },
+        };
+
+        Zotero.BetterNotesBridge = {
+            async handleRequest(
+                _method: string,
+                path: string,
+                body: BridgeBody,
+            ): Promise<unknown> {
+                const handler = handlers[path];
+                if (!handler) {
+                    throw new Error(`Unknown bridge endpoint: ${path}`);
+                }
+                return handler(body);
+            },
+        };
     }
-
-    const handlers: Record<string, BridgeHandler> = {
-      "/status": async () => ({
-        online: true,
-        // Better Notes doesn't expose a version field on `api`; report
-        // readiness instead of fabricating a version string.
-        ready: true,
-      }),
-
-      "/notes/to-markdown": async (body) => {
-        const itemKey = body.itemKey as string | undefined;
-        const html = body.html as string | undefined;
-        if (itemKey) {
-          const item = await requireItem(itemKey);
-          // No sync folder in this headless context, so pass an empty `dir`
-          // and skip writing embedded images to disk.
-          const markdown = await api.convert.note2md(item, "", {
-            skipSavingImages: true,
-          });
-          return { markdown };
-        }
-        if (html) {
-          return { markdown: await api.convert.html2md(html) };
-        }
-        throw new Error("Missing itemKey or html");
-      },
-
-      "/notes/from-markdown": async (body) => {
-        const parentKey = body.parentKey as string | undefined;
-        const markdown = body.markdown as string | undefined;
-        if (!markdown) {
-          throw new Error("Missing markdown");
-        }
-
-        const noteItem = new Zotero.Item("note");
-        if (parentKey) {
-          const parent = await requireItem(parentKey);
-          noteItem.parentID = parent.id;
-          noteItem.libraryID = parent.libraryID;
-        }
-        noteItem.setNote("");
-        await noteItem.saveTx();
-
-        const noteStatus = api.sync.getNoteStatus(noteItem.id);
-        if (!noteStatus) {
-          throw new Error(`Failed to read note status for ${noteItem.key}`);
-        }
-        const mdStatus = api.sync.getMDStatusFromContent(markdown);
-        const parsedContent = await api.convert.md2note(mdStatus, noteItem, {
-          isImport: true,
-        });
-        noteItem.setNote(noteStatus.meta + parsedContent + noteStatus.tail);
-        await noteItem.saveTx();
-
-        return { itemKey: noteItem.key };
-      },
-
-      "/templates/run": async (body) => {
-        const name = body.name as string | undefined;
-        const itemKey = body.itemKey as string | undefined;
-        if (!name || !itemKey) {
-          throw new Error("Missing name or itemKey");
-        }
-        const item = await requireItem(itemKey);
-        const result = await api.template.runItemTemplate(name, {
-          itemIds: [item.id],
-        });
-        return { result };
-      },
-
-      "/relations/get": async (body) => {
-        const itemKey = body.itemKey as string | undefined;
-        if (!itemKey) {
-          throw new Error("Missing itemKey");
-        }
-        const item = await requireItem(itemKey);
-        const [outbound, inbound] = await Promise.all([
-          api.relation.getNoteLinkOutboundRelation(item.id),
-          api.relation.getNoteLinkInboundRelation(item.id),
-        ]);
-        return { relations: { outbound, inbound } };
-      },
-
-      "/notes/tree": async (body) => {
-        const itemKey = body.itemKey as string | undefined;
-        if (!itemKey) {
-          throw new Error("Missing itemKey");
-        }
-        const item = await requireItem(itemKey);
-        return { tree: await api.note.getNoteTree(item) };
-      },
-    };
-
-    Zotero.BetterNotesBridge = {
-      async handleRequest(
-        _method: string,
-        path: string,
-        body: BridgeBody,
-      ): Promise<unknown> {
-        const handler = handlers[path];
-        if (!handler) {
-          throw new Error(`Unknown bridge endpoint: ${path}`);
-        }
-        return handler(body);
-      },
-    };
-  }
-  Zotero.debug("[BetterNotesBridge] Ready.");
+    Zotero.debug("[BetterNotesBridge] Ready.");
 }

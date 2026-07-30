@@ -1,5 +1,6 @@
 [tools]
 rust = { version = "nightly", components = ["rust-src", "rustfmt"] }
+node = "22"
 hk = "1.53.0"
 "cargo:https://github.com/snowmead/rust-docs-mcp" = { version = "branch:main", crate = "rust-docs-mcp" }
 
@@ -28,9 +29,26 @@ run = "cargo clippy --all-targets --all-features -- -D warnings"
 
 [tasks.check]
 description = "Run all CI checks"
+depends = ["bridge:typecheck"]
 run = [
   "cargo fmt --check",
   "cargo clippy --all-targets --all-features -- -D warnings",
   "cargo test --all-features",
 ]
 
+[tasks."bridge:install"]
+description = "Install the Better Notes bridge's npm dependencies"
+dir = "bridge"
+run = "npm install"
+
+[tasks."bridge:typecheck"]
+description = "Type-check the Better Notes bridge without emitting"
+dir = "bridge"
+depends = ["bridge:install"]
+run = "npx tsc -p tsconfig.json --noEmit"
+
+[tasks."bridge:build"]
+description = "Compile the Better Notes bridge to zotero-better-notes-bridge.js"
+dir = "bridge"
+depends = ["bridge:install"]
+run = "npm run build"
