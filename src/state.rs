@@ -78,8 +78,7 @@ impl AppState {
             .unwrap_or_else(|_| "https://openlibrary.org".to_owned());
 
         let write_enabled = env::var("ZOTERO_WRITE_ENABLED")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
+            .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
 
         Self {
             client,

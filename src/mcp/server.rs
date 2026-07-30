@@ -1,6 +1,8 @@
 //! Wires every MCP tool to the Zotero, Better `BibTeX`, and Better Notes
 //! clients.
 
+use std::future::Future;
+
 use rmcp::{
     ServerHandler,
     handler::server::wrapper::Parameters,
@@ -77,15 +79,16 @@ impl ServerHandler for ZoteroMcpServer {
         }
     }
 
-    async fn list_tools(
+    fn list_tools(
         &self,
         _param: Option<rmcp::model::PaginatedRequestParam>,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
-    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
-        Ok(rmcp::model::ListToolsResult {
+    ) -> impl Future<Output = Result<rmcp::model::ListToolsResult, rmcp::ErrorData>>
+    {
+        std::future::ready(Ok(rmcp::model::ListToolsResult {
             tools: Self::tool_router().list_all(),
             next_cursor: None,
-        })
+        }))
     }
 
     async fn call_tool(
@@ -99,12 +102,14 @@ impl ServerHandler for ZoteroMcpServer {
         Self::tool_router().call(ctx).await
     }
 
-    async fn list_resources(
+    fn list_resources(
         &self,
         _param: Option<rmcp::model::PaginatedRequestParam>,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
-    ) -> Result<rmcp::model::ListResourcesResult, rmcp::ErrorData> {
-        Ok(Self::list_resources_impl())
+    ) -> impl Future<
+        Output = Result<rmcp::model::ListResourcesResult, rmcp::ErrorData>,
+    > {
+        std::future::ready(Ok(Self::list_resources_impl()))
     }
 
     async fn read_resource(
@@ -115,20 +120,25 @@ impl ServerHandler for ZoteroMcpServer {
         self.read_resource_impl(&param.uri).await
     }
 
-    async fn list_prompts(
+    fn list_prompts(
         &self,
         _param: Option<rmcp::model::PaginatedRequestParam>,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
-    ) -> Result<rmcp::model::ListPromptsResult, rmcp::ErrorData> {
-        Ok(Self::list_prompts_impl())
+    ) -> impl Future<Output = Result<rmcp::model::ListPromptsResult, rmcp::ErrorData>>
+    {
+        std::future::ready(Ok(Self::list_prompts_impl()))
     }
 
-    async fn get_prompt(
+    fn get_prompt(
         &self,
         param: rmcp::model::GetPromptRequestParam,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
-    ) -> Result<rmcp::model::GetPromptResult, rmcp::ErrorData> {
-        Self::get_prompt_impl(&param.name, param.arguments.as_ref())
+    ) -> impl Future<Output = Result<rmcp::model::GetPromptResult, rmcp::ErrorData>>
+    {
+        std::future::ready(Self::get_prompt_impl(
+            &param.name,
+            param.arguments.as_ref(),
+        ))
     }
 }
 

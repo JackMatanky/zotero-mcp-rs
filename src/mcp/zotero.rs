@@ -29,7 +29,7 @@ pub(crate) enum MetadataFormat {
     /// Return Zotero item metadata as JSON.
     #[default]
     Json,
-    /// Return item metadata as Better BibTeX.
+    /// Return item metadata as Better `BibTeX`.
     Bibtex,
 }
 
