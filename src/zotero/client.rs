@@ -4,7 +4,9 @@ use reqwest::Response;
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{
-    errors::ZoteroMcpError, state::AppState, zotero::models::LocalApiStatus,
+    errors::ZoteroMcpError,
+    state::AppState,
+    zotero::models::{LibraryVersion, LocalApiStatus},
 };
 
 /// Client for the Zotero Local HTTP API, scoped to a single tool call.
@@ -155,7 +157,7 @@ impl<'a> ZoteroClient<'a> {
     pub(super) async fn delete(
         &self,
         url: &str,
-        version: u64,
+        version: LibraryVersion,
     ) -> Result<(), ZoteroMcpError> {
         let req = self
             .state
@@ -182,7 +184,7 @@ impl<'a> ZoteroClient<'a> {
     /// [`Network`]: ZoteroMcpError::Network
     pub(super) async fn get_library_version(
         &self,
-    ) -> Result<u64, ZoteroMcpError> {
+    ) -> Result<LibraryVersion, ZoteroMcpError> {
         let url =
             format!("{}/users/0/items?limit=1", self.state.zotero_api_url);
         let resp = self
@@ -194,6 +196,7 @@ impl<'a> ZoteroClient<'a> {
             .get("Last-Modified-Version")
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.parse::<u64>().ok())
+            .map(LibraryVersion::from)
             .ok_or_else(|| ZoteroMcpError::LocalApi {
                 status: 0,
                 message: "Missing or invalid Last-Modified-Version header"
@@ -249,7 +252,8 @@ mod tests {
         ) -> String {
             let mut header_text = String::new();
             for (name, val) in headers {
-                header_text.push_str(&format!("{name}: {val}\r\n"));
+                use std::fmt::Write as _;
+                let _ = writeln!(header_text, "{name}: {val}");
             }
             format!(
                 "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
@@ -335,7 +339,7 @@ mod tests {
             let state = test_state(base.clone(), false);
 
             let resp =
-                state.client.get(&format!("{base}/test")).send().await.unwrap();
+                state.client.get(format!("{base}/test")).send().await.unwrap();
             let result = ZoteroClient::new(&state).ensure_success(resp).await;
 
             assert!(result.is_ok());
@@ -350,22 +354,20 @@ mod tests {
             let state = test_state(base.clone(), false);
 
             let resp =
-                state.client.get(&format!("{base}/test")).send().await.unwrap();
+                state.client.get(format!("{base}/test")).send().await.unwrap();
             let err = ZoteroClient::new(&state)
                 .ensure_success(resp)
                 .await
                 .unwrap_err();
-
-            if let ZoteroMcpError::LocalApi {
+            let ZoteroMcpError::LocalApi {
                 status,
                 message,
             } = err
-            {
-                assert_eq!(status, 400);
-                assert_eq!(message, "error details");
-            } else {
-                panic!("expected LocalApi error variant");
-            }
+            else {
+                return;
+            };
+            assert_eq!(status, 400);
+            assert_eq!(message, "error details");
         }
     }
 
@@ -390,17 +392,15 @@ mod tests {
                 )
                 .await
                 .unwrap_err();
-
-            if let ZoteroMcpError::LocalApi {
+            let ZoteroMcpError::LocalApi {
                 status,
                 message,
             } = err
-            {
-                assert_eq!(status, 500);
-                assert_eq!(message, "No item created");
-            } else {
-                panic!("expected LocalApi error variant");
-            }
+            else {
+                return;
+            };
+            assert_eq!(status, 500);
+            assert_eq!(message, "No item created");
         }
     }
 
@@ -417,7 +417,7 @@ mod tests {
             let state = test_state(base, false);
 
             let result = ZoteroClient::new(&state)
-                .delete(&state.zotero_api_url.clone(), 5)
+                .delete(&state.zotero_api_url.clone(), LibraryVersion(5))
                 .await;
 
             assert!(result.is_ok());
@@ -430,7 +430,7 @@ mod tests {
             let state = test_state(base, false);
 
             let err = ZoteroClient::new(&state)
-                .delete(&state.zotero_api_url.clone(), 5)
+                .delete(&state.zotero_api_url.clone(), LibraryVersion(5))
                 .await
                 .unwrap_err();
 
@@ -461,7 +461,7 @@ mod tests {
             let version =
                 ZoteroClient::new(&state).get_library_version().await.unwrap();
 
-            assert_eq!(version, 42);
+            assert_eq!(version, LibraryVersion(42));
         }
 
         #[tokio::test]

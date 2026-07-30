@@ -8,8 +8,9 @@ use crate::{
     ZoteroMcpServer,
     pdf::extract_pdf_pages,
     zotero::{
-        AnnotationType, CollectionKey, ItemKey, ItemType, ZoteroClient,
-        ZoteroItem,
+        AnnotationDraft, AnnotationType, CitationKey, CollectionItemAction,
+        CollectionKey, ItemKey, ItemType, SearchCondition, SearchField,
+        SearchOperator, TagName, TrashAction, ZoteroClient, ZoteroItem,
     },
 };
 
@@ -627,12 +628,16 @@ impl ZoteroMcpServer {
         args: ManageCollectionsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        let remove = args.remove.unwrap_or(false);
+        let action = if args.remove.unwrap_or(false) {
+            CollectionItemAction::Remove
+        } else {
+            CollectionItemAction::Add
+        };
         match client
             .manage_collection_items(
                 &args.collection_key,
                 &args.item_keys,
-                remove,
+                action,
             )
             .await
         {
@@ -693,8 +698,18 @@ impl ZoteroMcpServer {
         args: BatchUpdateTagsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        let add = args.add_tags.unwrap_or_default();
-        let rem = args.remove_tags.unwrap_or_default();
+        let add: Vec<TagName> = args
+            .add_tags
+            .unwrap_or_default()
+            .into_iter()
+            .map(TagName::from)
+            .collect();
+        let rem: Vec<TagName> = args
+            .remove_tags
+            .unwrap_or_default()
+            .into_iter()
+            .map(TagName::from)
+            .collect();
         match client.batch_update_tags(&args.item_keys, &add, &rem).await {
             Ok(count) => Ok(super::text_success(format!(
                 "Batch updated tags on {count} items"
@@ -732,7 +747,9 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
         Ok(super::json_result(
-            client.set_item_deleted(&args.item_key, true).await,
+            client
+                .set_item_deleted(&args.item_key, TrashAction::MoveToTrash)
+                .await,
         ))
     }
 
@@ -748,7 +765,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
         Ok(super::json_result(
-            client.set_item_deleted(&args.item_key, false).await,
+            client.set_item_deleted(&args.item_key, TrashAction::Restore).await,
         ))
     }
 
@@ -797,7 +814,8 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let limit = args.limit.unwrap_or(20);
         let client = ZoteroClient::new(&self.state);
-        Ok(super::json_result(client.search_by_tag(&args.tag, limit).await))
+        let tag = TagName::from(args.tag);
+        Ok(super::json_result(client.search_by_tag(&tag, limit).await))
     }
 
     /// Handles Zotero citation-key search tool calls.
@@ -811,9 +829,8 @@ impl ZoteroMcpServer {
         args: SearchByCitationKeyArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        Ok(super::json_result(
-            client.search_by_citation_key(&args.citekey).await,
-        ))
+        let citekey = CitationKey::from(args.citekey);
+        Ok(super::json_result(client.search_by_citation_key(&citekey).await))
     }
 
     /// Handles Zotero structured search tool calls.
@@ -828,9 +845,12 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let limit = args.limit.unwrap_or(20);
         let client = ZoteroClient::new(&self.state);
-        Ok(super::json_result(
-            client.advanced_search(args.conditions, limit).await,
-        ))
+        let conditions: Vec<SearchCondition> = args
+            .conditions
+            .into_iter()
+            .filter_map(|v| serde_json::from_value(v).ok())
+            .collect();
+        Ok(super::json_result(client.advanced_search(conditions, limit).await))
     }
 
     /// Handles Zotero library coverage analysis tool calls.
@@ -891,19 +911,16 @@ impl ZoteroMcpServer {
         args: CreateAnnotationArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        Ok(super::json_result(
-            client
-                .create_annotation(
-                    &args.parent_attachment_key,
-                    args.annotation_type,
-                    args.text.as_deref(),
-                    args.comment.as_deref(),
-                    args.color.as_deref(),
-                    args.page_label.as_deref(),
-                    &args.position_json,
-                )
-                .await,
-        ))
+        let draft = AnnotationDraft {
+            parent_attachment_key: args.parent_attachment_key,
+            annotation_type: args.annotation_type,
+            text: args.text,
+            comment: args.comment,
+            color: args.color,
+            page_label: args.page_label,
+            position_json: args.position_json,
+        };
+        Ok(super::json_result(client.create_annotation(draft).await))
     }
 
     /// Handles Zotero add-by-identifier tool calls using `args`.
@@ -933,16 +950,12 @@ impl ZoteroMcpServer {
         };
 
         if !draft.title.is_empty() {
-            let existing = client
-                .advanced_search(
-                    vec![serde_json::json!({
-                        "field": "title",
-                        "operator": "equals",
-                        "value": &draft.title,
-                    })],
-                    1,
-                )
-                .await;
+            let cond = SearchCondition {
+                field: SearchField::Title,
+                operator: SearchOperator::Is,
+                value: draft.title.clone(),
+            };
+            let existing = client.advanced_search(vec![cond], 1).await;
             if let Ok(matches) = existing {
                 if let Some(found) = matches.into_iter().next() {
                     return Ok(super::json_success(&found));
@@ -1004,7 +1017,9 @@ impl ZoteroMcpServer {
         args: RenameTagArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.rename_tag(&args.old_tag, &args.new_tag).await {
+        let old_tag = TagName::from(args.old_tag);
+        let new_tag = TagName::from(args.new_tag);
+        match client.rename_tag(&old_tag, &new_tag).await {
             Ok(count) => {
                 Ok(super::text_success(format!("Renamed tag on {count} items")))
             }
@@ -1023,7 +1038,9 @@ impl ZoteroMcpServer {
         args: DeleteTagsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        match client.delete_tags(&args.tags).await {
+        let tags: Vec<TagName> =
+            args.tags.into_iter().map(TagName::from).collect();
+        match client.delete_tags(&tags).await {
             Ok(()) => Ok(super::text_success("Tags deleted")),
             Err(e) => Ok(super::text_error(&e)),
         }

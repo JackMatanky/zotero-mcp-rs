@@ -106,6 +106,68 @@ string_key!(
      within a library. Distinct from [`ItemKey`] to prevent the two from \
      being transposed at call sites."
 );
+string_key!(
+    TagName,
+    "Zotero tag name: wrapper for tag name strings to prevent transposition \
+     with free-text query strings or keys."
+);
+string_key!(
+    CitationKey,
+    "Zotero citation key: wrapper for citation keys to enforce type safety \
+     and key semantics across search and item metadata."
+);
+
+/// Zotero library version counter.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Default,
+    Serialize,
+    Deserialize,
+)]
+#[serde(transparent)]
+pub(crate) struct LibraryVersion(pub(crate) u64);
+
+impl LibraryVersion {}
+
+impl std::fmt::Display for LibraryVersion {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<u64> for LibraryVersion {
+    #[inline]
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+impl From<LibraryVersion> for u64 {
+    #[inline]
+    fn from(value: LibraryVersion) -> Self {
+        value.0
+    }
+}
+
+impl schemars::JsonSchema for LibraryVersion {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "LibraryVersion".into()
+    }
+
+    fn json_schema(
+        generator: &mut schemars::SchemaGenerator,
+    ) -> schemars::Schema {
+        u64::json_schema(generator)
+    }
+}
 
 /// Zotero item type (`itemType`), the closed-ish set of item kinds the
 /// Local API returns.
