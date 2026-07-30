@@ -130,6 +130,9 @@ pub(crate) struct ZoteroItemData {
     /// PDF page label where the annotation appears.
     #[serde(rename = "annotationPageLabel")]
     pub(crate) annotation_page_label: Option<String>,
+    /// Whether the item is in the trash.
+    #[serde(default)]
+    pub(crate) deleted: bool,
 }
 
 /// An author, editor, or other creator credited on an item.
@@ -238,5 +241,38 @@ mod tests {
         assert_eq!(creator.creator_type.as_deref(), Some("author"));
         assert_eq!(creator.first_name.as_deref(), Some("Ada"));
         assert_eq!(creator.last_name.as_deref(), Some("Lovelace"));
+    }
+
+    #[test]
+    fn deleted_defaults_to_false_when_absent_from_json() {
+        let raw_json = serde_json::json!({
+            "key": "ABC12345",
+            "version": 42,
+            "data": {
+                "key": "ABC12345",
+                "version": 42,
+                "itemType": "journalArticle"
+            }
+        });
+
+        let item: ZoteroItem = serde_json::from_value(raw_json).unwrap();
+
+        assert!(!item.data.deleted);
+    }
+
+    #[test]
+    fn deleted_round_trips_true() {
+        let raw_json = serde_json::json!({
+            "key": "ABC12345",
+            "version": 42,
+            "itemType": "journalArticle",
+            "deleted": true
+        });
+
+        let data: ZoteroItemData = serde_json::from_value(raw_json).unwrap();
+        assert!(data.deleted);
+
+        let serialized = serde_json::to_string(&data).unwrap();
+        assert!(serialized.contains("\"deleted\":true"));
     }
 }

@@ -197,6 +197,9 @@ mod tests {
                 zotero_api_url: String::new(),
                 better_bibtex_url: String::new(),
                 better_notes_url,
+                crossref_url: String::new(),
+                semantic_scholar_url: String::new(),
+                open_library_url: String::new(),
                 write_enabled,
             }
         }

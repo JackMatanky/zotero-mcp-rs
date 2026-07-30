@@ -31,6 +31,12 @@ pub(crate) struct AppState {
     pub(crate) better_bibtex_url: String,
     /// Base URL for the Better Notes companion bridge endpoint.
     pub(crate) better_notes_url: String,
+    /// Base URL for the `CrossRef` Works API (DOI resolution).
+    pub(crate) crossref_url: String,
+    /// Base URL for the Semantic Scholar Graph API (arXiv ID resolution).
+    pub(crate) semantic_scholar_url: String,
+    /// Base URL for the Open Library Books API (ISBN resolution).
+    pub(crate) open_library_url: String,
     /// Whether write/mutation operations are allowed.
     // ponytail: write gate defaults to read-only; enabled via
     // ZOTERO_WRITE_ENABLED
@@ -64,6 +70,13 @@ impl AppState {
                 "http://127.0.0.1:23119/better-notes".to_owned()
             });
 
+        let crossref_url = env::var("CROSSREF_URL")
+            .unwrap_or_else(|_| "https://api.crossref.org".to_owned());
+        let semantic_scholar_url = env::var("SEMANTIC_SCHOLAR_URL")
+            .unwrap_or_else(|_| "https://api.semanticscholar.org".to_owned());
+        let open_library_url = env::var("OPEN_LIBRARY_URL")
+            .unwrap_or_else(|_| "https://openlibrary.org".to_owned());
+
         let write_enabled = env::var("ZOTERO_WRITE_ENABLED")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
@@ -73,6 +86,9 @@ impl AppState {
             zotero_api_url,
             better_bibtex_url,
             better_notes_url,
+            crossref_url,
+            semantic_scholar_url,
+            open_library_url,
             write_enabled,
         }
     }
@@ -165,6 +181,9 @@ mod tests {
                 zotero_api_url: String::new(),
                 better_bibtex_url: String::new(),
                 better_notes_url: String::new(),
+                crossref_url: String::new(),
+                semantic_scholar_url: String::new(),
+                open_library_url: String::new(),
                 write_enabled,
             }
         }

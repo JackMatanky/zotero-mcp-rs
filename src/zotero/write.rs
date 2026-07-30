@@ -2,7 +2,7 @@
 
 use crate::{
     errors::ZoteroMcpError,
-    zotero::{ZoteroClient, ZoteroCollection, ZoteroItem},
+    zotero::{ZoteroClient, ZoteroCollection, ZoteroItem, models::ZoteroTag},
 };
 
 impl ZoteroClient<'_> {
@@ -180,18 +180,7 @@ impl ZoteroClient<'_> {
         let mut count: usize = 0;
         for key in item_keys {
             let item = self.get_item(key).await?;
-            let mut tags_set: std::collections::BTreeSet<String> =
-                item.data.tags.into_iter().map(|t| t.tag).collect();
-            for add in add_tags {
-                tags_set.insert(add.clone());
-            }
-            for rem in remove_tags {
-                tags_set.remove(rem);
-            }
-            let new_tags: Vec<serde_json::Value> = tags_set
-                .into_iter()
-                .map(|t| serde_json::json!({ "tag": t }))
-                .collect();
+            let new_tags = diff_tags(item.data.tags, add_tags, remove_tags);
             let patch_payload = serde_json::json!({
                 "tags": new_tags,
                 "version": item.version,
@@ -201,6 +190,276 @@ impl ZoteroClient<'_> {
         }
         Ok(count)
     }
+
+    /// Permanently deletes the item identified by `item_key`.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::NotFound`] if the item does not exist
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    pub(crate) async fn delete_item(
+        &self,
+        item_key: &str,
+    ) -> Result<(), ZoteroMcpError> {
+        self.state.check_write_permission()?;
+        let item = self.get_item(item_key).await?;
+        let url =
+            format!("{}/users/0/items/{}", self.state.zotero_api_url, item_key);
+        self.delete(&url, item.version).await
+    }
+
+    /// Sets the item's trash state via `PATCH {"deleted": deleted}`. `true`
+    /// moves the item to trash; `false` restores it.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::update_item`], which this delegates to.
+    pub(crate) async fn set_item_deleted(
+        &self,
+        item_key: &str,
+        deleted: bool,
+    ) -> Result<ZoteroItem, ZoteroMcpError> {
+        self.state.check_write_permission()?;
+        let item = self.get_item(item_key).await?;
+        self.update_item(
+            item_key,
+            serde_json::json!({"deleted": deleted, "version": item.version}),
+        )
+        .await
+    }
+
+    /// Permanently deletes the collection identified by `collection_key`.
+    /// Items inside it are not deleted.
+    ///
+    /// # Errors
+    ///
+    /// Same variants as [`Self::delete_item`].
+    pub(crate) async fn delete_collection(
+        &self,
+        collection_key: &str,
+    ) -> Result<(), ZoteroMcpError> {
+        self.state.check_write_permission()?;
+        let url = format!(
+            "{}/users/0/collections/{}",
+            self.state.zotero_api_url, collection_key
+        );
+        let resp = self
+            .ensure_success(
+                self.state.send_with_retry(self.state.client.get(&url)).await?,
+            )
+            .await?;
+        let collection: ZoteroCollection = resp.json().await?;
+        self.delete(&url, collection.version).await
+    }
+
+    /// Creates a PDF annotation (highlight, underline, or note) attached to
+    /// `parent_attachment_key`. `annotation_type` is `"highlight"`,
+    /// `"underline"`, or `"note"`. `position_json` is the raw Zotero
+    /// `annotationPosition` JSON string (e.g.
+    /// `{"pageIndex":0,"rects":[[100,200,300,220]]}`), passed through
+    /// opaquely.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded, or
+    ///   `position_json` is not valid JSON
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "mirrors Zotero's flat annotation field set; grouping into a struct would only move the same fields one layer down"
+    )]
+    pub(crate) async fn create_annotation(
+        &self,
+        parent_attachment_key: &str,
+        annotation_type: &str,
+        text: Option<&str>,
+        comment: Option<&str>,
+        color: Option<&str>,
+        page_label: Option<&str>,
+        position_json: &str,
+    ) -> Result<ZoteroItem, ZoteroMcpError> {
+        self.state.check_write_permission()?;
+        let position: serde_json::Value = serde_json::from_str(position_json)?;
+        let url = format!("{}/users/0/items", self.state.zotero_api_url);
+        let payload = serde_json::json!([{
+            "itemType": "annotation",
+            "parentItem": parent_attachment_key,
+            "annotationType": annotation_type,
+            "annotationText": text,
+            "annotationComment": comment.unwrap_or(""),
+            "annotationColor": color.unwrap_or("#ffd400"),
+            "annotationPageLabel": page_label,
+            "annotationPosition": position.to_string(),
+        }]);
+        self.post_json_first(
+            &url,
+            &payload,
+            "Created annotation array was empty",
+        )
+        .await
+    }
+
+    /// Creates a new item from a resolved metadata `draft` (as returned by
+    /// [`crate::zotero::identifiers::resolve_metadata`]).
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    pub(crate) async fn create_item_from_metadata(
+        &self,
+        draft: serde_json::Value,
+    ) -> Result<ZoteroItem, ZoteroMcpError> {
+        self.state.check_write_permission()?;
+        let url = format!("{}/users/0/items", self.state.zotero_api_url);
+        self.post_json_first(&url, &vec![draft], "Created item array was empty")
+            .await
+    }
+
+    /// Renames and/or moves a collection. `name` renames when `Some`.
+    /// `parent_key`, when `Some("")`, moves the collection to the top
+    /// level; when `Some(key)`, reparents it under `key`; when `None`,
+    /// leaves the parent untouched.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    pub(crate) async fn update_collection(
+        &self,
+        collection_key: &str,
+        name: Option<&str>,
+        parent_key: Option<&str>,
+    ) -> Result<ZoteroCollection, ZoteroMcpError> {
+        self.state.check_write_permission()?;
+        let url = format!(
+            "{}/users/0/collections/{}",
+            self.state.zotero_api_url, collection_key
+        );
+        let resp = self
+            .ensure_success(
+                self.state.send_with_retry(self.state.client.get(&url)).await?,
+            )
+            .await?;
+        let current: ZoteroCollection = resp.json().await?;
+
+        let new_name = name.unwrap_or(&current.data.name);
+        let new_parent = match parent_key {
+            Some("") => serde_json::Value::Bool(false),
+            Some(k) => serde_json::Value::String(k.to_owned()),
+            None => current
+                .data
+                .parent_collection
+                .clone()
+                .unwrap_or(serde_json::Value::Bool(false)),
+        };
+        let payload = serde_json::json!({
+            "key": collection_key,
+            "version": current.version,
+            "name": new_name,
+            "parentCollection": new_parent,
+        });
+
+        let put_resp = self
+            .state
+            .send_with_retry(self.state.client.put(&url).json(&payload))
+            .await?;
+        let put_resp = self.ensure_success(put_resp).await?;
+        if let Ok(collection) = put_resp.json::<ZoteroCollection>().await {
+            Ok(collection)
+        } else {
+            let refetch =
+                self.state.send_with_retry(self.state.client.get(&url)).await?;
+            Ok(self.ensure_success(refetch).await?.json().await?)
+        }
+    }
+
+    /// Renames a tag across every item in the library that has it (removes
+    /// the old tag, adds the new one, on each matching item).
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    pub(crate) async fn rename_tag(
+        &self,
+        old_tag: &str,
+        new_tag: &str,
+    ) -> Result<usize, ZoteroMcpError> {
+        self.state.check_write_permission()?;
+        let items = self.search_by_tag(old_tag, 100).await?;
+        let mut count: usize = 0;
+        for item in items {
+            let new_tags = diff_tags(
+                item.data.tags,
+                std::slice::from_ref(&new_tag.to_owned()),
+                std::slice::from_ref(&old_tag.to_owned()),
+            );
+            let patch =
+                serde_json::json!({"tags": new_tags, "version": item.version});
+            self.update_item(&item.key, patch).await?;
+            count = count.saturating_add(1);
+        }
+        Ok(count)
+    }
+
+    /// Deletes up to 50 tags from the entire library in one request.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    pub(crate) async fn delete_tags(
+        &self,
+        tags: &[String],
+    ) -> Result<(), ZoteroMcpError> {
+        self.state.check_write_permission()?;
+        let version = self.get_library_version().await?;
+        let joined = tags
+            .iter()
+            .map(|t| urlencoding::encode(t).into_owned())
+            .collect::<Vec<_>>()
+            .join(" || ");
+        let url = format!(
+            "{}/users/0/tags?tag={}",
+            self.state.zotero_api_url, joined
+        );
+        self.delete(&url, version).await
+    }
+}
+
+fn diff_tags(
+    existing: Vec<ZoteroTag>,
+    add: &[String],
+    remove: &[String],
+) -> Vec<serde_json::Value> {
+    let mut tags_set: std::collections::BTreeSet<String> =
+        existing.into_iter().map(|t| t.tag).collect();
+    for a in add {
+        tags_set.insert(a.clone());
+    }
+    for r in remove {
+        tags_set.remove(r);
+    }
+    tags_set.into_iter().map(|t| serde_json::json!({ "tag": t })).collect()
 }
 
 #[cfg(test)]
@@ -347,5 +606,383 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn delete_item_rejects_when_write_is_disabled() {
+        let state = test_state(String::new(), false);
+        let err =
+            ZoteroClient::new(&state).delete_item("ITEM1").await.unwrap_err();
+        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+    }
+
+    #[tokio::test]
+    async fn delete_item_deletes_after_fetching_current_version() {
+        let item = json!({
+            "key": "ITEM1",
+            "version": 7,
+            "data": { "key": "ITEM1", "version": 7, "itemType": "journalArticle" }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &item.to_string()),
+            http_response("204 No Content", ""),
+        ]);
+        let state = test_state(base, true);
+
+        let result = ZoteroClient::new(&state).delete_item("ITEM1").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn set_item_deleted_true_marks_item_trashed() {
+        let item = json!({
+            "key": "ITEM1",
+            "version": 7,
+            "data": { "key": "ITEM1", "version": 7, "itemType": "journalArticle" }
+        });
+        let updated = json!({
+            "key": "ITEM1",
+            "version": 8,
+            "data": { "key": "ITEM1", "version": 8, "itemType": "journalArticle", "deleted": true }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &item.to_string()),
+            http_response("200 OK", &updated.to_string()),
+        ]);
+        let state = test_state(base, true);
+
+        let trashed = ZoteroClient::new(&state)
+            .set_item_deleted("ITEM1", true)
+            .await
+            .unwrap();
+        assert!(trashed.data.deleted);
+    }
+
+    #[tokio::test]
+    async fn set_item_deleted_false_restores_item() {
+        let item = json!({
+            "key": "ITEM1",
+            "version": 8,
+            "data": { "key": "ITEM1", "version": 8, "itemType": "journalArticle", "deleted": true }
+        });
+        let updated = json!({
+            "key": "ITEM1",
+            "version": 9,
+            "data": { "key": "ITEM1", "version": 9, "itemType": "journalArticle", "deleted": false }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &item.to_string()),
+            http_response("200 OK", &updated.to_string()),
+        ]);
+        let state = test_state(base, true);
+
+        let restored = ZoteroClient::new(&state)
+            .set_item_deleted("ITEM1", false)
+            .await
+            .unwrap();
+        assert!(!restored.data.deleted);
+    }
+
+    #[tokio::test]
+    async fn delete_collection_rejects_when_write_is_disabled() {
+        let state = test_state(String::new(), false);
+        let err = ZoteroClient::new(&state)
+            .delete_collection("COL1")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+    }
+
+    #[tokio::test]
+    async fn delete_collection_deletes_after_fetching_current_version() {
+        let collection = json!({
+            "key": "COL1",
+            "version": 3,
+            "data": { "key": "COL1", "name": "Old Collection", "parentCollection": false }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &collection.to_string()),
+            http_response("204 No Content", ""),
+        ]);
+        let state = test_state(base, true);
+
+        let result = ZoteroClient::new(&state).delete_collection("COL1").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn create_annotation_rejects_when_write_is_disabled() {
+        let state = test_state(String::new(), false);
+        let err = ZoteroClient::new(&state)
+            .create_annotation(
+                "ATT1",
+                "highlight",
+                Some("selected text"),
+                None,
+                None,
+                None,
+                r#"{"pageIndex":0,"rects":[[100,200,300,220]]}"#,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+    }
+
+    #[tokio::test]
+    async fn create_annotation_returns_created_item_on_success() {
+        let created = json!([{
+            "key": "ANNOT1",
+            "version": 1,
+            "data": { "key": "ANNOT1", "version": 1, "itemType": "annotation", "annotationType": "highlight" }
+        }]);
+        let base =
+            mock_server(vec![http_response("200 OK", &created.to_string())]);
+        let state = test_state(base, true);
+
+        let item = ZoteroClient::new(&state)
+            .create_annotation(
+                "ATT1",
+                "highlight",
+                Some("selected text"),
+                None,
+                None,
+                None,
+                r#"{"pageIndex":0,"rects":[[100,200,300,220]]}"#,
+            )
+            .await
+            .unwrap();
+        assert_eq!(item.key, "ANNOT1");
+    }
+
+    #[tokio::test]
+    async fn create_annotation_rejects_invalid_position_json() {
+        let state = test_state(mock_server(vec![]), true);
+
+        let err = ZoteroClient::new(&state)
+            .create_annotation(
+                "ATT1",
+                "highlight",
+                Some("selected text"),
+                None,
+                None,
+                None,
+                "not json",
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ZoteroMcpError::Json(_)));
+    }
+
+    #[tokio::test]
+    async fn create_item_from_metadata_rejects_when_write_is_disabled() {
+        let state = test_state(String::new(), false);
+        let err = ZoteroClient::new(&state)
+            .create_item_from_metadata(
+                json!({"itemType": "book", "title": "A Book"}),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+    }
+
+    #[tokio::test]
+    async fn create_item_from_metadata_returns_created_item() {
+        let created = json!([{
+            "key": "NEWITEM1",
+            "version": 1,
+            "data": { "key": "NEWITEM1", "version": 1, "itemType": "book", "title": "A Book" }
+        }]);
+        let base =
+            mock_server(vec![http_response("200 OK", &created.to_string())]);
+        let state = test_state(base, true);
+
+        let item = ZoteroClient::new(&state)
+            .create_item_from_metadata(
+                json!({"itemType": "book", "title": "A Book"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(item.key, "NEWITEM1");
+    }
+
+    #[tokio::test]
+    async fn update_collection_rejects_when_write_is_disabled() {
+        let state = test_state(String::new(), false);
+        let err = ZoteroClient::new(&state)
+            .update_collection("COL1", Some("New Name"), None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+    }
+
+    #[tokio::test]
+    async fn update_collection_renames_when_name_given() {
+        let current = json!({
+            "key": "COL1",
+            "version": 3,
+            "data": { "key": "COL1", "name": "Old Name", "parentCollection": false }
+        });
+        let updated = json!({
+            "key": "COL1",
+            "version": 4,
+            "data": { "key": "COL1", "name": "New Name", "parentCollection": false }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &current.to_string()),
+            http_response("200 OK", &updated.to_string()),
+        ]);
+        let state = test_state(base, true);
+
+        let collection = ZoteroClient::new(&state)
+            .update_collection("COL1", Some("New Name"), None)
+            .await
+            .unwrap();
+        assert_eq!(collection.data.name, "New Name");
+    }
+
+    #[tokio::test]
+    async fn update_collection_reparents_when_parent_key_given() {
+        let current = json!({
+            "key": "COL1",
+            "version": 3,
+            "data": { "key": "COL1", "name": "Old Name", "parentCollection": false }
+        });
+        let updated = json!({
+            "key": "COL1",
+            "version": 4,
+            "data": { "key": "COL1", "name": "Old Name", "parentCollection": "PARENT1" }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &current.to_string()),
+            http_response("200 OK", &updated.to_string()),
+        ]);
+        let state = test_state(base, true);
+
+        let collection = ZoteroClient::new(&state)
+            .update_collection("COL1", None, Some("PARENT1"))
+            .await
+            .unwrap();
+        assert_eq!(collection.data.parent_collection, Some(json!("PARENT1")));
+    }
+
+    #[tokio::test]
+    async fn update_collection_moves_to_top_level_when_parent_key_is_empty_string()
+     {
+        let current = json!({
+            "key": "COL1",
+            "version": 3,
+            "data": { "key": "COL1", "name": "Old Name", "parentCollection": "PARENT1" }
+        });
+        let updated = json!({
+            "key": "COL1",
+            "version": 4,
+            "data": { "key": "COL1", "name": "Old Name", "parentCollection": false }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &current.to_string()),
+            http_response("200 OK", &updated.to_string()),
+        ]);
+        let state = test_state(base, true);
+
+        let collection = ZoteroClient::new(&state)
+            .update_collection("COL1", None, Some(""))
+            .await
+            .unwrap();
+        assert_eq!(collection.data.parent_collection, Some(json!(false)));
+    }
+
+    #[tokio::test]
+    async fn rename_tag_rejects_when_write_is_disabled() {
+        let state = test_state(String::new(), false);
+        let err = ZoteroClient::new(&state)
+            .rename_tag("old_tag", "new_tag")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+    }
+
+    #[tokio::test]
+    async fn rename_tag_swaps_tag_across_matching_items() {
+        let items = json!([
+            {
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle", "tags": [{ "tag": "old_tag" }] }
+            },
+            {
+                "key": "ITEM2",
+                "version": 1,
+                "data": { "key": "ITEM2", "version": 1, "itemType": "journalArticle", "tags": [{ "tag": "old_tag" }] }
+            }
+        ]);
+        let patch1 = json!({
+            "key": "ITEM1",
+            "version": 2,
+            "data": { "key": "ITEM1", "version": 2, "itemType": "journalArticle", "tags": [{ "tag": "new_tag" }] }
+        });
+        let patch2 = json!({
+            "key": "ITEM2",
+            "version": 2,
+            "data": { "key": "ITEM2", "version": 2, "itemType": "journalArticle", "tags": [{ "tag": "new_tag" }] }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &items.to_string()),
+            http_response("200 OK", &patch1.to_string()),
+            http_response("200 OK", &patch2.to_string()),
+        ]);
+        let state = test_state(base, true);
+
+        let count = ZoteroClient::new(&state)
+            .rename_tag("old_tag", "new_tag")
+            .await
+            .unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[tokio::test]
+    async fn delete_tags_rejects_when_write_is_disabled() {
+        let state = test_state(String::new(), false);
+        let err = ZoteroClient::new(&state)
+            .delete_tags(&["old_tag".to_owned()])
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+    }
+
+    #[tokio::test]
+    async fn delete_tags_sends_joined_tag_query_and_succeeds() {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+        let addr = listener.local_addr().expect("local addr");
+        std::thread::spawn(move || {
+            let (mut stream, _) =
+                listener.accept().expect("accept version request");
+            let mut buf = [0_u8; 1024];
+            let _ = stream.read(&mut buf);
+            let version_resp = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\
+                                 Content-Type: application/json\r\n\
+                                 Last-Modified-Version: 9\r\n\
+                                 Connection: close\r\n\r\n[]";
+            let _ = stream.write_all(version_resp.as_bytes());
+
+            let (mut stream2, _) =
+                listener.accept().expect("accept delete request");
+            let mut buf2 = [0_u8; 1024];
+            let _ = stream2.read(&mut buf2);
+            let _ = stream2.write_all(
+                "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
+                    .as_bytes(),
+            );
+        });
+        let state = test_state(format!("http://{addr}"), true);
+
+        let result = ZoteroClient::new(&state)
+            .delete_tags(&["old_tag".to_owned(), "other tag".to_owned()])
+            .await;
+        assert!(result.is_ok());
     }
 }

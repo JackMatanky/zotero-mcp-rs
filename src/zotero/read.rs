@@ -342,6 +342,54 @@ impl ZoteroClient<'_> {
 
         Ok(md)
     }
+
+    /// Lists all tag names in the library, up to `limit`.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    pub(crate) async fn list_tags(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<String>, ZoteroMcpError> {
+        let url = format!(
+            "{}/users/0/tags?limit={}",
+            self.state.zotero_api_url, limit
+        );
+        let raw: Vec<serde_json::Value> = self.get_json(&url).await?;
+        Ok(raw
+            .into_iter()
+            .filter_map(|v| {
+                v.get("tag").and_then(|t| t.as_str()).map(str::to_owned)
+            })
+            .collect())
+    }
+
+    /// Lists top-level items not in any collection, up to `limit`.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    pub(crate) async fn get_unfiled_items(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
+        let url = format!(
+            "{}/users/0/items/top?limit={}",
+            self.state.zotero_api_url, limit
+        );
+        let items: Vec<ZoteroItem> = self.get_json(&url).await?;
+        Ok(items
+            .into_iter()
+            .filter(|i| i.data.collections.is_empty())
+            .collect())
+    }
 }
 
 fn match_condition(item: &ZoteroItem, cond: &serde_json::Value) -> bool {
@@ -792,5 +840,40 @@ mod tests {
         let duplicates =
             ZoteroClient::new(&state).find_duplicates(None).await.unwrap();
         assert_eq!(duplicates.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn list_tags_returns_tag_names() {
+        let tags = json!([{"tag": "quantum", "meta": {"numItems": 3}}]);
+        let base =
+            mock_server(vec![http_response("200 OK", &tags.to_string())]);
+        let state = test_state(base, false);
+
+        let result = ZoteroClient::new(&state).list_tags(100).await.unwrap();
+        assert_eq!(result, vec!["quantum".to_owned()]);
+    }
+
+    #[tokio::test]
+    async fn get_unfiled_items_filters_out_items_with_collections() {
+        let items = json!([
+            {
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Filed Item", "collections": ["COL1"] }
+            },
+            {
+                "key": "ITEM2",
+                "version": 1,
+                "data": { "key": "ITEM2", "itemType": "journalArticle", "title": "Unfiled Item", "collections": [] }
+            }
+        ]);
+        let base =
+            mock_server(vec![http_response("200 OK", &items.to_string())]);
+        let state = test_state(base, false);
+
+        let result =
+            ZoteroClient::new(&state).get_unfiled_items(100).await.unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result.first().expect("item").key, "ITEM2");
     }
 }

@@ -167,6 +167,77 @@ pub(crate) struct BatchUpdateTagsArgs {
     pub(crate) remove_tags: Option<Vec<String>>,
 }
 
+/// Arguments for `zotero_delete_item`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct DeleteItemArgs {
+    /// Key of the item to permanently delete.
+    pub(crate) item_key: String,
+}
+
+/// Arguments for `zotero_trash_item` and `zotero_restore_item`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct TrashItemArgs {
+    /// Key of the item to move to or restore from trash.
+    pub(crate) item_key: String,
+}
+
+/// Arguments for `zotero_delete_collection`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct DeleteCollectionArgs {
+    /// Key of the collection to permanently delete.
+    pub(crate) collection_key: String,
+}
+
+/// Arguments for `zotero_update_collection`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct UpdateCollectionArgs {
+    /// Zotero collection key.
+    pub(crate) collection_key: String,
+    /// New name for the collection.
+    pub(crate) name: Option<String>,
+    /// New parent collection key; pass an empty string to move the
+    /// collection to the top level.
+    pub(crate) parent_key: Option<String>,
+}
+
+// --- Zotero Tag Administration ---
+
+/// Arguments for `zotero_list_tags`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct ListTagsArgs {
+    /// Maximum number of tags to return (default: 100).
+    pub(crate) limit: Option<usize>,
+}
+
+/// Arguments for `zotero_rename_tag`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct RenameTagArgs {
+    /// Existing tag name.
+    pub(crate) old_tag: String,
+    /// New tag name.
+    pub(crate) new_tag: String,
+}
+
+/// Arguments for `zotero_delete_tags`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct DeleteTagsArgs {
+    /// Tag names to delete from the library (up to 50).
+    pub(crate) tags: Vec<String>,
+}
+
+// --- Zotero Identifier Lookup ---
+
+/// Arguments for `zotero_add_by_identifier`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct AddByIdentifierArgs {
+    /// `"doi"`, `"arxiv"`, or `"isbn"`.
+    pub(crate) kind: crate::zotero::IdentifierKind,
+    /// The DOI, arXiv ID, or ISBN to resolve.
+    pub(crate) identifier: String,
+    /// Optional collection key to file the new item into.
+    pub(crate) collection_key: Option<String>,
+}
+
 // --- Zotero Discovery & Analysis ---
 
 /// Arguments for `zotero_find_duplicates`.
@@ -209,6 +280,13 @@ pub(crate) struct LibraryCoverageArgs {
     pub(crate) collection_key: Option<String>,
 }
 
+/// Arguments for `zotero_get_unfiled_items`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct GetUnfiledItemsArgs {
+    /// Maximum number of items to return (default: 50).
+    pub(crate) limit: Option<usize>,
+}
+
 // --- Zotero Annotation Synthesis ---
 
 /// Arguments for `zotero_synthesize_annotations`.
@@ -216,6 +294,26 @@ pub(crate) struct LibraryCoverageArgs {
 pub(crate) struct SynthesizeAnnotationsArgs {
     /// Zotero item key.
     pub(crate) item_key: String,
+}
+
+/// Arguments for `zotero_create_annotation`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct CreateAnnotationArgs {
+    /// Key of the parent PDF attachment.
+    pub(crate) parent_attachment_key: String,
+    /// `"highlight"`, `"underline"`, or `"note"`.
+    pub(crate) annotation_type: String,
+    /// Selected text (required for highlight/underline, omit for note).
+    pub(crate) text: Option<String>,
+    /// Optional user comment attached to the annotation.
+    pub(crate) comment: Option<String>,
+    /// CSS-style hex color, e.g. `"#ffd400"`.
+    pub(crate) color: Option<String>,
+    /// Optional PDF page label where the annotation appears.
+    pub(crate) page_label: Option<String>,
+    /// Raw Zotero `annotationPosition` JSON string, e.g.
+    /// `{"pageIndex":0,"rects":[[100,200,300,220]]}`.
+    pub(crate) position_json: String,
 }
 
 // --- Handler Implementations ---
@@ -602,6 +700,72 @@ impl ZoteroMcpServer {
         }
     }
 
+    /// Handles Zotero item permanent deletion tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_delete_item_impl(
+        &self,
+        args: DeleteItemArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.delete_item(&args.item_key).await {
+            Ok(()) => Ok(super::text_success("Item permanently deleted")),
+            Err(e) => Ok(super::text_error(&e)),
+        }
+    }
+
+    /// Handles Zotero item trash tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_trash_item_impl(
+        &self,
+        args: TrashItemArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(super::json_result(
+            client.set_item_deleted(&args.item_key, true).await,
+        ))
+    }
+
+    /// Handles Zotero item restore-from-trash tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_restore_item_impl(
+        &self,
+        args: TrashItemArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(super::json_result(
+            client.set_item_deleted(&args.item_key, false).await,
+        ))
+    }
+
+    /// Handles Zotero collection permanent deletion tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_delete_collection_impl(
+        &self,
+        args: DeleteCollectionArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.delete_collection(&args.collection_key).await {
+            Ok(()) => Ok(super::text_success("Collection permanently deleted")),
+            Err(e) => Ok(super::text_error(&e)),
+        }
+    }
+
     /// Handles Zotero duplicate detection tool calls.
     ///
     /// # Errors
@@ -682,6 +846,21 @@ impl ZoteroMcpServer {
         ))
     }
 
+    /// Handles Zotero unfiled items listing tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_unfiled_items_impl(
+        &self,
+        args: GetUnfiledItemsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = args.limit.unwrap_or(50);
+        let client = ZoteroClient::new(&self.state);
+        Ok(super::json_result(client.get_unfiled_items(limit).await))
+    }
+
     /// Handles Zotero annotation synthesis tool calls.
     ///
     /// # Errors
@@ -696,6 +875,161 @@ impl ZoteroMcpServer {
         Ok(super::text_result(
             client.synthesize_annotations(&args.item_key).await,
         ))
+    }
+
+    /// Handles Zotero PDF annotation creation tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_create_annotation_impl(
+        &self,
+        args: CreateAnnotationArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(super::json_result(
+            client
+                .create_annotation(
+                    &args.parent_attachment_key,
+                    &args.annotation_type,
+                    args.text.as_deref(),
+                    args.comment.as_deref(),
+                    args.color.as_deref(),
+                    args.page_label.as_deref(),
+                    &args.position_json,
+                )
+                .await,
+        ))
+    }
+
+    /// Handles Zotero add-by-identifier tool calls. Resolves the identifier
+    /// via a public metadata API and creates the item, returning the
+    /// existing item instead if an exact title match is already in the
+    /// library.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_add_by_identifier_impl(
+        &self,
+        args: AddByIdentifierArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        let mut draft = match crate::zotero::identifiers::resolve_metadata(
+            &self.state,
+            args.kind,
+            &args.identifier,
+        )
+        .await
+        {
+            Ok(d) => d,
+            Err(e) => return Ok(super::text_error(&e)),
+        };
+
+        let title = draft
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_owned();
+        if !title.is_empty() {
+            let existing = client
+                .advanced_search(
+                    vec![serde_json::json!({
+                        "field": "title",
+                        "operator": "equals",
+                        "value": title,
+                    })],
+                    1,
+                )
+                .await;
+            if let Ok(matches) = existing {
+                if let Some(found) = matches.into_iter().next() {
+                    return Ok(super::json_success(&found));
+                }
+            }
+        }
+
+        if let Some(col) = &args.collection_key {
+            if let Some(obj) = draft.as_object_mut() {
+                obj.insert("collections".to_owned(), serde_json::json!([col]));
+            }
+        }
+        Ok(super::json_result(client.create_item_from_metadata(draft).await))
+    }
+
+    /// Handles Zotero collection rename/move tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_update_collection_impl(
+        &self,
+        args: UpdateCollectionArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(super::json_result(
+            client
+                .update_collection(
+                    &args.collection_key,
+                    args.name.as_deref(),
+                    args.parent_key.as_deref(),
+                )
+                .await,
+        ))
+    }
+
+    /// Handles Zotero tag listing tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_list_tags_impl(
+        &self,
+        args: ListTagsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = args.limit.unwrap_or(100);
+        let client = ZoteroClient::new(&self.state);
+        Ok(super::json_result(client.list_tags(limit).await))
+    }
+
+    /// Handles Zotero tag rename tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_rename_tag_impl(
+        &self,
+        args: RenameTagArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.rename_tag(&args.old_tag, &args.new_tag).await {
+            Ok(count) => {
+                Ok(super::text_success(format!("Renamed tag on {count} items")))
+            }
+            Err(e) => Ok(super::text_error(&e)),
+        }
+    }
+
+    /// Handles Zotero tag deletion tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_delete_tags_impl(
+        &self,
+        args: DeleteTagsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.delete_tags(&args.tags).await {
+            Ok(()) => Ok(super::text_success("Tags deleted")),
+            Err(e) => Ok(super::text_error(&e)),
+        }
     }
 }
 fn find_pdf_path(children: &[ZoteroItem]) -> Option<String> {

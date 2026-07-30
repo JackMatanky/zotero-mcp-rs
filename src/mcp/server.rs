@@ -24,14 +24,18 @@ use crate::{
         },
         chatgpt::{FetchArgs, SearchArgs},
         zotero::{
-            AdvancedSearchArgs, AttachFileArgs, BatchUpdateTagsArgs,
-            CreateCollectionArgs, CreateNoteArgs, EmptyArgs,
-            FindDuplicatesArgs, GetCollectionItemsArgs, GetItemArgs,
-            GetItemChildrenArgs, GetItemFulltextArgs, GetItemMetadataArgs,
-            GetNotesArgs, GetPdfPathArgs, GetRecentArgs, LibraryCoverageArgs,
-            ManageCollectionsArgs, ReadPdfPagesArgs, SearchByCitationKeyArgs,
+            AddByIdentifierArgs, AdvancedSearchArgs, AttachFileArgs,
+            BatchUpdateTagsArgs, CreateAnnotationArgs, CreateCollectionArgs,
+            CreateNoteArgs, DeleteCollectionArgs, DeleteItemArgs,
+            DeleteTagsArgs, EmptyArgs, FindDuplicatesArgs,
+            GetCollectionItemsArgs, GetItemArgs, GetItemChildrenArgs,
+            GetItemFulltextArgs, GetItemMetadataArgs, GetNotesArgs,
+            GetPdfPathArgs, GetRecentArgs, GetUnfiledItemsArgs,
+            LibraryCoverageArgs, ListTagsArgs, ManageCollectionsArgs,
+            ReadPdfPagesArgs, RenameTagArgs, SearchByCitationKeyArgs,
             SearchByTagArgs, SearchCollectionsArgs, SearchItemsArgs,
-            SynthesizeAnnotationsArgs, UpdateItemArgs,
+            SynthesizeAnnotationsArgs, TrashItemArgs, UpdateCollectionArgs,
+            UpdateItemArgs,
         },
     },
     state::AppState,
@@ -436,6 +440,75 @@ impl ZoteroMcpServer {
     }
 
     #[tool(
+        name = "zotero_delete_item",
+        description = "Permanently delete an item (article, note, \
+                       annotation, or attachment) (requires write \
+                       permission)"
+    )]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_delete_item(
+        &self,
+        Parameters(args): Parameters<DeleteItemArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_delete_item_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_trash_item",
+        description = "Move an item to trash, reversible (requires write \
+                       permission)"
+    )]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_trash_item(
+        &self,
+        Parameters(args): Parameters<TrashItemArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_trash_item_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_restore_item",
+        description = "Restore an item from trash (requires write \
+                       permission)"
+    )]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_restore_item(
+        &self,
+        Parameters(args): Parameters<TrashItemArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_restore_item_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_delete_collection",
+        description = "Permanently delete a collection; items inside are \
+                       not deleted (requires write permission)"
+    )]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_delete_collection(
+        &self,
+        Parameters(args): Parameters<DeleteCollectionArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_delete_collection_impl(args).await
+    }
+
+    #[tool(
         name = "zotero_find_duplicates",
         description = "Finds potential duplicate items in library or \
                        collection by matching title or DOI"
@@ -519,6 +592,22 @@ impl ZoteroMcpServer {
     }
 
     #[tool(
+        name = "zotero_get_unfiled_items",
+        description = "List top-level items not in any collection"
+    )]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_unfiled_items(
+        &self,
+        Parameters(args): Parameters<GetUnfiledItemsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_get_unfiled_items_impl(args).await
+    }
+
+    #[tool(
         name = "zotero_synthesize_annotations",
         description = "Extract and synthesize annotations and notes into \
                        structured Markdown"
@@ -533,6 +622,111 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<SynthesizeAnnotationsArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_synthesize_annotations_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_create_annotation",
+        description = "Create a PDF highlight/underline/note annotation on \
+                       an attachment (requires write permission)"
+    )]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_create_annotation(
+        &self,
+        Parameters(args): Parameters<CreateAnnotationArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_create_annotation_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_add_by_identifier",
+        description = "Resolve a DOI, arXiv ID, or ISBN via public metadata \
+                       APIs and add it to the library (returns the existing \
+                       item instead of creating a duplicate if an exact \
+                       title match is already present) (requires write \
+                       permission)"
+    )]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_add_by_identifier(
+        &self,
+        Parameters(args): Parameters<AddByIdentifierArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_add_by_identifier_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_update_collection",
+        description = "Rename and/or move a collection (pass an empty \
+                       string for parent_key to move to the top level) \
+                       (requires write permission)"
+    )]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_update_collection(
+        &self,
+        Parameters(args): Parameters<UpdateCollectionArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_update_collection_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_list_tags",
+        description = "List all tag names in the library"
+    )]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_list_tags(
+        &self,
+        Parameters(args): Parameters<ListTagsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_list_tags_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_rename_tag",
+        description = "Rename a tag across every item in the library that \
+                       has it (requires write permission)"
+    )]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_rename_tag(
+        &self,
+        Parameters(args): Parameters<RenameTagArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_rename_tag_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_delete_tags",
+        description = "Delete up to 50 tags from the entire library \
+                       (requires write permission)"
+    )]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_delete_tags(
+        &self,
+        Parameters(args): Parameters<DeleteTagsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_delete_tags_impl(args).await
     }
 
     // --- Better BibTeX Operations ---
@@ -811,6 +1005,9 @@ mod tests {
                 zotero_api_url,
                 better_bibtex_url: String::new(),
                 better_notes_url: String::new(),
+                crossref_url: String::new(),
+                semantic_scholar_url: String::new(),
+                open_library_url: String::new(),
                 write_enabled: true,
                 ..AppState::from_env()
             }
@@ -859,6 +1056,378 @@ mod tests {
         let res = server
             .zotero_get_recent(Parameters(GetRecentArgs {
                 limit: Some(10),
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn zotero_get_unfiled_items_tool_returns_success() {
+        let items = json!([{
+            "key": "ITEM1",
+            "version": 1,
+            "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle", "title": "Unfiled Item", "collections": [] }
+        }]);
+        let base =
+            mock_server(vec![http_response("200 OK", &items.to_string())]);
+        let server = ZoteroMcpServer::new(zotero_state(base));
+
+        let res = server
+            .zotero_get_unfiled_items(Parameters(GetUnfiledItemsArgs {
+                limit: Some(50),
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn zotero_delete_item_tool_returns_success() {
+        let item = json!({
+            "key": "ITEM1",
+            "version": 1,
+            "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle" }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &item.to_string()),
+            http_response("204 No Content", ""),
+        ]);
+        let server = ZoteroMcpServer::new(zotero_state(base));
+
+        let res = server
+            .zotero_delete_item(Parameters(DeleteItemArgs {
+                item_key: "ITEM1".to_owned(),
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn zotero_trash_item_tool_returns_success() {
+        let item = json!({
+            "key": "ITEM1",
+            "version": 1,
+            "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle" }
+        });
+        let updated = json!({
+            "key": "ITEM1",
+            "version": 2,
+            "data": { "key": "ITEM1", "version": 2, "itemType": "journalArticle", "deleted": true }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &item.to_string()),
+            http_response("200 OK", &updated.to_string()),
+        ]);
+        let server = ZoteroMcpServer::new(zotero_state(base));
+
+        let res = server
+            .zotero_trash_item(Parameters(TrashItemArgs {
+                item_key: "ITEM1".to_owned(),
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn zotero_restore_item_tool_returns_success() {
+        let item = json!({
+            "key": "ITEM1",
+            "version": 2,
+            "data": { "key": "ITEM1", "version": 2, "itemType": "journalArticle", "deleted": true }
+        });
+        let updated = json!({
+            "key": "ITEM1",
+            "version": 3,
+            "data": { "key": "ITEM1", "version": 3, "itemType": "journalArticle", "deleted": false }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &item.to_string()),
+            http_response("200 OK", &updated.to_string()),
+        ]);
+        let server = ZoteroMcpServer::new(zotero_state(base));
+
+        let res = server
+            .zotero_restore_item(Parameters(TrashItemArgs {
+                item_key: "ITEM1".to_owned(),
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn zotero_delete_collection_tool_returns_success() {
+        let collection = json!({
+            "key": "COL1",
+            "version": 1,
+            "data": { "key": "COL1", "name": "Old Collection", "parentCollection": false }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &collection.to_string()),
+            http_response("204 No Content", ""),
+        ]);
+        let server = ZoteroMcpServer::new(zotero_state(base));
+
+        let res = server
+            .zotero_delete_collection(Parameters(DeleteCollectionArgs {
+                collection_key: "COL1".to_owned(),
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn zotero_delete_item_tool_returns_error_when_write_disabled() {
+        let server = ZoteroMcpServer::new(AppState {
+            zotero_api_url: String::new(),
+            better_bibtex_url: String::new(),
+            better_notes_url: String::new(),
+            write_enabled: false,
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_delete_item(Parameters(DeleteItemArgs {
+                item_key: "ITEM1".to_owned(),
+            }))
+            .await
+            .unwrap();
+        assert_eq!(res.is_error, Some(true));
+    }
+
+    #[tokio::test]
+    async fn zotero_create_annotation_tool_returns_success() {
+        let created = json!([{
+            "key": "ANNOT1",
+            "version": 1,
+            "data": { "key": "ANNOT1", "version": 1, "itemType": "annotation", "annotationType": "highlight" }
+        }]);
+        let base =
+            mock_server(vec![http_response("200 OK", &created.to_string())]);
+        let server = ZoteroMcpServer::new(zotero_state(base));
+
+        let res = server
+            .zotero_create_annotation(Parameters(CreateAnnotationArgs {
+                parent_attachment_key: "ATT1".to_owned(),
+                annotation_type: "highlight".to_owned(),
+                text: Some("selected text".to_owned()),
+                comment: None,
+                color: None,
+                page_label: None,
+                position_json: r#"{"pageIndex":0,"rects":[[100,200,300,220]]}"#
+                    .to_owned(),
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn zotero_add_by_identifier_tool_returns_success() {
+        let crossref_body = json!({"message": {
+            "title": ["A Great Paper"],
+            "author": [{"given": "Sam", "family": "McAuthor"}],
+            "published": {"date-parts": [[2021]]},
+            "DOI": "10.1/xyz",
+            "URL": "https://doi.org/10.1/xyz",
+            "container-title": ["Journal of Things"]
+        }});
+        let crossref_base = mock_server(vec![http_response(
+            "200 OK",
+            &crossref_body.to_string(),
+        )]);
+        let created = json!([{
+            "key": "NEWITEM1",
+            "version": 1,
+            "data": { "key": "NEWITEM1", "version": 1, "itemType": "journalArticle", "title": "A Great Paper" }
+        }]);
+        let zotero_base = mock_server(vec![
+            http_response("200 OK", "[]"),
+            http_response("200 OK", &created.to_string()),
+        ]);
+        let server = ZoteroMcpServer::new(AppState {
+            zotero_api_url: zotero_base,
+            better_bibtex_url: String::new(),
+            better_notes_url: String::new(),
+            crossref_url: crossref_base,
+            semantic_scholar_url: String::new(),
+            open_library_url: String::new(),
+            write_enabled: true,
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_add_by_identifier(Parameters(AddByIdentifierArgs {
+                kind: crate::zotero::IdentifierKind::Doi,
+                identifier: "10.1/xyz".to_owned(),
+                collection_key: None,
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn zotero_add_by_identifier_tool_returns_existing_item_when_duplicate_found()
+     {
+        let crossref_body = json!({"message": {
+            "title": ["A Great Paper"],
+            "author": [{"given": "Sam", "family": "McAuthor"}],
+            "published": {"date-parts": [[2021]]},
+            "DOI": "10.1/xyz",
+            "URL": "https://doi.org/10.1/xyz",
+            "container-title": ["Journal of Things"]
+        }});
+        let crossref_base = mock_server(vec![http_response(
+            "200 OK",
+            &crossref_body.to_string(),
+        )]);
+        let existing = json!([{
+            "key": "EXISTING1",
+            "version": 1,
+            "data": { "key": "EXISTING1", "version": 1, "itemType": "journalArticle", "title": "A Great Paper" }
+        }]);
+        let zotero_base =
+            mock_server(vec![http_response("200 OK", &existing.to_string())]);
+        let server = ZoteroMcpServer::new(AppState {
+            zotero_api_url: zotero_base,
+            better_bibtex_url: String::new(),
+            better_notes_url: String::new(),
+            crossref_url: crossref_base,
+            semantic_scholar_url: String::new(),
+            open_library_url: String::new(),
+            write_enabled: true,
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_add_by_identifier(Parameters(AddByIdentifierArgs {
+                kind: crate::zotero::IdentifierKind::Doi,
+                identifier: "10.1/xyz".to_owned(),
+                collection_key: None,
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+        let text = match res.content.first().and_then(|c| c.as_text()) {
+            Some(t) => t.text.clone(),
+            None => String::new(),
+        };
+        assert!(text.contains("EXISTING1"));
+    }
+
+    #[tokio::test]
+    async fn zotero_update_collection_tool_returns_success() {
+        let current = json!({
+            "key": "COL1",
+            "version": 3,
+            "data": { "key": "COL1", "name": "Old Name", "parentCollection": false }
+        });
+        let updated = json!({
+            "key": "COL1",
+            "version": 4,
+            "data": { "key": "COL1", "name": "New Name", "parentCollection": false }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &current.to_string()),
+            http_response("200 OK", &updated.to_string()),
+        ]);
+        let server = ZoteroMcpServer::new(zotero_state(base));
+
+        let res = server
+            .zotero_update_collection(Parameters(UpdateCollectionArgs {
+                collection_key: "COL1".to_owned(),
+                name: Some("New Name".to_owned()),
+                parent_key: None,
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn zotero_list_tags_tool_returns_success() {
+        let tags = json!([{"tag": "quantum", "meta": {"numItems": 3}}]);
+        let base =
+            mock_server(vec![http_response("200 OK", &tags.to_string())]);
+        let server = ZoteroMcpServer::new(zotero_state(base));
+
+        let res = server
+            .zotero_list_tags(Parameters(ListTagsArgs {
+                limit: Some(50),
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn zotero_rename_tag_tool_returns_success() {
+        let items = json!([{
+            "key": "ITEM1",
+            "version": 1,
+            "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle", "tags": [{ "tag": "old_tag" }] }
+        }]);
+        let patched = json!({
+            "key": "ITEM1",
+            "version": 2,
+            "data": { "key": "ITEM1", "version": 2, "itemType": "journalArticle", "tags": [{ "tag": "new_tag" }] }
+        });
+        let base = mock_server(vec![
+            http_response("200 OK", &items.to_string()),
+            http_response("200 OK", &patched.to_string()),
+        ]);
+        let server = ZoteroMcpServer::new(zotero_state(base));
+
+        let res = server
+            .zotero_rename_tag(Parameters(RenameTagArgs {
+                old_tag: "old_tag".to_owned(),
+                new_tag: "new_tag".to_owned(),
+            }))
+            .await
+            .unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn zotero_delete_tags_tool_returns_success() {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+        let addr = listener.local_addr().expect("local addr");
+        std::thread::spawn(move || {
+            let (mut stream, _) =
+                listener.accept().expect("accept version request");
+            let mut buf = [0_u8; 1024];
+            let _ = stream.read(&mut buf);
+            let version_resp = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\
+                                 Content-Type: application/json\r\n\
+                                 Last-Modified-Version: 9\r\n\
+                                 Connection: close\r\n\r\n[]";
+            let _ = stream.write_all(version_resp.as_bytes());
+
+            let (mut stream2, _) =
+                listener.accept().expect("accept delete request");
+            let mut buf2 = [0_u8; 1024];
+            let _ = stream2.read(&mut buf2);
+            let _ = stream2.write_all(
+                "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
+                    .as_bytes(),
+            );
+        });
+        let server =
+            ZoteroMcpServer::new(zotero_state(format!("http://{addr}")));
+
+        let res = server
+            .zotero_delete_tags(Parameters(DeleteTagsArgs {
+                tags: vec!["old_tag".to_owned()],
             }))
             .await
             .unwrap();
