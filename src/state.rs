@@ -37,8 +37,8 @@ pub(crate) struct AppState {
     pub(crate) semantic_scholar_url: String,
     /// Base URL for the Open Library Books API (ISBN resolution).
     pub(crate) open_library_url: String,
-    /// Whether write/mutation operations are allowed.
-    // Write gate defaults to read-only; enabled via ZOTERO_WRITE_ENABLED.
+    /// Whether write/mutation operations are allowed. Defaults to
+    /// read-only; enable by setting `ZOTERO_WRITE_ENABLED`.
     pub(crate) write_enabled: bool,
 }
 
