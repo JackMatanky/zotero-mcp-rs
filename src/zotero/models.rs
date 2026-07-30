@@ -47,6 +47,13 @@ pub(crate) struct ZoteroItemData {
     pub(crate) series_text: Option<String>,
     pub(crate) journal_abbreviation: Option<String>,
     pub(crate) doi: Option<String>,
+    /// Zotero's native citation key field (Zotero 9+; `itemFields.citationKey`
+    /// in Zotero's item schema). Also searchable server-side via Zotero's
+    /// quicksearch as of Zotero 9. Distinct from, and takes precedence over,
+    /// any `Citation Key: ...` line Better `BibTeX` may still write to `extra`
+    /// on libraries that predate native support.
+    #[serde(rename = "citationKey")]
+    pub(crate) citation_key: Option<String>,
     pub(crate) isbn: Option<String>,
     pub(crate) issn: Option<String>,
     pub(crate) url: Option<String>,
@@ -226,5 +233,18 @@ mod tests {
 
         let serialized = serde_json::to_string(&data).unwrap();
         assert!(serialized.contains("\"deleted\":true"));
+    }
+
+    #[test]
+    fn deserializes_native_citation_key_field() {
+        let raw_json = serde_json::json!({
+            "key": "ABC12345",
+            "version": 42,
+            "itemType": "journalArticle",
+            "citationKey": "smith2020deep"
+        });
+
+        let data: ZoteroItemData = serde_json::from_value(raw_json).unwrap();
+        assert_eq!(data.citation_key.as_deref(), Some("smith2020deep"));
     }
 }

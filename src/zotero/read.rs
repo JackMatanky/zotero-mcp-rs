@@ -209,7 +209,14 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Searches items by `citekey` in the extra field or query string.
+    /// Searches items by citation key.
+    ///
+    /// Matches Zotero's native `citationKey` item field first (Zotero 9+;
+    /// authoritative when present, and already part of what `search_items`
+    /// finds server-side via Zotero's quicksearch). Falls back to scanning
+    /// the legacy `extra` field for items with no native citation key --
+    /// libraries still on Zotero <9, or a Better `BibTeX` install that only
+    /// ever wrote `Citation Key: ...` to `extra`.
     ///
     /// # Errors
     ///
@@ -224,6 +231,12 @@ impl ZoteroClient<'_> {
         let items = self.search_items(citekey, None, 20).await?;
         let citekey_lc = citekey.to_lowercase();
         for item in items {
+            if let Some(ref native) = item.data.citation_key {
+                if native.to_lowercase() == citekey_lc {
+                    return Ok(Some(item));
+                }
+                continue;
+            }
             if let Some(ref extra) = item.data.extra {
                 let extra_lc = extra.to_lowercase();
                 if extra_lc.contains(&format!("citation key: {citekey_lc}"))
@@ -437,6 +450,12 @@ fn match_condition(item: &ZoteroItem, cond: &serde_json::Value) -> bool {
             let val_matched = match field {
                 "itemType" | "item_type" => item.data.item_type.to_lowercase(),
                 "doi" => item.data.doi.as_deref().unwrap_or("").to_lowercase(),
+                "citationKey" | "citekey" => item
+                    .data
+                    .citation_key
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_lowercase(),
                 "year" | "date" => {
                     item.data.date.as_deref().unwrap_or("").to_lowercase()
                 }
@@ -689,6 +708,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn search_by_citation_key_matches_native_field() {
+        let items = json!([{
+            "key": "ITEM1",
+            "version": 1,
+            "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Citekey Item", "citationKey": "smith2020deep" }
+        }]);
+        let base =
+            mock_server(vec![http_response("200 OK", &items.to_string())]);
+        let state = test_state(base, false);
+
+        let res = ZoteroClient::new(&state)
+            .search_by_citation_key("smith2020deep")
+            .await
+            .unwrap();
+        assert_eq!(res.expect("item found").key, "ITEM1");
+    }
+
+    #[tokio::test]
+    async fn search_by_citation_key_native_field_takes_precedence_over_stale_extra()
+     {
+        let items = json!([{
+            "key": "ITEM1",
+            "version": 1,
+            "data": {
+                "key": "ITEM1",
+                "itemType": "journalArticle",
+                "title": "Citekey Item",
+                "citationKey": "other2019",
+                "extra": "Citation Key: smith2020deep"
+            }
+        }]);
+        let base =
+            mock_server(vec![http_response("200 OK", &items.to_string())]);
+        let state = test_state(base, false);
+
+        let res = ZoteroClient::new(&state)
+            .search_by_citation_key("smith2020deep")
+            .await
+            .unwrap();
+        assert!(res.is_none());
+    }
+
+    #[tokio::test]
     async fn advanced_search_filters_items_by_conditions() {
         let items = json!([
             {
@@ -708,6 +770,33 @@ mod tests {
 
         let conds = vec![
             json!({"field": "title", "operator": "contains", "value": "quantum"}),
+        ];
+        let res =
+            ZoteroClient::new(&state).advanced_search(conds, 10).await.unwrap();
+        assert_eq!(res.len(), 1);
+        assert_eq!(res.first().expect("item").key, "ITEM1");
+    }
+
+    #[tokio::test]
+    async fn advanced_search_filters_items_by_citation_key() {
+        let items = json!([
+            {
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Quantum Computing", "citationKey": "smith2020deep" }
+            },
+            {
+                "key": "ITEM2",
+                "version": 1,
+                "data": { "key": "ITEM2", "itemType": "book", "title": "Classical Mechanics", "citationKey": "jones2019classical" }
+            }
+        ]);
+        let base =
+            mock_server(vec![http_response("200 OK", &items.to_string())]);
+        let state = test_state(base, false);
+
+        let conds = vec![
+            json!({"field": "citationKey", "operator": "equals", "value": "smith2020deep"}),
         ];
         let res =
             ZoteroClient::new(&state).advanced_search(conds, 10).await.unwrap();
