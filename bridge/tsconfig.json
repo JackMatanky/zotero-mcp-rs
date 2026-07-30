@@ -6,9 +6,7 @@
     "noEmitOnError": true,
     "composite": false,
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
   },
-  "include": [
-    "src/**/*.ts"
-  ]
+  "include": ["src/**/*.ts"],
 }
