@@ -17,7 +17,7 @@ pub(crate) struct JsonRpcRequest<'a, T: Serialize> {
     pub(crate) id: u64,
 }
 
-/// A JSON-RPC 2.0 response envelope, carrying either `result` or `error`.
+/// A JSON-RPC 2.0 response envelope, carrying either `result` payload or [`JsonRpcError`].
 #[derive(Debug, Deserialize)]
 pub(crate) struct JsonRpcResponse<T> {
     /// JSON-RPC version string (expected `"2.0"`).
@@ -39,7 +39,7 @@ pub(crate) struct JsonRpcError {
     pub(crate) data: Option<serde_json::Value>,
 }
 
-/// Maps a Zotero item key to its Better `BibTeX` citation key.
+/// Maps a Zotero item key to its Better `BibTeX` citation key using [`HashMap`].
 pub(crate) type CitekeyMap = HashMap<String, String>;
 
 #[cfg(test)]

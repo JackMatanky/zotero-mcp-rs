@@ -18,7 +18,7 @@ pub(crate) struct BetterNotesClient<'a> {
 }
 
 impl<'a> BetterNotesClient<'a> {
-    /// Creates a Better Notes client borrowing shared [`AppState`].
+    /// Creates a Better Notes client borrowing shared `state` ([`AppState`]).
     pub(crate) fn new(state: &'a AppState) -> Self {
         Self {
             state,
@@ -204,7 +204,7 @@ mod tests {
             }
         }
 
-        /// Formats a minimal JSON HTTP response for fixture servers.
+        /// Formats a minimal JSON HTTP response with `status` and `body` for fixture servers.
         pub(super) fn http_response(status: &str, body: &str) -> String {
             format!(
                 "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
@@ -213,7 +213,7 @@ mod tests {
             )
         }
 
-        /// Runs a one-shot fixture HTTP server and returns its base URL.
+        /// Runs a one-shot fixture HTTP server for `responses` and returns its base URL.
         pub(super) fn mock_server(responses: Vec<String>) -> String {
             let listener =
                 TcpListener::bind("127.0.0.1:0").expect("bind listener");

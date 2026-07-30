@@ -1,25 +1,25 @@
 //! Crate-wide error type unifying failures from every backend.
 //!
 //! [`ZoteroMcpError`] is the single error type returned by every fallible
-//! operation in the crate, built with [`thiserror`] so each variant's
-//! `Display` message doubles as the text surfaced back to MCP clients.
+//! operation in the crate, built with `thiserror` so each variant's `Display`
+//! message doubles as the text surfaced back to MCP clients.
 
 use thiserror::Error;
 
-/// Error returned by any fallible operation against the Zotero Local API,
-/// Better `BibTeX`, Better Notes, or local file system.
+/// Unifies failures from the Zotero Local API, Better `BibTeX`, Better Notes, or
+/// local file system.
 #[derive(Debug, Error)]
 pub(crate) enum ZoteroMcpError {
     /// Network or HTTP transport failure from [`reqwest`].
     #[error("Network error: {0}")]
     Network(#[from] reqwest::Error),
 
-    /// Zotero Local HTTP API responded with non-2xx HTTP `status` code.
+    /// Zotero Local HTTP API responded with a non-2xx status code.
     #[error("Local API error: HTTP {status} - {message}")]
     LocalApi {
-        /// HTTP status code returned by Zotero Local API.
+        /// HTTP status code returned by the Zotero Local API.
         status: u16,
-        /// Error message or body from Zotero Local API.
+        /// Error message or body returned by the Zotero Local API.
         message: String,
     },
 
@@ -36,7 +36,7 @@ pub(crate) enum ZoteroMcpError {
     #[error("PDF extraction error: {0}")]
     PdfExtract(String),
 
-    /// `SQLite` database query or connection failure from [`sqlx`].
+    /// `SQLite` database query or connection failure from `sqlx`.
     #[error("SQLite error: {0}")]
     Sqlite(#[from] sqlx::Error),
 

@@ -8,8 +8,8 @@ use crate::{
 };
 
 impl ZoteroClient<'_> {
-    /// Fetches the `limit` most recently modified library items (notes
-    /// excluded).
+    /// Fetches the `limit` most recently modified library items, excluding
+    /// notes.
     ///
     /// # Errors
     ///
@@ -29,9 +29,13 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Searches library items by `query` (title, creator, year, or
-    /// fulltext), optionally scoped to `collection_key`, returning at most
-    /// `limit` results. Notes are excluded.
+    /// Searches library items matching a query string, excluding notes.
+    ///
+    /// # Arguments
+    ///
+    /// - `query`: Free-text query matching title, creator, year, or fulltext.
+    /// - `collection_key`: Optional collection key to scope the search.
+    /// - `limit`: Maximum number of items to return.
     ///
     /// # Errors
     ///
@@ -62,6 +66,7 @@ impl ZoteroClient<'_> {
     ///
     /// # Errors
     ///
+    /// - [`ZoteroMcpError::NotFound`] if the item does not exist
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
     /// - [`ZoteroMcpError::Network`] if the request fails at the transport
     ///   level
@@ -95,7 +100,7 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Searches collections by `query` matching collection names
+    /// Searches collections by `query`, matching collection names
     /// case-insensitively.
     ///
     /// # Errors
@@ -156,8 +161,8 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Fetches Zotero's indexed fulltext content for `item_key`, or an
-    /// empty string if none has been indexed.
+    /// Fetches Zotero's indexed fulltext content for `item_key`, returning an
+    /// empty string if unindexed.
     ///
     /// # Errors
     ///
@@ -182,7 +187,7 @@ impl ZoteroClient<'_> {
         Ok(content)
     }
 
-    /// Searches items by tag name.
+    /// Searches items by `tag` name, returning at most `limit` items (excluding notes).
     ///
     /// # Errors
     ///
@@ -203,7 +208,7 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Searches items by citation key in `extra` field or query.
+    /// Searches items by `citekey` in the extra field or query string.
     ///
     /// # Errors
     ///
@@ -231,7 +236,7 @@ impl ZoteroClient<'_> {
         Ok(None)
     }
 
-    /// Advanced multi-condition structured search over item fields.
+    /// Executes an advanced multi-condition structured search over item fields.
     ///
     /// # Errors
     ///
@@ -255,8 +260,8 @@ impl ZoteroClient<'_> {
         Ok(results)
     }
 
-    /// Finds potential duplicate items in library or collection by matching
-    /// title or DOI.
+    /// Finds potential duplicate items in the library or optional
+    /// `collection_key` by matching title or DOI.
     ///
     /// # Errors
     ///
@@ -281,7 +286,7 @@ impl ZoteroClient<'_> {
         Ok(find_duplicate_groups(&items))
     }
 
-    /// Computes library or collection coverage statistics (PDF, DOI, Notes).
+    /// Computes library or optional `collection_key` coverage statistics for PDF, DOI, and notes.
     ///
     /// # Errors
     ///
@@ -308,7 +313,7 @@ impl ZoteroClient<'_> {
         Ok(classify_coverage(&flags))
     }
 
-    /// Extracts and synthesizes annotations and notes into structured Markdown.
+    /// Extracts and synthesizes annotations and notes for `item_key` into structured Markdown.
     ///
     /// # Errors
     ///
@@ -343,7 +348,7 @@ impl ZoteroClient<'_> {
         Ok(md)
     }
 
-    /// Lists all tag names in the library, up to `limit`.
+    /// Lists all tag names in the library, returning up to `limit` tags.
     ///
     /// # Errors
     ///
@@ -368,7 +373,7 @@ impl ZoteroClient<'_> {
             .collect())
     }
 
-    /// Lists top-level items not in any collection, up to `limit`.
+    /// Lists top-level items not belonging to any collection, up to `limit` items.
     ///
     /// # Errors
     ///

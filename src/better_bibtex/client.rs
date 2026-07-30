@@ -22,14 +22,14 @@ pub(crate) struct BetterBibtexClient<'a> {
 }
 
 impl<'a> BetterBibtexClient<'a> {
-    /// Creates a Better `BibTeX` client borrowing shared [`AppState`].
+    /// Creates a Better `BibTeX` client borrowing shared `state` ([`AppState`]).
     pub(crate) fn new(state: &'a AppState) -> Self {
         Self {
             state,
         }
     }
 
-    /// Maps `item_keys` to their Better `BibTeX` citation keys.
+    /// Maps `item_keys` to their Better `BibTeX` citation keys in a [`CitekeyMap`].
     ///
     /// Tries the local `SQLite` citekey cache first (fast path, no HTTP round
     /// trip); falls back to the JSON-RPC `item.citationkey` call if the cache
@@ -75,9 +75,13 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("item.export", params).await
     }
 
-    /// Generates a formatted bibliography for `item_keys` using the given
-    /// citation `style` and `locale`, if provided.
+    /// Generates a formatted bibliography for `item_keys`.
     ///
+    /// # Arguments
+    ///
+    /// * `item_keys` - Item keys to include in the bibliography
+    /// * `style` - Optional citation style name
+    /// * `locale` - Optional locale code
     /// # Errors
     ///
     /// - [`BetterBibTeX`] if the JSON-RPC call fails
@@ -147,12 +151,17 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("item.regenerate_key", params).await
     }
 
-    /// Registers an auto-export job that writes `collection_key` to `path`
-    /// using `translator` whenever the collection changes.
+    /// Registers an auto-export job for a collection.
     ///
     /// Mutates Better `BibTeX`'s export configuration; assumes the caller has
     /// already enforced [`AppState::check_write_permission`], and re-checks it
     /// itself before issuing the call.
+    ///
+    /// # Arguments
+    ///
+    /// * `collection_key` - Key of the collection to auto-export
+    /// * `translator` - Export format translator name
+    /// * `path` - Destination file path
     ///
     /// # Errors
     ///
@@ -293,7 +302,7 @@ mod tests {
             }
         }
 
-        /// Formats a minimal JSON HTTP response for fixture servers.
+        /// Formats a minimal JSON HTTP response with `status` and `body` for fixture servers.
         pub(super) fn http_response(status: &str, body: &str) -> String {
             format!(
                 "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
@@ -302,7 +311,7 @@ mod tests {
             )
         }
 
-        /// Runs a one-shot fixture HTTP server and returns its base URL.
+        /// Runs a one-shot fixture HTTP server for `responses` and returns its base URL.
         pub(super) fn mock_server(responses: Vec<String>) -> String {
             let listener =
                 TcpListener::bind("127.0.0.1:0").expect("bind listener");

@@ -22,10 +22,9 @@ impl<'a> ZoteroClient<'a> {
 
     /// Probes the Zotero Local API for availability.
     ///
-    /// Issues a lightweight `items?limit=1` request. Never returns an error:
-    /// connection and non-2xx failures are captured in the returned
-    /// [`LocalApiStatus::error`] field instead of being propagated, so callers
-    /// can always surface a diagnostic result.
+    /// Issues a lightweight `items?limit=1` request. Connection and HTTP status failures
+    /// are captured in the returned [`LocalApiStatus::error`] field rather than being
+    /// propagated as an error.
     pub(crate) async fn check_status(&self) -> LocalApiStatus {
         let url =
             format!("{}/users/0/items?limit=1", self.state.zotero_api_url);
@@ -61,12 +60,15 @@ impl<'a> ZoteroClient<'a> {
         }
     }
 
-    /// Converts non-success Zotero HTTP responses into [`ZoteroMcpError::LocalApi`].
+    /// Converts non-success HTTP responses into a [`ZoteroMcpError`].
+    ///
+    /// Evaluates `resp` and returns it unchanged if successful.
     ///
     /// # Errors
     ///
-    /// Returns [`ZoteroMcpError::LocalApi`] when `resp` is not a successful
-    /// HTTP response.
+    /// - [`LocalApi`] if `resp` status is not a successful HTTP status (non-2xx)
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
     pub(super) async fn ensure_success(
         &self,
         resp: Response,
@@ -80,11 +82,19 @@ impl<'a> ZoteroClient<'a> {
         })
     }
 
-    /// Sends a GET request to `url` and decodes the JSON body.
+    /// Sends a GET request to `url` and decodes the JSON response body.
+    ///
+    /// Returns the decoded payload of type `T`.
     ///
     /// # Errors
     ///
-    /// Returns network, non-success HTTP, or JSON decode failures.
+    /// - [`LocalApi`] if Zotero responds with a non-2xx HTTP status
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body cannot be decoded
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(super) async fn get_json<T: DeserializeOwned>(
         &self,
         url: &str,
@@ -94,11 +104,23 @@ impl<'a> ZoteroClient<'a> {
         Ok(self.ensure_success(resp).await?.json().await?)
     }
 
-    /// Sends a JSON POST request and returns the first item from Zotero's array response.
+    /// Sends a JSON POST request to `url` and returns the first item from the array response.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - Target API endpoint URL
+    /// * `payload` - JSON-serializable request payload
+    /// * `empty_message` - Error message to return if Zotero returns an empty array
     ///
     /// # Errors
     ///
-    /// Returns network, non-success HTTP, JSON decode, or empty-array failures.
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status, or returns an empty array
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body cannot be decoded
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(super) async fn post_json_first<T: DeserializeOwned, P: Serialize>(
         &self,
         url: &str,
@@ -116,14 +138,15 @@ impl<'a> ZoteroClient<'a> {
         })
     }
 
-    /// Sends `DELETE` to `url` with the required `If-Unmodified-Since-Version`
-    /// header, treating any 2xx as success.
+    /// Sends a `DELETE` request to `url` with an `If-Unmodified-Since-Version` header for `version`.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`Network`] if the request fails at the transport level
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
     pub(super) async fn delete(
         &self,
         url: &str,
@@ -138,16 +161,17 @@ impl<'a> ZoteroClient<'a> {
         Ok(())
     }
 
-    /// Fetches the current library version via the `Last-Modified-Version`
-    /// response header on a lightweight `items?limit=1` request.
+    /// Fetches the current library version counter via the `Last-Modified-Version` response header.
+    ///
+    /// Issues a lightweight `items?limit=1` request to inspect response headers.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx
-    ///   status, or the response is missing/has a non-numeric
-    ///   `Last-Modified-Version` header
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status, or the response lacks a valid `Last-Modified-Version` header
+    /// - [`Network`] if the request fails at the transport level
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
     pub(super) async fn get_library_version(
         &self,
     ) -> Result<u64, ZoteroMcpError> {
@@ -171,11 +195,11 @@ impl<'a> ZoteroClient<'a> {
 }
 
 #[cfg(test)]
-/// Test support shared by read and write client modules.
+/// Shared test helpers for Zotero Local API client modules.
 pub(crate) mod tests {
     use super::*;
 
-    /// Fixture builders and raw HTTP mock helpers.
+    /// Fixtures and HTTP mock server for testing.
     pub(crate) mod fixtures {
         use std::{
             io::{Read, Write},
@@ -184,7 +208,7 @@ pub(crate) mod tests {
 
         use super::AppState;
 
-        /// Builds an [`AppState`] fixture for Zotero Local API client tests.
+        /// Builds an [`AppState`] fixture for testing with `zotero_api_url` and `write_enabled`.
         pub(crate) fn test_state(
             zotero_api_url: String,
             write_enabled: bool,
@@ -201,7 +225,7 @@ pub(crate) mod tests {
             }
         }
 
-        /// Formats a minimal JSON HTTP response for fixture servers.
+        /// Formats a minimal HTTP response string with `status` and `body`.
         pub(crate) fn http_response(status: &str, body: &str) -> String {
             format!(
                 "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
@@ -210,7 +234,7 @@ pub(crate) mod tests {
             )
         }
 
-        /// Runs a one-shot fixture HTTP server and returns its base URL.
+        /// Spawns a fixture HTTP server returning `responses` and returns its base URL.
         pub(crate) fn mock_server(responses: Vec<String>) -> String {
             let listener =
                 TcpListener::bind("127.0.0.1:0").expect("bind listener");

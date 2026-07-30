@@ -41,8 +41,8 @@ use crate::{
     state::AppState,
 };
 
-/// The MCP tool router: holds the shared [`AppState`] and implements
-/// [`ServerHandler`], hosting every `#[tool]` method below.
+/// Holds shared [`AppState`] and implements [`ServerHandler`], hosting every
+/// `#[tool]` method below.
 pub(crate) struct ZoteroMcpServer {
     /// Shared configuration and HTTP client state.
     pub(crate) state: AppState,
@@ -132,7 +132,7 @@ impl ServerHandler for ZoteroMcpServer {
     }
 }
 
-/// All `#[tool]` methods stay in this one router impl; keep bodies as one-line forwards.
+/// Hosts all `#[tool]` router forwarder methods.
 #[tool_router]
 impl ZoteroMcpServer {
     // --- Zotero Diagnostics & Status ---
@@ -142,7 +142,6 @@ impl ZoteroMcpServer {
         description = "Check Zotero Local API availability, version, and \
                        connectivity"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -160,7 +159,6 @@ impl ZoteroMcpServer {
         name = "zotero_get_recent",
         description = "Fetch recently modified library items (notes excluded)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -176,7 +174,6 @@ impl ZoteroMcpServer {
         name = "zotero_search_items",
         description = "Search items by title, creator, year, or fulltext query"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -192,7 +189,6 @@ impl ZoteroMcpServer {
         name = "zotero_get_item",
         description = "Fetch a single Zotero item by its key"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -209,7 +205,6 @@ impl ZoteroMcpServer {
         description = "Get metadata for an item as JSON or formatted BibTeX \
                        string"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -225,7 +220,6 @@ impl ZoteroMcpServer {
         name = "zotero_get_collection_items",
         description = "Fetch items inside a specific Zotero collection"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -242,7 +236,6 @@ impl ZoteroMcpServer {
         description = "Get child items (notes, attachments) for a given item \
                        key"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -258,7 +251,6 @@ impl ZoteroMcpServer {
         name = "zotero_get_item_fulltext",
         description = "Get Zotero's indexed fulltext for an item"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -275,7 +267,6 @@ impl ZoteroMcpServer {
         description = "Locate the local PDF file path for an item or its \
                        attachment"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -291,7 +282,6 @@ impl ZoteroMcpServer {
         name = "zotero_read_pdf_pages",
         description = "Extract raw text from specific 1-based pages of a PDF"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -307,7 +297,6 @@ impl ZoteroMcpServer {
         name = "zotero_get_notes",
         description = "Fetch all note child items for a given item key"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -326,7 +315,6 @@ impl ZoteroMcpServer {
         description = "Attach a new note to an item (requires write \
                        permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -343,7 +331,6 @@ impl ZoteroMcpServer {
         description = "Create a new Zotero collection (requires write \
                        permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -359,7 +346,6 @@ impl ZoteroMcpServer {
         name = "zotero_search_collections",
         description = "Search collections by collection name query"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -376,7 +362,6 @@ impl ZoteroMcpServer {
         description = "Add or remove items to/from a collection (requires \
                        write permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -393,7 +378,6 @@ impl ZoteroMcpServer {
         description = "Update fields of an existing item using PATCH \
                        (requires write permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -410,7 +394,6 @@ impl ZoteroMcpServer {
         description = "Attach a file link to a parent item (requires write \
                        permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -427,7 +410,6 @@ impl ZoteroMcpServer {
         description = "Batch add/remove tags across items (requires write \
                        permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -445,7 +427,6 @@ impl ZoteroMcpServer {
                        annotation, or attachment) (requires write \
                        permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -462,7 +443,6 @@ impl ZoteroMcpServer {
         description = "Move an item to trash, reversible (requires write \
                        permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -479,7 +459,6 @@ impl ZoteroMcpServer {
         description = "Restore an item from trash (requires write \
                        permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -496,7 +475,6 @@ impl ZoteroMcpServer {
         description = "Permanently delete a collection; items inside are \
                        not deleted (requires write permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -513,7 +491,6 @@ impl ZoteroMcpServer {
         description = "Finds potential duplicate items in library or \
                        collection by matching title or DOI"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -529,7 +506,6 @@ impl ZoteroMcpServer {
         name = "zotero_search_by_tag",
         description = "Search Zotero items by tag string"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -545,7 +521,6 @@ impl ZoteroMcpServer {
         name = "zotero_search_by_citation_key",
         description = "Search Zotero items by citation key string"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -562,7 +537,6 @@ impl ZoteroMcpServer {
         description = "Advanced multi-condition structured search over item \
                        fields"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -579,7 +553,6 @@ impl ZoteroMcpServer {
         description = "Analyze library or collection statistics for PDF, DOI, \
                        and note coverage"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -595,7 +568,6 @@ impl ZoteroMcpServer {
         name = "zotero_get_unfiled_items",
         description = "List top-level items not in any collection"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -612,7 +584,6 @@ impl ZoteroMcpServer {
         description = "Extract and synthesize annotations and notes into \
                        structured Markdown"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -629,7 +600,6 @@ impl ZoteroMcpServer {
         description = "Create a PDF highlight/underline/note annotation on \
                        an attachment (requires write permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -649,7 +619,6 @@ impl ZoteroMcpServer {
                        title match is already present) (requires write \
                        permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -667,7 +636,6 @@ impl ZoteroMcpServer {
                        string for parent_key to move to the top level) \
                        (requires write permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -683,7 +651,6 @@ impl ZoteroMcpServer {
         name = "zotero_list_tags",
         description = "List all tag names in the library"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -700,7 +667,6 @@ impl ZoteroMcpServer {
         description = "Rename a tag across every item in the library that \
                        has it (requires write permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -717,7 +683,6 @@ impl ZoteroMcpServer {
         description = "Delete up to 50 tags from the entire library \
                        (requires write permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -735,7 +700,6 @@ impl ZoteroMcpServer {
         name = "better_bibtex_get_citekeys",
         description = "Fetch citation keys for Zotero items via Better BibTeX"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -752,7 +716,6 @@ impl ZoteroMcpServer {
         description = "Regenerate citation keys for items via Better BibTeX \
                        (requires write permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -768,7 +731,6 @@ impl ZoteroMcpServer {
         name = "better_bibtex_export_items",
         description = "Export items using a Better BibTeX translator"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -784,7 +746,6 @@ impl ZoteroMcpServer {
         name = "better_bibtex_format_bibliography",
         description = "Format a bibliography for citekeys in a given CSL style"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -801,7 +762,6 @@ impl ZoteroMcpServer {
         description = "Extract citekeys from a LaTeX .aux file via Better \
                        BibTeX"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -817,7 +777,6 @@ impl ZoteroMcpServer {
         name = "better_bibtex_pandoc_filter",
         description = "Process citekeys through Better BibTeX's Pandoc filter"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -834,7 +793,6 @@ impl ZoteroMcpServer {
         description = "Configure auto-export for a collection/library \
                        (requires write permission)"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -850,7 +808,6 @@ impl ZoteroMcpServer {
         name = "better_bibtex_search",
         description = "Search items using Better BibTeX's query engine"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -868,7 +825,6 @@ impl ZoteroMcpServer {
         name = "better_notes_to_markdown",
         description = "Convert a Zotero note item to Markdown via Better Notes"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -885,7 +841,6 @@ impl ZoteroMcpServer {
         description = "Convert Markdown to HTML formatted for Zotero notes \
                        via Better Notes"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -901,7 +856,6 @@ impl ZoteroMcpServer {
         name = "better_notes_run_template",
         description = "Execute a Better Notes template against an item"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -918,7 +872,6 @@ impl ZoteroMcpServer {
         description = "Fetch linked items / note network for a note via \
                        Better Notes"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -935,7 +888,6 @@ impl ZoteroMcpServer {
         description = "Fetch the hierarchical note outline/tree for a note \
                        via Better Notes"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -954,7 +906,6 @@ impl ZoteroMcpServer {
         description = "ChatGPT Connector search tool - search Zotero items by \
                        query"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -971,7 +922,6 @@ impl ZoteroMcpServer {
         description = "ChatGPT Connector fetch tool - get item metadata by \
                        item ID/key"
     )]
-    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend

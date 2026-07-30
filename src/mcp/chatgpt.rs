@@ -1,4 +1,4 @@
-//! MCP tool handlers and argument models for `ChatGPT` connector compatibility tools.
+//! MCP tool handlers and argument models for `ChatGPT` connector compatibility.
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -11,29 +11,30 @@ use crate::{
 
 // --- Argument Schemas ---
 
-/// Arguments for `search` (`ChatGPT` connector compatibility).
+/// Arguments for the `ChatGPT` compatibility `search` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchArgs {
-    /// Search query.
+    /// Search query string.
     pub(crate) query: String,
 }
 
-/// Arguments for `fetch` (`ChatGPT` connector compatibility).
+/// Arguments for the `ChatGPT` compatibility `fetch` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FetchArgs {
-    /// Zotero item key or ID to fetch.
+    /// Zotero item key or identifier to fetch.
     pub(crate) id: String,
 }
 
 // --- Handler Implementations ---
 
 impl ZoteroMcpServer {
-    /// Handles `ChatGPT` connector `search` compatibility calls.
+    /// Executes a `ChatGPT` connector compatibility search using `args`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// - [`ErrorData`] if item search fails at the protocol level
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn chatgpt_search_impl(
         &self,
         args: SearchArgs,
@@ -46,12 +47,13 @@ impl ZoteroMcpServer {
         .await
     }
 
-    /// Handles `ChatGPT` connector `fetch` compatibility calls.
+    /// Fetches Zotero item metadata for `ChatGPT` connector compatibility using `args`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// - [`ErrorData`] if item retrieval fails at the protocol level
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn chatgpt_fetch_impl(
         &self,
         args: FetchArgs,

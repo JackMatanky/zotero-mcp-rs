@@ -5,7 +5,9 @@ use serde::Serialize;
 use crate::{ZoteroMcpServer, zotero::ZoteroClient};
 
 impl ZoteroMcpServer {
-    /// Lists MCP resources exposed by the server.
+    /// Lists MCP resources exposed by the server as a [`ListResourcesResult`].
+    ///
+    /// [`ListResourcesResult`]: rmcp::model::ListResourcesResult
     pub(crate) fn list_resources_impl() -> rmcp::model::ListResourcesResult {
         let raw_resource = rmcp::model::RawResource {
             uri: "zotero://collections".to_owned(),
@@ -24,12 +26,13 @@ impl ZoteroMcpServer {
         }
     }
 
-    /// Reads a single MCP resource by URI.
+    /// Reads a single MCP resource identified by `uri`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// - [`ErrorData`] if `uri` is unrecognized or resource reading fails
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn read_resource_impl(
         &self,
         uri: &str,
@@ -57,7 +60,9 @@ impl ZoteroMcpServer {
         }
     }
 
-    /// Lists MCP prompts exposed by the server.
+    /// Lists MCP prompts exposed by the server as a [`ListPromptsResult`].
+    ///
+    /// [`ListPromptsResult`]: rmcp::model::ListPromptsResult
     pub(crate) fn list_prompts_impl() -> rmcp::model::ListPromptsResult {
         let prompt = rmcp::model::Prompt {
             name: "zotero_literature_review".to_owned(),
@@ -80,11 +85,13 @@ impl ZoteroMcpServer {
         }
     }
 
-    /// Builds an MCP prompt response by prompt name.
+    /// Builds an MCP prompt response for `name` using `arguments`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] if `name` is not a known prompt.
+    /// - [`ErrorData`] if `name` is not a recognized prompt
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) fn get_prompt_impl(
         name: &str,
         arguments: Option<&serde_json::Map<String, serde_json::Value>>,

@@ -21,7 +21,7 @@ pub(crate) struct EmptyArgs {}
 /// Arguments for `zotero_get_recent`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetRecentArgs {
-    /// Number of items to return (default: 10, max: 100).
+    /// Maximum number of items to return (default: 10, max: 100).
     pub(crate) limit: Option<usize>,
 }
 
@@ -32,7 +32,7 @@ pub(crate) struct SearchItemsArgs {
     pub(crate) query: String,
     /// Optional collection key to search within.
     pub(crate) collection_key: Option<String>,
-    /// Maximum number of results to return (default: 20).
+    /// Maximum number of items to return (default: 20).
     pub(crate) limit: Option<usize>,
 }
 
@@ -85,7 +85,7 @@ pub(crate) struct GetPdfPathArgs {
 pub(crate) struct ReadPdfPagesArgs {
     /// Zotero item key or direct file path to PDF.
     pub(crate) item_key_or_path: String,
-    /// 1-based page numbers to extract (e.g. [1, 2, 3]).
+    /// 1-based page numbers to extract (e.g. `[1, 2, 3]`).
     pub(crate) pages: Option<Vec<usize>>,
 }
 
@@ -101,7 +101,7 @@ pub(crate) struct GetNotesArgs {
 /// Arguments for `zotero_create_note`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateNoteArgs {
-    /// Parent item key.
+    /// Key of the parent item.
     pub(crate) parent_item_key: String,
     /// HTML or Markdown content for the note.
     pub(crate) note_content: String,
@@ -112,7 +112,7 @@ pub(crate) struct CreateNoteArgs {
 pub(crate) struct CreateCollectionArgs {
     /// Name of the collection to create.
     pub(crate) name: String,
-    /// Optional key of parent collection.
+    /// Optional key of the parent collection.
     pub(crate) parent_key: Option<String>,
 }
 
@@ -130,7 +130,7 @@ pub(crate) struct ManageCollectionsArgs {
     pub(crate) collection_key: String,
     /// List of item keys to add or remove.
     pub(crate) item_keys: Vec<String>,
-    /// Set to true to remove items instead of adding them.
+    /// Set to `true` to remove items instead of adding them.
     pub(crate) remove: Option<bool>,
 }
 
@@ -146,7 +146,7 @@ pub(crate) struct UpdateItemArgs {
 /// Arguments for `zotero_attach_file`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AttachFileArgs {
-    /// Parent item key.
+    /// Key of the parent item.
     pub(crate) parent_item_key: String,
     /// Display title for the attachment.
     pub(crate) title: String,
@@ -230,7 +230,7 @@ pub(crate) struct DeleteTagsArgs {
 /// Arguments for `zotero_add_by_identifier`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AddByIdentifierArgs {
-    /// `"doi"`, `"arxiv"`, or `"isbn"`.
+    /// Kind of identifier ([`IdentifierKind`](crate::zotero::IdentifierKind): `"doi"`, `"arxiv"`, or `"isbn"`).
     pub(crate) kind: crate::zotero::IdentifierKind,
     /// The DOI, arXiv ID, or ISBN to resolve.
     pub(crate) identifier: String,
@@ -266,8 +266,8 @@ pub(crate) struct SearchByCitationKeyArgs {
 /// Arguments for `zotero_advanced_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AdvancedSearchArgs {
-    /// List of search conditions: [{"field": "title", "operator": "contains",
-    /// "value": "..."}].
+    /// List of search conditions, e.g.
+    /// `[{"field": "title", "operator": "contains", "value": "..."}]`.
     pub(crate) conditions: Vec<serde_json::Value>,
     /// Maximum number of items to return (default: 20).
     pub(crate) limit: Option<usize>,
@@ -301,7 +301,7 @@ pub(crate) struct SynthesizeAnnotationsArgs {
 pub(crate) struct CreateAnnotationArgs {
     /// Key of the parent PDF attachment.
     pub(crate) parent_attachment_key: String,
-    /// `"highlight"`, `"underline"`, or `"note"`.
+    /// Type of annotation: `"highlight"`, `"underline"`, or `"note"`.
     pub(crate) annotation_type: String,
     /// Selected text (required for highlight/underline, omit for note).
     pub(crate) text: Option<String>,
@@ -903,10 +903,11 @@ impl ZoteroMcpServer {
         ))
     }
 
-    /// Handles Zotero add-by-identifier tool calls. Resolves the identifier
-    /// via a public metadata API and creates the item, returning the
-    /// existing item instead if an exact title match is already in the
-    /// library.
+    /// Handles Zotero add-by-identifier tool calls using `args`.
+    ///
+    /// Resolves the identifier via a public metadata API and creates the item,
+    /// returning the existing item instead if an exact title match is already
+    /// present in the library.
     ///
     /// # Errors
     ///

@@ -1,4 +1,4 @@
-//! MCP tool handlers and argument models for Better `BibTeX` tools.
+//! MCP tool handlers and argument models for Better `BibTeX` integration.
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -11,48 +11,48 @@ use crate::{ZoteroMcpServer, better_bibtex::BetterBibtexClient};
 /// Arguments for `better_bibtex_get_citekeys`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetCitekeysArgs {
-    /// List of Zotero item keys.
+    /// Zotero item keys to look up.
     pub(crate) item_keys: Vec<String>,
 }
 
 /// Arguments for `better_bibtex_regenerate_citekeys`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RegenerateKeysArgs {
-    /// List of Zotero item keys to regenerate citekeys for.
+    /// Zotero item keys to regenerate citation keys for.
     pub(crate) item_keys: Vec<String>,
 }
 
 /// Arguments for `better_bibtex_export_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ExportItemsArgs {
-    /// List of Zotero item keys.
+    /// Zotero item keys to export.
     pub(crate) item_keys: Vec<String>,
-    /// Format string (e.g. "bibtex", "biblatex", "csljson").
+    /// Translator format string (e.g. `"bibtex"`, `"biblatex"`, `"csljson"`).
     pub(crate) translator: String,
 }
 
 /// Arguments for `better_bibtex_format_bibliography`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BibliographyArgs {
-    /// List of citation keys.
+    /// Citation keys to format.
     pub(crate) citekeys: Vec<String>,
-    /// CSL style string (e.g. "apa", "ieee").
+    /// Optional CSL style string (e.g. `"apa"`, `"ieee"`).
     pub(crate) style: Option<String>,
 }
 
 /// Arguments for `better_bibtex_scan_aux`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ScanAuxArgs {
-    /// Target collection key to import references into.
+    /// Target Zotero collection key to import references into.
     pub(crate) collection_key: Option<String>,
-    /// Path to the `LaTeX` .aux file.
+    /// Path to the `LaTeX` `.aux` file.
     pub(crate) aux_path: String,
 }
 
 /// Arguments for `better_bibtex_pandoc_filter`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct PandocFilterArgs {
-    /// List of citation keys.
+    /// Citation keys to filter.
     pub(crate) citekeys: Vec<String>,
 }
 
@@ -61,28 +61,29 @@ pub(crate) struct PandocFilterArgs {
 pub(crate) struct AutoexportAddArgs {
     /// Zotero collection key or library ID.
     pub(crate) collection_key: String,
-    /// Destination file path.
+    /// Destination export file path.
     pub(crate) path: String,
-    /// Format (e.g. "bibtex", "biblatex").
+    /// Format translator string (e.g. `"bibtex"`, `"biblatex"`).
     pub(crate) translator: String,
 }
 
 /// Arguments for `better_bibtex_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BetterBibtexSearchArgs {
-    /// Search query.
+    /// Search query string.
     pub(crate) query: String,
 }
 
 // --- Handler Implementations ---
 
 impl ZoteroMcpServer {
-    /// Handles Better `BibTeX` citekey lookup tool calls.
+    /// Retrieves Better `BibTeX` citation keys using `args`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// - [`ErrorData`] if citekey lookup fails at the protocol level
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn better_bibtex_get_citekeys_impl(
         &self,
         args: GetCitekeysArgs,
@@ -93,12 +94,13 @@ impl ZoteroMcpServer {
         Ok(super::json_result(client.get_citekeys(&keys_str).await))
     }
 
-    /// Handles Better `BibTeX` citation key regeneration tool calls.
+    /// Regenerates Better `BibTeX` citation keys using `args`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// - [`ErrorData`] if citekey regeneration fails at the protocol level
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn better_bibtex_regenerate_citekeys_impl(
         &self,
         args: RegenerateKeysArgs,
@@ -114,12 +116,13 @@ impl ZoteroMcpServer {
         }
     }
 
-    /// Handles Better `BibTeX` item export tool calls.
+    /// Exports Zotero items in the requested translator format using `args`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// - [`ErrorData`] if item export fails at the protocol level
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn better_bibtex_export_items_impl(
         &self,
         args: ExportItemsArgs,
@@ -132,12 +135,13 @@ impl ZoteroMcpServer {
         ))
     }
 
-    /// Handles Better `BibTeX` bibliography formatting tool calls.
+    /// Formats a bibliography from citation keys using `args`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// - [`ErrorData`] if bibliography formatting fails at the protocol level
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn better_bibtex_format_bibliography_impl(
         &self,
         args: BibliographyArgs,
@@ -150,12 +154,13 @@ impl ZoteroMcpServer {
         ))
     }
 
-    /// Handles Better `BibTeX` `.aux` import tool calls.
+    /// Imports references from a `LaTeX` `.aux` file using `args`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// - [`ErrorData`] if `.aux` file scanning fails at the protocol level
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn better_bibtex_scan_aux_impl(
         &self,
         args: ScanAuxArgs,
@@ -165,12 +170,13 @@ impl ZoteroMcpServer {
         Ok(super::json_result(client.scan_aux(col, &args.aux_path).await))
     }
 
-    /// Handles Better `BibTeX` Pandoc filter tool calls.
+    /// Processes citation keys through the Better `BibTeX` Pandoc filter using `args`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// - [`ErrorData`] if Pandoc filter processing fails at the protocol level
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn better_bibtex_pandoc_filter_impl(
         &self,
         args: PandocFilterArgs,
@@ -181,12 +187,13 @@ impl ZoteroMcpServer {
         Ok(super::json_result(client.pandoc_filter(&keys_str, true).await))
     }
 
-    /// Handles Better `BibTeX` auto-export registration tool calls.
+    /// Registers a Better `BibTeX` auto-export target using `args`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// - [`ErrorData`] if auto-export configuration fails at the protocol level
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn better_bibtex_autoexport_add_impl(
         &self,
         args: AutoexportAddArgs,
@@ -203,12 +210,13 @@ impl ZoteroMcpServer {
         }
     }
 
-    /// Handles Better `BibTeX` search tool calls.
+    /// Searches Better `BibTeX` items using `args`.
     ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// - [`ErrorData`] if search fails at the protocol level
+    ///
+    /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn better_bibtex_search_impl(
         &self,
         args: BetterBibtexSearchArgs,

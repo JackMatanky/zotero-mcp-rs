@@ -10,8 +10,8 @@ use crate::errors::ZoteroMcpError;
 /// `page_numbers`.
 ///
 /// `pdf-extract` delimits pages with a form-feed (`\x0C`) character in its
-/// output. When `page_numbers` is `Some`, only the matching 1-based pages
-/// are kept, rejoined with `\x0C`; when it's `None`, the full extracted text
+/// output. When `page_numbers` is [`Some`], only the matching 1-based pages
+/// are kept, rejoined with `\x0C`; when it's [`None`], the full extracted text
 /// is returned unmodified. An empty `page_numbers` slice returns an empty
 /// string.
 ///
@@ -41,8 +41,8 @@ pub(crate) fn extract_pdf_pages(
 /// Filters form-feed-delimited `full_text` down to `page_numbers` (1-based).
 ///
 /// Pages extracted by `pdf-extract` are delimited by a form-feed (`\x0C`)
-/// character. `page_numbers` of `None` returns `full_text` unmodified; an
-/// empty (but `Some`) slice returns an empty string; out-of-range page
+/// character. `page_numbers` of [`None`] returns `full_text` unmodified; an
+/// empty (but [`Some`]) slice returns an empty string; out-of-range page
 /// numbers are silently skipped.
 fn filter_pages(full_text: &str, page_numbers: Option<&[usize]>) -> String {
     let Some(pages) = page_numbers else {

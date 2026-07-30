@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::{errors::ZoteroMcpError, state::AppState};
 
-/// Public-identifier kind for [`resolve_metadata`].
+/// Public-identifier type for [`resolve_metadata`].
 #[derive(Debug, Clone, Copy, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum IdentifierKind {
@@ -13,18 +13,28 @@ pub(crate) enum IdentifierKind {
     Isbn,
 }
 
-/// Resolves `id` against the metadata API for `kind` and returns a Zotero
-/// item-creation payload (`itemType`, `title`, `creators`, `date`, `url`,
-/// and `DOI`/`ISBN` as applicable).
+/// Resolves a public identifier against its metadata API and returns a Zotero item draft.
+///
+/// Returns a JSON object structured for Zotero item creation (`itemType`, `title`,
+/// `creators`, `date`, `url`, and `DOI`/`ISBN` as applicable).
+///
+/// # Arguments
+///
+/// * `state` - Shared application state containing metadata API endpoints
+/// * `kind` - Public identifier type ([`IdentifierKind::Doi`], [`IdentifierKind::Arxiv`], or [`IdentifierKind::Isbn`])
+/// * `id` - Identifier string to resolve
 ///
 /// # Errors
 ///
-/// - [`ZoteroMcpError::NotFound`] if the identifier doesn't resolve (404
-///   from the source API)
-/// - [`ZoteroMcpError::LocalApi`] if the source API responds with another
-///   non-2xx status
-/// - [`ZoteroMcpError::Network`] if the request fails at the transport level
-/// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+/// - [`NotFound`] if the identifier cannot be resolved (404 status from the source API)
+/// - [`LocalApi`] if the source API responds with a non-2xx status other than 404
+/// - [`Network`] if the request fails at the transport level
+/// - [`Json`] if the metadata response cannot be decoded
+///
+/// [`NotFound`]: ZoteroMcpError::NotFound
+/// [`LocalApi`]: ZoteroMcpError::LocalApi
+/// [`Network`]: ZoteroMcpError::Network
+/// [`Json`]: ZoteroMcpError::Json
 pub(crate) async fn resolve_metadata(
     state: &AppState,
     kind: IdentifierKind,
@@ -56,9 +66,10 @@ async fn fetch_json(
     Ok(resp.json().await?)
 }
 
-/// Reads a nested string field via a `.`-separated path of object keys
-/// and/or array indices, without ever indexing a [`serde_json::Value`]
-/// directly (which can panic on the wrong shape).
+/// Reads a nested string field via a `.`-separated path of object keys and array indices.
+///
+/// Returns `Some(&str)` if `path` resolves to a string value in `value`, or `None` otherwise.
+/// Avoids indexing a [`serde_json::Value`] directly to prevent panics on unexpected JSON shapes.
 fn str_at<'a>(value: &'a serde_json::Value, path: &[&str]) -> Option<&'a str> {
     let mut current = value;
     for segment in path {

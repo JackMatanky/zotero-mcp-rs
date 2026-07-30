@@ -38,18 +38,18 @@ pub(crate) struct AppState {
     /// Base URL for the Open Library Books API (ISBN resolution).
     pub(crate) open_library_url: String,
     /// Whether write/mutation operations are allowed.
-    // ponytail: write gate defaults to read-only; enabled via
-    // ZOTERO_WRITE_ENABLED
+    // Write gate defaults to read-only; enabled via ZOTERO_WRITE_ENABLED.
     pub(crate) write_enabled: bool,
 }
 
 impl AppState {
     /// Builds an [`AppState`] from environment variables.
     ///
-    /// Reads `ZOTERO_API_URL`, `BETTER_BIBTEX_URL`, and `BETTER_NOTES_URL`
-    /// for the backend URLs, defaulting to the standard local Zotero plugin
-    /// ports when unset, and `ZOTERO_WRITE_ENABLED` (`"1"` or `"true"`,
-    /// case-insensitive) to opt into write operations, defaulting to
+    /// Reads `ZOTERO_API_URL`, `BETTER_BIBTEX_URL`, `BETTER_NOTES_URL`,
+    /// `CROSSREF_URL`, `SEMANTIC_SCHOLAR_URL`, and `OPEN_LIBRARY_URL` for the
+    /// backend URLs (defaulting to standard local Zotero plugin ports or
+    /// public endpoints when unset), and `ZOTERO_WRITE_ENABLED` (`"1"` or
+    /// `"true"`, case-insensitive) to opt into write operations, defaulting to
     /// read-only. Returns the constructed [`AppState`].
     pub(crate) fn from_env() -> Self {
         let client = Client::builder()
@@ -100,9 +100,10 @@ impl AppState {
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`] if `write_enabled` is `false` (the default)
+    /// - [`PermissionDenied`] if [`write_enabled`] is `false` (the default)
     ///
     /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`write_enabled`]: Self::write_enabled
     pub(crate) fn check_write_permission(&self) -> Result<(), ZoteroMcpError> {
         if self.write_enabled {
             Ok(())
@@ -120,7 +121,7 @@ impl AppState {
     /// Retries on `5xx` responses, HTTP 429, timeouts, and connect errors, up
     /// to [`RETRY_MAX_ATTEMPTS`] attempts total, doubling the delay from
     /// [`RETRY_BASE_DELAY`] and capping it at [`RETRY_MAX_DELAY`]. Returns
-    /// the first response that isn't a transient failure, or the final
+    /// the first [`Response`] that isn't a transient failure, or the final
     /// attempt's outcome once retries are exhausted.
     ///
     /// # Errors

@@ -33,7 +33,7 @@ impl ZoteroClient<'_> {
             .await
     }
 
-    /// Creates a new collection with name `name` and optional `parent_key`.
+    /// Creates a new collection with `name` and optional `parent_key`.
     ///
     /// # Errors
     ///
@@ -66,7 +66,13 @@ impl ZoteroClient<'_> {
         .await
     }
 
-    /// Adds or removes item keys to/from a collection.
+    /// Adds or removes items to or from a collection.
+    ///
+    /// # Arguments
+    ///
+    /// - `collection_key`: Key of the target collection.
+    /// - `item_keys`: Slice of item keys to add or remove.
+    /// - `remove`: `true` to remove items from the collection, `false` to add them.
     ///
     /// # Errors
     ///
@@ -98,7 +104,7 @@ impl ZoteroClient<'_> {
         Ok(())
     }
 
-    /// Updates fields of an existing item using `PATCH`.
+    /// Updates fields of an existing item identified by `item_key` with JSON `fields`.
     ///
     /// # Errors
     ///
@@ -127,6 +133,13 @@ impl ZoteroClient<'_> {
     }
 
     /// Attaches a linked file to a parent item.
+    ///
+    /// # Arguments
+    ///
+    /// - `parent_item_key`: Key of the parent item to attach to.
+    /// - `title`: Display title of the attachment.
+    /// - `file_path_or_url`: File path or URL of the file to link.
+    /// - `content_type`: Optional MIME content type (defaults to `"application/pdf"`).
     ///
     /// # Errors
     ///
@@ -161,7 +174,13 @@ impl ZoteroClient<'_> {
         .await
     }
 
-    /// Batch updates tags across multiple items by adding and/or removing tags.
+    /// Batch updates tags across multiple items by adding and removing tags.
+    ///
+    /// # Arguments
+    ///
+    /// - `item_keys`: Slice of item keys to update.
+    /// - `add_tags`: Slice of tag names to add.
+    /// - `remove_tags`: Slice of tag names to remove.
     ///
     /// # Errors
     ///
@@ -212,12 +231,17 @@ impl ZoteroClient<'_> {
         self.delete(&url, item.version).await
     }
 
-    /// Sets the item's trash state via `PATCH {"deleted": deleted}`. `true`
+    /// Sets the item's trash state for `item_key`. Setting `deleted` to `true`
     /// moves the item to trash; `false` restores it.
     ///
     /// # Errors
     ///
-    /// Same as [`Self::update_item`], which this delegates to.
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::NotFound`] if the item does not exist
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn set_item_deleted(
         &self,
         item_key: &str,
@@ -232,12 +256,16 @@ impl ZoteroClient<'_> {
         .await
     }
 
-    /// Permanently deletes the collection identified by `collection_key`.
-    /// Items inside it are not deleted.
+    /// Permanently deletes the collection identified by `collection_key`. Items
+    /// inside the collection are not deleted.
     ///
     /// # Errors
     ///
-    /// Same variants as [`Self::delete_item`].
+    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
     pub(crate) async fn delete_collection(
         &self,
         collection_key: &str,
@@ -256,12 +284,17 @@ impl ZoteroClient<'_> {
         self.delete(&url, collection.version).await
     }
 
-    /// Creates a PDF annotation (highlight, underline, or note) attached to
-    /// `parent_attachment_key`. `annotation_type` is `"highlight"`,
-    /// `"underline"`, or `"note"`. `position_json` is the raw Zotero
-    /// `annotationPosition` JSON string (e.g.
-    /// `{"pageIndex":0,"rects":[[100,200,300,220]]}`), passed through
-    /// opaquely.
+    /// Creates a PDF annotation attached to `parent_attachment_key`.
+    ///
+    /// # Arguments
+    ///
+    /// - `parent_attachment_key`: Key of the parent PDF attachment.
+    /// - `annotation_type`: Type of annotation (`"highlight"`, `"underline"`, or `"note"`).
+    /// - `text`: Optional selected text for highlight or underline.
+    /// - `comment`: Optional user comment text.
+    /// - `color`: Optional CSS hex color string (defaults to `"#ffd400"`).
+    /// - `page_label`: Optional page label string.
+    /// - `position_json`: Raw Zotero `annotationPosition` JSON string.
     ///
     /// # Errors
     ///
@@ -269,8 +302,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
     /// - [`ZoteroMcpError::Network`] if the request fails at the transport
     ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded, or
-    ///   `position_json` is not valid JSON
+    /// - [`ZoteroMcpError::Json`] if `position_json` is invalid or response decoding fails
     #[allow(
         clippy::too_many_arguments,
         reason = "mirrors Zotero's flat annotation field set; grouping into a struct would only move the same fields one layer down"
@@ -326,10 +358,13 @@ impl ZoteroClient<'_> {
             .await
     }
 
-    /// Renames and/or moves a collection. `name` renames when `Some`.
-    /// `parent_key`, when `Some("")`, moves the collection to the top
-    /// level; when `Some(key)`, reparents it under `key`; when `None`,
-    /// leaves the parent untouched.
+    /// Renames and/or moves a collection identified by `collection_key`.
+    ///
+    /// # Arguments
+    ///
+    /// - `collection_key`: Key of the collection to update.
+    /// - `name`: Optional new name for the collection.
+    /// - `parent_key`: Optional parent key; pass `Some("")` to move to top level.
     ///
     /// # Errors
     ///
@@ -387,8 +422,7 @@ impl ZoteroClient<'_> {
         }
     }
 
-    /// Renames a tag across every item in the library that has it (removes
-    /// the old tag, adds the new one, on each matching item).
+    /// Renames tag `old_tag` to `new_tag` across every item in the library.
     ///
     /// # Errors
     ///
@@ -419,7 +453,7 @@ impl ZoteroClient<'_> {
         Ok(count)
     }
 
-    /// Deletes up to 50 tags from the entire library in one request.
+    /// Deletes up to 50 `tags` from the entire library in a single request.
     ///
     /// # Errors
     ///
