@@ -5,8 +5,8 @@ use serde_json::Value;
 
 use crate::{
     better_notes::models::{
-        MarkdownResponse, NoteItemResponse, NoteTreeResponse,
-        RelationsResponse, TemplateResponse,
+        BetterNotesFormat, MarkdownResponse, NoteItemResponse,
+        NoteTreeResponse, RelationsResponse, TemplateResponse,
     },
     errors::ZoteroMcpError,
     state::AppState,
@@ -26,8 +26,8 @@ impl<'a> BetterNotesClient<'a> {
         }
     }
 
-    /// Converts a note to Markdown, either by `item_key` (an existing Zotero
-    /// note) or raw `html`.
+    /// Converts an existing Zotero note to Markdown through the Better Notes
+    /// bridge.
     ///
     /// # Errors
     ///
@@ -37,11 +37,12 @@ impl<'a> BetterNotesClient<'a> {
     pub(crate) async fn to_markdown(
         &self,
         item_key: Option<&ItemKey>,
-        html: Option<&str>,
+        format: Option<BetterNotesFormat>,
     ) -> Result<String, ZoteroMcpError> {
+        let format = format.map(BetterNotesFormat::as_str);
         let payload = serde_json::json!({
             "itemKey": item_key,
-            "html": html,
+            "html": format,
         });
         let res: MarkdownResponse =
             self.post_json("/notes/to-markdown", payload).await?;

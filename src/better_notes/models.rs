@@ -1,8 +1,39 @@
 //! Response shapes returned by the Better Notes bridge's HTTP endpoints.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::zotero::ItemKey;
+
+/// Output format for Better Notes note export.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
+    Deserialize,
+    Serialize,
+    JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum BetterNotesFormat {
+    /// Return Markdown content.
+    #[default]
+    Markdown,
+    /// Return HTML content.
+    Html,
+}
+
+impl BetterNotesFormat {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Markdown => "markdown",
+            Self::Html => "html",
+        }
+    }
+}
 
 /// Response body of the Markdown-conversion endpoints.
 #[derive(Debug, Serialize, Deserialize)]

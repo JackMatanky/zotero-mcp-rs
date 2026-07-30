@@ -5,7 +5,9 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::{
-    ZoteroMcpServer, better_notes::BetterNotesClient, zotero::ItemKey,
+    ZoteroMcpServer,
+    better_notes::{BetterNotesClient, BetterNotesFormat},
+    zotero::ItemKey,
 };
 
 // --- Argument Schemas ---
@@ -17,7 +19,7 @@ pub(crate) struct ToMarkdownArgs {
     pub(crate) item_key: ItemKey,
     /// Output format (`"html"` or `"markdown"`), defaulting to `"markdown"`
     /// when [`None`].
-    pub(crate) format: Option<String>,
+    pub(crate) format: Option<BetterNotesFormat>,
 }
 
 /// Arguments for importing Markdown into a Better Notes note.
@@ -67,9 +69,8 @@ impl ZoteroMcpServer {
         args: ToMarkdownArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterNotesClient::new(&self.state);
-        let format = args.format.as_deref();
         Ok(super::text_result(
-            client.to_markdown(Some(&args.item_key), format).await,
+            client.to_markdown(Some(&args.item_key), args.format).await,
         ))
     }
 

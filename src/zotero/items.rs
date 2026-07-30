@@ -36,7 +36,7 @@ pub(crate) struct AnnotationDraft {
     pub(crate) comment: Option<String>,
     pub(crate) color: Option<String>,
     pub(crate) page_label: Option<String>,
-    pub(crate) position_json: String,
+    pub(crate) position: serde_json::Value,
 }
 
 /// Action for setting an item's trash state.
@@ -317,15 +317,13 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
     /// - [`ZoteroMcpError::Network`] if the request fails at the transport
     ///   level
-    /// - [`ZoteroMcpError::Json`] if `position_json` is invalid or response
-    ///   decoding fails
+    /// - [`ZoteroMcpError::Json`] if response decoding fails
     pub(crate) async fn create_annotation(
         &self,
         draft: AnnotationDraft,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let position: serde_json::Value =
-            serde_json::from_str(&draft.position_json)?;
+        let position = draft.position;
         let url = format!("{}/users/0/items", self.state.zotero_api_url);
         let payload = serde_json::json!([{
             "itemType": ItemType::Annotation,

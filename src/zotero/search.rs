@@ -12,6 +12,7 @@
 //! - [`ZoteroClient::advanced_search`] - Multi-condition search using
 //!   [`SearchCondition`], [`SearchField`], and [`SearchOperator`]
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -23,7 +24,7 @@ use crate::{
 };
 
 /// Searchable item field in structured searches.
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum SearchField {
     Title,
@@ -39,7 +40,9 @@ pub(crate) enum SearchField {
 }
 
 /// Comparison operator in structured searches.
-#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(
+    Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize, JsonSchema,
+)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum SearchOperator {
     #[default]
@@ -52,7 +55,7 @@ pub(crate) enum SearchOperator {
 }
 
 /// Structured search condition matching a specific item field.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub(crate) struct SearchCondition {
     pub(crate) field: SearchField,
     #[serde(default)]

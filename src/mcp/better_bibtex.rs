@@ -7,7 +7,7 @@ use serde::Deserialize;
 use crate::{
     ZoteroMcpServer,
     better_bibtex::BetterBibtexClient,
-    zotero::{CollectionKey, ItemKey},
+    zotero::{CitationKey, CollectionKey, ItemKey},
 };
 
 // --- Argument Schemas ---
@@ -39,7 +39,7 @@ pub(crate) struct ExportItemsArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BibliographyArgs {
     /// Citation keys to format.
-    pub(crate) citekeys: Vec<String>,
+    pub(crate) citekeys: Vec<CitationKey>,
     /// Optional CSL style string (e.g. `"apa"`, `"ieee"`).
     pub(crate) style: Option<String>,
 }
@@ -57,7 +57,7 @@ pub(crate) struct ScanAuxArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct PandocFilterArgs {
     /// Citation keys to filter.
-    pub(crate) citekeys: Vec<String>,
+    pub(crate) citekeys: Vec<CitationKey>,
 }
 
 /// Arguments for `better_bibtex_autoexport_add`.
@@ -152,7 +152,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
         let keys_str: Vec<&str> =
-            args.citekeys.iter().map(String::as_str).collect();
+            args.citekeys.iter().map(CitationKey::as_str).collect();
         Ok(super::text_result(
             client.bibliography(&keys_str, args.style.as_deref(), None).await,
         ))
@@ -189,7 +189,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
         let keys_str: Vec<&str> =
-            args.citekeys.iter().map(String::as_str).collect();
+            args.citekeys.iter().map(CitationKey::as_str).collect();
         Ok(super::json_result(client.pandoc_filter(&keys_str, true).await))
     }
 

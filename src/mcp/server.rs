@@ -1166,8 +1166,7 @@ mod tests {
                 comment: None,
                 color: None,
                 page_label: None,
-                position_json: r#"{"pageIndex":0,"rects":[[100,200,300,220]]}"#
-                    .to_owned(),
+                position: json!({"pageIndex": 0, "rects": [[100, 200, 300, 220]]}),
             }))
             .await
             .unwrap();
@@ -1333,8 +1332,8 @@ mod tests {
 
         let res = server
             .zotero_rename_tag(Parameters(RenameTagArgs {
-                old_tag: "old_tag".to_owned(),
-                new_tag: "new_tag".to_owned(),
+                old_tag: "old_tag".into(),
+                new_tag: "new_tag".into(),
             }))
             .await
             .unwrap();
@@ -1375,7 +1374,7 @@ mod tests {
 
         let res = server
             .zotero_delete_tags(Parameters(DeleteTagsArgs {
-                tags: vec!["old_tag".to_owned()],
+                tags: vec!["old_tag".into()],
             }))
             .await
             .unwrap();

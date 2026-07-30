@@ -20,6 +20,19 @@ use crate::{
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct EmptyArgs {}
 
+/// Output format for `zotero_get_item_metadata`.
+#[derive(
+    Copy, Clone, Debug, Default, Eq, PartialEq, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum MetadataFormat {
+    /// Return Zotero item metadata as JSON.
+    #[default]
+    Json,
+    /// Return item metadata as Better BibTeX.
+    Bibtex,
+}
+
 // --- Zotero Read Operations ---
 
 /// Arguments for `zotero_get_recent`.
@@ -53,7 +66,7 @@ pub(crate) struct GetItemMetadataArgs {
     /// Zotero item key.
     pub(crate) item_key: ItemKey,
     /// Format: `"json"` or `"bibtex"` (default: `"json"`).
-    pub(crate) format: Option<String>,
+    pub(crate) format: Option<MetadataFormat>,
 }
 
 /// Arguments for `zotero_get_collection_items`.
@@ -166,9 +179,9 @@ pub(crate) struct BatchUpdateTagsArgs {
     /// List of item keys.
     pub(crate) item_keys: Vec<ItemKey>,
     /// Tags to add.
-    pub(crate) add_tags: Option<Vec<String>>,
+    pub(crate) add_tags: Option<Vec<TagName>>,
     /// Tags to remove.
-    pub(crate) remove_tags: Option<Vec<String>>,
+    pub(crate) remove_tags: Option<Vec<TagName>>,
 }
 
 /// Arguments for `zotero_delete_item`.
@@ -217,16 +230,16 @@ pub(crate) struct ListTagsArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RenameTagArgs {
     /// Existing tag name.
-    pub(crate) old_tag: String,
+    pub(crate) old_tag: TagName,
     /// New tag name.
-    pub(crate) new_tag: String,
+    pub(crate) new_tag: TagName,
 }
 
 /// Arguments for `zotero_delete_tags`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteTagsArgs {
     /// Tag names to delete from the library (up to 50).
-    pub(crate) tags: Vec<String>,
+    pub(crate) tags: Vec<TagName>,
 }
 
 // --- Zotero Identifier Lookup ---
@@ -255,8 +268,8 @@ pub(crate) struct FindDuplicatesArgs {
 /// Arguments for `zotero_search_by_tag`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchByTagArgs {
-    /// Tag string to search for.
-    pub(crate) tag: String,
+    /// Tag name to search for.
+    pub(crate) tag: TagName,
     /// Maximum number of items to return (default: 20).
     pub(crate) limit: Option<usize>,
 }
@@ -264,8 +277,8 @@ pub(crate) struct SearchByTagArgs {
 /// Arguments for `zotero_search_by_citation_key`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchByCitationKeyArgs {
-    /// Citation key string to match.
-    pub(crate) citekey: String,
+    /// Citation key to match.
+    pub(crate) citekey: CitationKey,
 }
 
 /// Arguments for `zotero_advanced_search`.
@@ -273,7 +286,7 @@ pub(crate) struct SearchByCitationKeyArgs {
 pub(crate) struct AdvancedSearchArgs {
     /// List of search conditions, e.g.
     /// `[{"field": "title", "operator": "contains", "value": "..."}]`.
-    pub(crate) conditions: Vec<serde_json::Value>,
+    pub(crate) conditions: Vec<SearchCondition>,
     /// Maximum number of items to return (default: 20).
     pub(crate) limit: Option<usize>,
 }
@@ -316,9 +329,9 @@ pub(crate) struct CreateAnnotationArgs {
     pub(crate) color: Option<String>,
     /// Optional PDF page label where the annotation appears.
     pub(crate) page_label: Option<String>,
-    /// Raw Zotero `annotationPosition` JSON string, e.g.
+    /// Raw Zotero `annotationPosition` JSON object, e.g.
     /// `{"pageIndex":0,"rects":[[100,200,300,220]]}`.
-    pub(crate) position_json: String,
+    pub(crate) position: serde_json::Value,
 }
 
 // --- Handler Implementations ---
@@ -398,8 +411,7 @@ impl ZoteroMcpServer {
         &self,
         args: GetItemMetadataArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let format = args.format.as_deref().unwrap_or("json");
-        if format.eq_ignore_ascii_case("bibtex") {
+        if args.format.unwrap_or_default() == MetadataFormat::Bibtex {
             let bbt_client =
                 crate::better_bibtex::BetterBibtexClient::new(&self.state);
             Ok(super::text_result(
@@ -698,18 +710,8 @@ impl ZoteroMcpServer {
         args: BatchUpdateTagsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        let add: Vec<TagName> = args
-            .add_tags
-            .unwrap_or_default()
-            .into_iter()
-            .map(TagName::from)
-            .collect();
-        let rem: Vec<TagName> = args
-            .remove_tags
-            .unwrap_or_default()
-            .into_iter()
-            .map(TagName::from)
-            .collect();
+        let add = args.add_tags.unwrap_or_default();
+        let rem = args.remove_tags.unwrap_or_default();
         match client.batch_update_tags(&args.item_keys, &add, &rem).await {
             Ok(count) => Ok(super::text_success(format!(
                 "Batch updated tags on {count} items"
@@ -814,8 +816,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let limit = args.limit.unwrap_or(20);
         let client = ZoteroClient::new(&self.state);
-        let tag = TagName::from(args.tag);
-        Ok(super::json_result(client.search_by_tag(&tag, limit).await))
+        Ok(super::json_result(client.search_by_tag(&args.tag, limit).await))
     }
 
     /// Handles Zotero citation-key search tool calls.
@@ -829,8 +830,9 @@ impl ZoteroMcpServer {
         args: SearchByCitationKeyArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        let citekey = CitationKey::from(args.citekey);
-        Ok(super::json_result(client.search_by_citation_key(&citekey).await))
+        Ok(super::json_result(
+            client.search_by_citation_key(&args.citekey).await,
+        ))
     }
 
     /// Handles Zotero structured search tool calls.
@@ -845,12 +847,9 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let limit = args.limit.unwrap_or(20);
         let client = ZoteroClient::new(&self.state);
-        let conditions: Vec<SearchCondition> = args
-            .conditions
-            .into_iter()
-            .filter_map(|v| serde_json::from_value(v).ok())
-            .collect();
-        Ok(super::json_result(client.advanced_search(conditions, limit).await))
+        Ok(super::json_result(
+            client.advanced_search(args.conditions, limit).await,
+        ))
     }
 
     /// Handles Zotero library coverage analysis tool calls.
@@ -918,7 +917,7 @@ impl ZoteroMcpServer {
             comment: args.comment,
             color: args.color,
             page_label: args.page_label,
-            position_json: args.position_json,
+            position: args.position,
         };
         Ok(super::json_result(client.create_annotation(draft).await))
     }
@@ -1017,8 +1016,8 @@ impl ZoteroMcpServer {
         args: RenameTagArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        let old_tag = TagName::from(args.old_tag);
-        let new_tag = TagName::from(args.new_tag);
+        let old_tag = args.old_tag;
+        let new_tag = args.new_tag;
         match client.rename_tag(&old_tag, &new_tag).await {
             Ok(count) => {
                 Ok(super::text_success(format!("Renamed tag on {count} items")))
@@ -1038,8 +1037,7 @@ impl ZoteroMcpServer {
         args: DeleteTagsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        let tags: Vec<TagName> =
-            args.tags.into_iter().map(TagName::from).collect();
+        let tags = args.tags;
         match client.delete_tags(&tags).await {
             Ok(()) => Ok(super::text_success("Tags deleted")),
             Err(e) => Ok(super::text_error(&e)),
