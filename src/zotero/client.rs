@@ -203,12 +203,10 @@ impl<'a> ZoteroClient<'a> {
 }
 
 #[cfg(test)]
-/// Shared test helpers for Zotero Local API client modules.
-pub(crate) mod tests {
+mod tests {
     use super::*;
 
-    /// Fixtures and HTTP mock server for testing.
-    pub(crate) mod fixtures {
+    mod fixtures {
         use std::{
             io::{Read, Write},
             net::TcpListener,
@@ -218,7 +216,7 @@ pub(crate) mod tests {
 
         /// Builds an [`AppState`] fixture for testing with `zotero_api_url` and
         /// `write_enabled`.
-        pub(crate) fn test_state(
+        pub(super) fn test_state(
             zotero_api_url: String,
             write_enabled: bool,
         ) -> AppState {
@@ -235,7 +233,7 @@ pub(crate) mod tests {
         }
 
         /// Formats a minimal HTTP response string with `status` and `body`.
-        pub(crate) fn http_response(status: &str, body: &str) -> String {
+        pub(super) fn http_response(status: &str, body: &str) -> String {
             format!(
                 "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
                  application/json\r\nConnection: close\r\n\r\n{body}",
@@ -243,9 +241,27 @@ pub(crate) mod tests {
             )
         }
 
+        /// Formats an HTTP response string with additional header lines.
+        pub(super) fn http_response_with_headers(
+            status: &str,
+            headers: &[(&str, &str)],
+            body: &str,
+        ) -> String {
+            let mut header_text = String::new();
+            for (name, val) in headers {
+                header_text.push_str(&format!("{name}: {val}\r\n"));
+            }
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\n{header_text}Connection: \
+                 close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
         /// Spawns a fixture HTTP server returning `responses` and returns its
         /// base URL.
-        pub(crate) fn mock_server(responses: Vec<String>) -> String {
+        pub(super) fn mock_server(responses: Vec<String>) -> String {
             let listener =
                 TcpListener::bind("127.0.0.1:0").expect("bind listener");
             let addr = listener.local_addr().expect("local addr");
@@ -295,10 +311,100 @@ pub(crate) mod tests {
                 Some("HTTP status 500 Internal Server Error".to_owned())
             );
         }
+
+        #[tokio::test]
+        async fn returns_online_false_on_connection_failure() {
+            let state = test_state("http://127.0.0.1:1".to_owned(), false);
+
+            let status = ZoteroClient::new(&state).check_status().await;
+
+            assert!(!status.online);
+            assert!(status.error.is_some());
+        }
+    }
+
+    mod ensure_success {
+        use super::{
+            fixtures::{http_response, mock_server, test_state},
+            *,
+        };
+
+        #[tokio::test]
+        async fn returns_response_when_status_is_success() {
+            let base = mock_server(vec![http_response("200 OK", "{}")]);
+            let state = test_state(base.clone(), false);
+
+            let resp =
+                state.client.get(&format!("{base}/test")).send().await.unwrap();
+            let result = ZoteroClient::new(&state).ensure_success(resp).await;
+
+            assert!(result.is_ok());
+        }
+
+        #[tokio::test]
+        async fn returns_local_api_error_when_status_is_non_2xx() {
+            let base = mock_server(vec![http_response(
+                "400 Bad Request",
+                "error details",
+            )]);
+            let state = test_state(base.clone(), false);
+
+            let resp =
+                state.client.get(&format!("{base}/test")).send().await.unwrap();
+            let err = ZoteroClient::new(&state)
+                .ensure_success(resp)
+                .await
+                .unwrap_err();
+
+            if let ZoteroMcpError::LocalApi {
+                status,
+                message,
+            } = err
+            {
+                assert_eq!(status, 400);
+                assert_eq!(message, "error details");
+            } else {
+                panic!("expected LocalApi error variant");
+            }
+        }
+    }
+
+    mod post_json_first {
+        use serde_json::json;
+
+        use super::{
+            fixtures::{http_response, mock_server, test_state},
+            *,
+        };
+
+        #[tokio::test]
+        async fn returns_local_api_error_when_array_is_empty() {
+            let base = mock_server(vec![http_response("200 OK", "[]")]);
+            let state = test_state(base.clone(), true);
+
+            let err = ZoteroClient::new(&state)
+                .post_json_first::<serde_json::Value, _>(
+                    &format!("{base}/items"),
+                    &json!({}),
+                    "No item created",
+                )
+                .await
+                .unwrap_err();
+
+            if let ZoteroMcpError::LocalApi {
+                status,
+                message,
+            } = err
+            {
+                assert_eq!(status, 500);
+                assert_eq!(message, "No item created");
+            } else {
+                panic!("expected LocalApi error variant");
+            }
+        }
     }
 
     mod delete {
-
         use super::{
             fixtures::{http_response, mock_server, test_state},
             *,
@@ -333,32 +439,24 @@ pub(crate) mod tests {
     }
 
     mod get_library_version {
-        use std::{
-            io::{Read, Write},
-            net::TcpListener,
-        };
-
         use pretty_assertions::assert_eq;
 
-        use super::{fixtures::test_state, *};
+        use super::{
+            fixtures::{
+                http_response, http_response_with_headers, mock_server,
+                test_state,
+            },
+            *,
+        };
 
         #[tokio::test]
         async fn reads_last_modified_version_header() {
-            let listener =
-                TcpListener::bind("127.0.0.1:0").expect("bind listener");
-            let addr = listener.local_addr().expect("local addr");
-            std::thread::spawn(move || {
-                let (mut stream, _) =
-                    listener.accept().expect("accept connection");
-                let mut buf = [0_u8; 1024];
-                let _ = stream.read(&mut buf);
-                let response = "HTTP/1.1 200 OK\r\nContent-Length: \
-                                2\r\nContent-Type: \
-                                application/json\r\nLast-Modified-Version: \
-                                42\r\nConnection: close\r\n\r\n[]";
-                let _ = stream.write_all(response.as_bytes());
-            });
-            let state = test_state(format!("http://{addr}"), false);
+            let base = mock_server(vec![http_response_with_headers(
+                "200 OK",
+                &[("Last-Modified-Version", "42")],
+                "[]",
+            )]);
+            let state = test_state(base, false);
 
             let version =
                 ZoteroClient::new(&state).get_library_version().await.unwrap();
@@ -367,9 +465,24 @@ pub(crate) mod tests {
         }
 
         #[tokio::test]
-        async fn errors_when_header_missing() {
-            let base = fixtures::mock_server(vec![fixtures::http_response(
-                "200 OK", "[]",
+        async fn returns_error_when_header_missing() {
+            let base = mock_server(vec![http_response("200 OK", "[]")]);
+            let state = test_state(base, false);
+
+            let err = ZoteroClient::new(&state)
+                .get_library_version()
+                .await
+                .unwrap_err();
+
+            assert!(matches!(err, ZoteroMcpError::LocalApi { .. }));
+        }
+
+        #[tokio::test]
+        async fn returns_error_when_header_is_not_a_number() {
+            let base = mock_server(vec![http_response_with_headers(
+                "200 OK",
+                &[("Last-Modified-Version", "not_a_num")],
+                "[]",
             )]);
             let state = test_state(base, false);
 

@@ -510,536 +510,727 @@ fn diff_tags(
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
     use serde_json::json;
 
-    use super::{
-        super::client::tests::fixtures::{
-            http_response, mock_server, test_state,
-        },
-        *,
-    };
+    use super::*;
 
-    #[tokio::test]
-    async fn create_note_rejects_when_write_is_disabled() {
-        let state = test_state(String::new(), false);
-        let err = ZoteroClient::new(&state)
-            .create_note(&"PARENT1".into(), "note body")
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
-    }
-
-    #[tokio::test]
-    async fn create_note_returns_created_item_on_success() {
-        let created = json!([{
-            "key": "NOTE1",
-            "version": 1,
-            "data": { "key": "NOTE1", "version": 1, "itemType": "note", "note": "note body" }
-        }]);
-        let base =
-            mock_server(vec![http_response("200 OK", &created.to_string())]);
-        let state = test_state(base, true);
-
-        let item = ZoteroClient::new(&state)
-            .create_note(&"PARENT1".into(), "note body")
-            .await
-            .unwrap();
-        assert_eq!(item.key, "NOTE1");
-    }
-
-    #[tokio::test]
-    async fn create_collection_returns_created_collection_on_success() {
-        let created = json!([{
-            "key": "COL1",
-            "version": 1,
-            "data": { "key": "COL1", "name": "New Collection", "parentCollection": "false" }
-        }]);
-        let base =
-            mock_server(vec![http_response("200 OK", &created.to_string())]);
-        let state = test_state(base, true);
-
-        let col = ZoteroClient::new(&state)
-            .create_collection("New Collection", None)
-            .await
-            .unwrap();
-        assert_eq!(col.key, "COL1");
-    }
-
-    #[tokio::test]
-    async fn manage_collection_items_adds_and_removes() {
-        let base = mock_server(vec![
-            http_response("200 OK", ""),
-            http_response("200 OK", ""),
-        ]);
-        let state = test_state(base, true);
-
-        let res_add = ZoteroClient::new(&state)
-            .manage_collection_items(
-                &"COL1".into(),
-                &["ITEM1".into(), "ITEM2".into()],
-                false,
-            )
-            .await;
-        assert!(res_add.is_ok());
-
-        let res_rem = ZoteroClient::new(&state)
-            .manage_collection_items(&"COL1".into(), &["ITEM1".into()], true)
-            .await;
-        assert!(res_rem.is_ok());
-    }
-
-    #[tokio::test]
-    async fn update_item_updates_fields() {
-        let item = json!({
-            "key": "ITEM1",
-            "version": 2,
-            "data": { "key": "ITEM1", "version": 2, "itemType": "journalArticle", "title": "Updated Title" }
-        });
-        let base =
-            mock_server(vec![http_response("200 OK", &item.to_string())]);
-        let state = test_state(base, true);
-
-        let res = ZoteroClient::new(&state)
-            .update_item(&"ITEM1".into(), json!({"title": "Updated Title"}))
-            .await
-            .unwrap();
-        assert_eq!(res.key, "ITEM1");
-    }
-
-    #[tokio::test]
-    async fn attach_file_link_creates_attachment() {
-        let created = json!([{
-            "key": "ATT1",
-            "version": 1,
-            "data": { "key": "ATT1", "version": 1, "itemType": "attachment", "title": "PDF Attachment" }
-        }]);
-        let base =
-            mock_server(vec![http_response("200 OK", &created.to_string())]);
-        let state = test_state(base, true);
-
-        let item = ZoteroClient::new(&state)
-            .attach_file_link(
-                &"ITEM1".into(),
-                "PDF Attachment",
-                "/path/file.pdf",
-                None,
-            )
-            .await
-            .unwrap();
-        assert_eq!(item.key, "ATT1");
-    }
-
-    #[tokio::test]
-    async fn batch_update_tags_updates_tags_across_items() {
-        let item = json!({
-            "key": "ITEM1",
-            "version": 1,
-            "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle", "title": "Paper", "tags": [{ "tag": "old_tag" }] }
-        });
-        let updated = json!({
-            "key": "ITEM1",
-            "version": 2,
-            "data": { "key": "ITEM1", "version": 2, "itemType": "journalArticle", "title": "Paper", "tags": [{ "tag": "new_tag" }] }
-        });
-        let base = mock_server(vec![
-            http_response("200 OK", &item.to_string()),
-            http_response("200 OK", &updated.to_string()),
-        ]);
-        let state = test_state(base, true);
-
-        let count = ZoteroClient::new(&state)
-            .batch_update_tags(&["ITEM1".into()], &["new_tag".to_owned()], &[
-                "old_tag".to_owned(),
-            ])
-            .await
-            .unwrap();
-        assert_eq!(count, 1);
-    }
-
-    #[tokio::test]
-    async fn delete_item_rejects_when_write_is_disabled() {
-        let state = test_state(String::new(), false);
-        let err = ZoteroClient::new(&state)
-            .delete_item(&"ITEM1".into())
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
-    }
-
-    #[tokio::test]
-    async fn delete_item_deletes_after_fetching_current_version() {
-        let item = json!({
-            "key": "ITEM1",
-            "version": 7,
-            "data": { "key": "ITEM1", "version": 7, "itemType": "journalArticle" }
-        });
-        let base = mock_server(vec![
-            http_response("200 OK", &item.to_string()),
-            http_response("204 No Content", ""),
-        ]);
-        let state = test_state(base, true);
-
-        let result =
-            ZoteroClient::new(&state).delete_item(&"ITEM1".into()).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn set_item_deleted_true_marks_item_trashed() {
-        let item = json!({
-            "key": "ITEM1",
-            "version": 7,
-            "data": { "key": "ITEM1", "version": 7, "itemType": "journalArticle" }
-        });
-        let updated = json!({
-            "key": "ITEM1",
-            "version": 8,
-            "data": { "key": "ITEM1", "version": 8, "itemType": "journalArticle", "deleted": true }
-        });
-        let base = mock_server(vec![
-            http_response("200 OK", &item.to_string()),
-            http_response("200 OK", &updated.to_string()),
-        ]);
-        let state = test_state(base, true);
-
-        let trashed = ZoteroClient::new(&state)
-            .set_item_deleted(&"ITEM1".into(), true)
-            .await
-            .unwrap();
-        assert!(trashed.data.deleted);
-    }
-
-    #[tokio::test]
-    async fn set_item_deleted_false_restores_item() {
-        let item = json!({
-            "key": "ITEM1",
-            "version": 8,
-            "data": { "key": "ITEM1", "version": 8, "itemType": "journalArticle", "deleted": true }
-        });
-        let updated = json!({
-            "key": "ITEM1",
-            "version": 9,
-            "data": { "key": "ITEM1", "version": 9, "itemType": "journalArticle", "deleted": false }
-        });
-        let base = mock_server(vec![
-            http_response("200 OK", &item.to_string()),
-            http_response("200 OK", &updated.to_string()),
-        ]);
-        let state = test_state(base, true);
-
-        let restored = ZoteroClient::new(&state)
-            .set_item_deleted(&"ITEM1".into(), false)
-            .await
-            .unwrap();
-        assert!(!restored.data.deleted);
-    }
-
-    #[tokio::test]
-    async fn delete_collection_rejects_when_write_is_disabled() {
-        let state = test_state(String::new(), false);
-        let err = ZoteroClient::new(&state)
-            .delete_collection(&"COL1".into())
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
-    }
-
-    #[tokio::test]
-    async fn delete_collection_deletes_after_fetching_current_version() {
-        let collection = json!({
-            "key": "COL1",
-            "version": 3,
-            "data": { "key": "COL1", "name": "Old Collection", "parentCollection": false }
-        });
-        let base = mock_server(vec![
-            http_response("200 OK", &collection.to_string()),
-            http_response("204 No Content", ""),
-        ]);
-        let state = test_state(base, true);
-
-        let result =
-            ZoteroClient::new(&state).delete_collection(&"COL1".into()).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn create_annotation_rejects_when_write_is_disabled() {
-        let state = test_state(String::new(), false);
-        let err = ZoteroClient::new(&state)
-            .create_annotation(
-                &"ATT1".into(),
-                AnnotationType::Highlight,
-                Some("selected text"),
-                None,
-                None,
-                None,
-                r#"{"pageIndex":0,"rects":[[100,200,300,220]]}"#,
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
-    }
-
-    #[tokio::test]
-    async fn create_annotation_returns_created_item_on_success() {
-        let created = json!([{
-            "key": "ANNOT1",
-            "version": 1,
-            "data": { "key": "ANNOT1", "version": 1, "itemType": "annotation", "annotationType": "highlight" }
-        }]);
-        let base =
-            mock_server(vec![http_response("200 OK", &created.to_string())]);
-        let state = test_state(base, true);
-
-        let item = ZoteroClient::new(&state)
-            .create_annotation(
-                &"ATT1".into(),
-                AnnotationType::Highlight,
-                Some("selected text"),
-                None,
-                None,
-                None,
-                r#"{"pageIndex":0,"rects":[[100,200,300,220]]}"#,
-            )
-            .await
-            .unwrap();
-        assert_eq!(item.key, "ANNOT1");
-    }
-
-    #[tokio::test]
-    async fn create_annotation_rejects_invalid_position_json() {
-        let state = test_state(mock_server(vec![]), true);
-
-        let err = ZoteroClient::new(&state)
-            .create_annotation(
-                &"ATT1".into(),
-                AnnotationType::Highlight,
-                Some("selected text"),
-                None,
-                None,
-                None,
-                "not json",
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ZoteroMcpError::Json(_)));
-    }
-
-    #[tokio::test]
-    async fn create_item_from_metadata_rejects_when_write_is_disabled() {
-        let state = test_state(String::new(), false);
-        let err = ZoteroClient::new(&state)
-            .create_item_from_metadata(ItemDraft {
-                item_type: ItemType::Book,
-                title: "A Book".to_owned(),
-                ..ItemDraft::default()
-            })
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
-    }
-
-    #[tokio::test]
-    async fn create_item_from_metadata_returns_created_item() {
-        let created = json!([{
-            "key": "NEWITEM1",
-            "version": 1,
-            "data": { "key": "NEWITEM1", "version": 1, "itemType": "book", "title": "A Book" }
-        }]);
-        let base =
-            mock_server(vec![http_response("200 OK", &created.to_string())]);
-        let state = test_state(base, true);
-
-        let item = ZoteroClient::new(&state)
-            .create_item_from_metadata(ItemDraft {
-                item_type: ItemType::Book,
-                title: "A Book".to_owned(),
-                ..ItemDraft::default()
-            })
-            .await
-            .unwrap();
-        assert_eq!(item.key, "NEWITEM1");
-    }
-
-    #[tokio::test]
-    async fn update_collection_rejects_when_write_is_disabled() {
-        let state = test_state(String::new(), false);
-        let err = ZoteroClient::new(&state)
-            .update_collection(&"COL1".into(), Some("New Name"), None)
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
-    }
-
-    #[tokio::test]
-    async fn update_collection_renames_when_name_given() {
-        let current = json!({
-            "key": "COL1",
-            "version": 3,
-            "data": { "key": "COL1", "name": "Old Name", "parentCollection": false }
-        });
-        let updated = json!({
-            "key": "COL1",
-            "version": 4,
-            "data": { "key": "COL1", "name": "New Name", "parentCollection": false }
-        });
-        let base = mock_server(vec![
-            http_response("200 OK", &current.to_string()),
-            http_response("200 OK", &updated.to_string()),
-        ]);
-        let state = test_state(base, true);
-
-        let collection = ZoteroClient::new(&state)
-            .update_collection(&"COL1".into(), Some("New Name"), None)
-            .await
-            .unwrap();
-        assert_eq!(collection.data.name, "New Name");
-    }
-
-    #[tokio::test]
-    async fn update_collection_reparents_when_parent_key_given() {
-        let current = json!({
-            "key": "COL1",
-            "version": 3,
-            "data": { "key": "COL1", "name": "Old Name", "parentCollection": false }
-        });
-        let updated = json!({
-            "key": "COL1",
-            "version": 4,
-            "data": { "key": "COL1", "name": "Old Name", "parentCollection": "PARENT1" }
-        });
-        let base = mock_server(vec![
-            http_response("200 OK", &current.to_string()),
-            http_response("200 OK", &updated.to_string()),
-        ]);
-        let state = test_state(base, true);
-
-        let collection = ZoteroClient::new(&state)
-            .update_collection(&"COL1".into(), None, Some(&"PARENT1".into()))
-            .await
-            .unwrap();
-        assert_eq!(collection.data.parent_collection, Some(json!("PARENT1")));
-    }
-
-    #[tokio::test]
-    async fn update_collection_moves_to_top_level_when_parent_key_is_empty_string()
-     {
-        let current = json!({
-            "key": "COL1",
-            "version": 3,
-            "data": { "key": "COL1", "name": "Old Name", "parentCollection": "PARENT1" }
-        });
-        let updated = json!({
-            "key": "COL1",
-            "version": 4,
-            "data": { "key": "COL1", "name": "Old Name", "parentCollection": false }
-        });
-        let base = mock_server(vec![
-            http_response("200 OK", &current.to_string()),
-            http_response("200 OK", &updated.to_string()),
-        ]);
-        let state = test_state(base, true);
-
-        let collection = ZoteroClient::new(&state)
-            .update_collection(&"COL1".into(), None, Some(&"".into()))
-            .await
-            .unwrap();
-        assert_eq!(collection.data.parent_collection, Some(json!(false)));
-    }
-
-    #[tokio::test]
-    async fn rename_tag_rejects_when_write_is_disabled() {
-        let state = test_state(String::new(), false);
-        let err = ZoteroClient::new(&state)
-            .rename_tag("old_tag", "new_tag")
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
-    }
-
-    #[tokio::test]
-    async fn rename_tag_swaps_tag_across_matching_items() {
-        let items = json!([
-            {
-                "key": "ITEM1",
-                "version": 1,
-                "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle", "tags": [{ "tag": "old_tag" }] }
-            },
-            {
-                "key": "ITEM2",
-                "version": 1,
-                "data": { "key": "ITEM2", "version": 1, "itemType": "journalArticle", "tags": [{ "tag": "old_tag" }] }
-            }
-        ]);
-        let patch1 = json!({
-            "key": "ITEM1",
-            "version": 2,
-            "data": { "key": "ITEM1", "version": 2, "itemType": "journalArticle", "tags": [{ "tag": "new_tag" }] }
-        });
-        let patch2 = json!({
-            "key": "ITEM2",
-            "version": 2,
-            "data": { "key": "ITEM2", "version": 2, "itemType": "journalArticle", "tags": [{ "tag": "new_tag" }] }
-        });
-        let base = mock_server(vec![
-            http_response("200 OK", &items.to_string()),
-            http_response("200 OK", &patch1.to_string()),
-            http_response("200 OK", &patch2.to_string()),
-        ]);
-        let state = test_state(base, true);
-
-        let count = ZoteroClient::new(&state)
-            .rename_tag("old_tag", "new_tag")
-            .await
-            .unwrap();
-        assert_eq!(count, 2);
-    }
-
-    #[tokio::test]
-    async fn delete_tags_rejects_when_write_is_disabled() {
-        let state = test_state(String::new(), false);
-        let err = ZoteroClient::new(&state)
-            .delete_tags(&["old_tag".to_owned()])
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
-    }
-
-    #[tokio::test]
-    async fn delete_tags_sends_joined_tag_query_and_succeeds() {
+    mod fixtures {
         use std::{
             io::{Read, Write},
             net::TcpListener,
         };
 
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
-        let addr = listener.local_addr().expect("local addr");
-        std::thread::spawn(move || {
-            let (mut stream, _) =
-                listener.accept().expect("accept version request");
-            let mut buf = [0_u8; 1024];
-            let _ = stream.read(&mut buf);
-            let version_resp = "HTTP/1.1 200 OK\r\nContent-Length: \
-                                2\r\nContent-Type: \
-                                application/json\r\nLast-Modified-Version: \
-                                9\r\nConnection: close\r\n\r\n[]";
-            let _ = stream.write_all(version_resp.as_bytes());
+        use crate::state::AppState;
 
-            let (mut stream2, _) =
-                listener.accept().expect("accept delete request");
-            let mut buf2 = [0_u8; 1024];
-            let _ = stream2.read(&mut buf2);
-            let _ = stream2.write_all(
-                "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
-                    .as_bytes(),
+        pub(super) fn test_state(
+            zotero_api_url: String,
+            write_enabled: bool,
+        ) -> AppState {
+            AppState {
+                zotero_api_url,
+                better_bibtex_url: String::new(),
+                better_notes_url: String::new(),
+                crossref_url: String::new(),
+                semantic_scholar_url: String::new(),
+                open_library_url: String::new(),
+                write_enabled,
+                ..AppState::from_env()
+            }
+        }
+
+        pub(super) fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        pub(super) fn http_response_with_headers(
+            status: &str,
+            headers: &[(&str, &str)],
+            body: &str,
+        ) -> String {
+            let mut header_text = String::new();
+            for (name, val) in headers {
+                header_text.push_str(&format!("{name}: {val}\r\n"));
+            }
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\n{header_text}Connection: \
+                 close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        pub(super) fn mock_server(responses: Vec<String>) -> String {
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind listener");
+            let addr = listener.local_addr().expect("local addr");
+            std::thread::spawn(move || {
+                for response in responses {
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
+                    let mut buf = [0_u8; 1024];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            });
+            format!("http://{addr}")
+        }
+    }
+
+    use fixtures::*;
+
+    mod create_note {
+        use super::*;
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            let state = test_state(String::new(), false);
+            let err = ZoteroClient::new(&state)
+                .create_note(&"PARENT1".into(), "note body")
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn returns_created_item_on_success() {
+            let created = json!([{
+                "key": "NOTE1",
+                "version": 1,
+                "data": { "key": "NOTE1", "version": 1, "itemType": "note", "note": "note body" }
+            }]);
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &created.to_string(),
+            )]);
+            let state = test_state(base, true);
+
+            let item = ZoteroClient::new(&state)
+                .create_note(&"PARENT1".into(), "note body")
+                .await
+                .unwrap();
+            assert_eq!(item.key, "NOTE1");
+        }
+    }
+
+    mod create_collection {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            let state = test_state(String::new(), false);
+            let err = ZoteroClient::new(&state)
+                .create_collection("New Collection", None)
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn returns_created_collection_on_success() {
+            let created = json!([{
+                "key": "COL1",
+                "version": 1,
+                "data": { "key": "COL1", "name": "New Collection", "parentCollection": "false" }
+            }]);
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &created.to_string(),
+            )]);
+            let state = test_state(base, true);
+
+            let col = ZoteroClient::new(&state)
+                .create_collection("New Collection", None)
+                .await
+                .unwrap();
+            assert_eq!(col.key, "COL1");
+        }
+    }
+
+    mod manage_collection_items {
+        use super::*;
+
+        #[tokio::test]
+        async fn adds_items_to_collection() {
+            let base = mock_server(vec![http_response("200 OK", "")]);
+            let state = test_state(base, true);
+
+            let result = ZoteroClient::new(&state)
+                .manage_collection_items(
+                    &"COL1".into(),
+                    &["ITEM1".into(), "ITEM2".into()],
+                    false,
+                )
+                .await;
+            assert!(result.is_ok());
+        }
+
+        #[tokio::test]
+        async fn removes_items_from_collection() {
+            let base = mock_server(vec![http_response("200 OK", "")]);
+            let state = test_state(base, true);
+
+            let result = ZoteroClient::new(&state)
+                .manage_collection_items(
+                    &"COL1".into(),
+                    &["ITEM1".into()],
+                    true,
+                )
+                .await;
+            assert!(result.is_ok());
+        }
+    }
+
+    mod update_item {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            let state = test_state(String::new(), false);
+            let err = ZoteroClient::new(&state)
+                .update_item(&"ITEM1".into(), json!({"title": "Updated Title"}))
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn updates_fields() {
+            let item = json!({
+                "key": "ITEM1",
+                "version": 2,
+                "data": { "key": "ITEM1", "version": 2, "itemType": "journalArticle", "title": "Updated Title" }
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &item.to_string())]);
+            let state = test_state(base, true);
+
+            let res = ZoteroClient::new(&state)
+                .update_item(&"ITEM1".into(), json!({"title": "Updated Title"}))
+                .await
+                .unwrap();
+            assert_eq!(res.key, "ITEM1");
+        }
+    }
+
+    mod attach_file_link {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn creates_attachment() {
+            let created = json!([{
+                "key": "ATT1",
+                "version": 1,
+                "data": { "key": "ATT1", "version": 1, "itemType": "attachment", "title": "PDF Attachment" }
+            }]);
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &created.to_string(),
+            )]);
+            let state = test_state(base, true);
+
+            let item = ZoteroClient::new(&state)
+                .attach_file_link(
+                    &"ITEM1".into(),
+                    "PDF Attachment",
+                    "/path/file.pdf",
+                    None,
+                )
+                .await
+                .unwrap();
+            assert_eq!(item.key, "ATT1");
+        }
+    }
+
+    mod batch_update_tags {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn updates_tags_across_items() {
+            let item = json!({
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle", "title": "Paper", "tags": [{ "tag": "old_tag" }] }
+            });
+            let updated = json!({
+                "key": "ITEM1",
+                "version": 2,
+                "data": { "key": "ITEM1", "version": 2, "itemType": "journalArticle", "title": "Paper", "tags": [{ "tag": "new_tag" }] }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &item.to_string()),
+                http_response("200 OK", &updated.to_string()),
+            ]);
+            let state = test_state(base, true);
+
+            let count = ZoteroClient::new(&state)
+                .batch_update_tags(
+                    &["ITEM1".into()],
+                    &["new_tag".to_owned()],
+                    &["old_tag".to_owned()],
+                )
+                .await
+                .unwrap();
+            assert_eq!(count, 1);
+        }
+    }
+
+    mod delete_item {
+        use super::*;
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            let state = test_state(String::new(), false);
+            let err = ZoteroClient::new(&state)
+                .delete_item(&"ITEM1".into())
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn deletes_after_fetching_current_version() {
+            let item = json!({
+                "key": "ITEM1",
+                "version": 7,
+                "data": { "key": "ITEM1", "version": 7, "itemType": "journalArticle" }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &item.to_string()),
+                http_response("204 No Content", ""),
+            ]);
+            let state = test_state(base, true);
+
+            let result =
+                ZoteroClient::new(&state).delete_item(&"ITEM1".into()).await;
+            assert!(result.is_ok());
+        }
+    }
+
+    mod set_item_deleted {
+        use super::*;
+
+        #[tokio::test]
+        async fn marks_item_trashed_when_true() {
+            let item = json!({
+                "key": "ITEM1",
+                "version": 7,
+                "data": { "key": "ITEM1", "version": 7, "itemType": "journalArticle" }
+            });
+            let updated = json!({
+                "key": "ITEM1",
+                "version": 8,
+                "data": { "key": "ITEM1", "version": 8, "itemType": "journalArticle", "deleted": true }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &item.to_string()),
+                http_response("200 OK", &updated.to_string()),
+            ]);
+            let state = test_state(base, true);
+
+            let trashed = ZoteroClient::new(&state)
+                .set_item_deleted(&"ITEM1".into(), true)
+                .await
+                .unwrap();
+            assert!(trashed.data.deleted);
+        }
+
+        #[tokio::test]
+        async fn restores_item_when_false() {
+            let item = json!({
+                "key": "ITEM1",
+                "version": 8,
+                "data": { "key": "ITEM1", "version": 8, "itemType": "journalArticle", "deleted": true }
+            });
+            let updated = json!({
+                "key": "ITEM1",
+                "version": 9,
+                "data": { "key": "ITEM1", "version": 9, "itemType": "journalArticle", "deleted": false }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &item.to_string()),
+                http_response("200 OK", &updated.to_string()),
+            ]);
+            let state = test_state(base, true);
+
+            let restored = ZoteroClient::new(&state)
+                .set_item_deleted(&"ITEM1".into(), false)
+                .await
+                .unwrap();
+            assert!(!restored.data.deleted);
+        }
+    }
+
+    mod delete_collection {
+        use super::*;
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            let state = test_state(String::new(), false);
+            let err = ZoteroClient::new(&state)
+                .delete_collection(&"COL1".into())
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn deletes_after_fetching_current_version() {
+            let collection = json!({
+                "key": "COL1",
+                "version": 3,
+                "data": { "key": "COL1", "name": "Old Collection", "parentCollection": false }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &collection.to_string()),
+                http_response("204 No Content", ""),
+            ]);
+            let state = test_state(base, true);
+
+            let result = ZoteroClient::new(&state)
+                .delete_collection(&"COL1".into())
+                .await;
+            assert!(result.is_ok());
+        }
+    }
+
+    mod create_annotation {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            let state = test_state(String::new(), false);
+            let err = ZoteroClient::new(&state)
+                .create_annotation(
+                    &"ATT1".into(),
+                    AnnotationType::Highlight,
+                    Some("selected text"),
+                    None,
+                    None,
+                    None,
+                    r#"{"pageIndex":0,"rects":[[100,200,300,220]]}"#,
+                )
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn returns_created_item_on_success() {
+            let created = json!([{
+                "key": "ANNOT1",
+                "version": 1,
+                "data": { "key": "ANNOT1", "version": 1, "itemType": "annotation", "annotationType": "highlight" }
+            }]);
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &created.to_string(),
+            )]);
+            let state = test_state(base, true);
+
+            let item = ZoteroClient::new(&state)
+                .create_annotation(
+                    &"ATT1".into(),
+                    AnnotationType::Highlight,
+                    Some("selected text"),
+                    None,
+                    None,
+                    None,
+                    r#"{"pageIndex":0,"rects":[[100,200,300,220]]}"#,
+                )
+                .await
+                .unwrap();
+            assert_eq!(item.key, "ANNOT1");
+        }
+
+        #[tokio::test]
+        async fn rejects_invalid_position_json() {
+            let state = test_state(mock_server(vec![]), true);
+
+            let err = ZoteroClient::new(&state)
+                .create_annotation(
+                    &"ATT1".into(),
+                    AnnotationType::Highlight,
+                    Some("selected text"),
+                    None,
+                    None,
+                    None,
+                    "not json",
+                )
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::Json(_)));
+        }
+    }
+
+    mod create_item_from_metadata {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            let state = test_state(String::new(), false);
+            let err = ZoteroClient::new(&state)
+                .create_item_from_metadata(ItemDraft {
+                    item_type: ItemType::Book,
+                    title: "A Book".to_owned(),
+                    ..ItemDraft::default()
+                })
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn returns_created_item() {
+            let created = json!([{
+                "key": "NEWITEM1",
+                "version": 1,
+                "data": { "key": "NEWITEM1", "version": 1, "itemType": "book", "title": "A Book" }
+            }]);
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &created.to_string(),
+            )]);
+            let state = test_state(base, true);
+
+            let item = ZoteroClient::new(&state)
+                .create_item_from_metadata(ItemDraft {
+                    item_type: ItemType::Book,
+                    title: "A Book".to_owned(),
+                    ..ItemDraft::default()
+                })
+                .await
+                .unwrap();
+            assert_eq!(item.key, "NEWITEM1");
+        }
+    }
+
+    mod update_collection {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            let state = test_state(String::new(), false);
+            let err = ZoteroClient::new(&state)
+                .update_collection(&"COL1".into(), Some("New Name"), None)
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn renames_when_name_given() {
+            let current = json!({
+                "key": "COL1",
+                "version": 3,
+                "data": { "key": "COL1", "name": "Old Name", "parentCollection": false }
+            });
+            let updated = json!({
+                "key": "COL1",
+                "version": 4,
+                "data": { "key": "COL1", "name": "New Name", "parentCollection": false }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &current.to_string()),
+                http_response("200 OK", &updated.to_string()),
+            ]);
+            let state = test_state(base, true);
+
+            let collection = ZoteroClient::new(&state)
+                .update_collection(&"COL1".into(), Some("New Name"), None)
+                .await
+                .unwrap();
+            assert_eq!(collection.data.name, "New Name");
+        }
+
+        #[tokio::test]
+        async fn reparents_when_parent_key_given() {
+            let current = json!({
+                "key": "COL1",
+                "version": 3,
+                "data": { "key": "COL1", "name": "Old Name", "parentCollection": false }
+            });
+            let updated = json!({
+                "key": "COL1",
+                "version": 4,
+                "data": { "key": "COL1", "name": "Old Name", "parentCollection": "PARENT1" }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &current.to_string()),
+                http_response("200 OK", &updated.to_string()),
+            ]);
+            let state = test_state(base, true);
+
+            let collection = ZoteroClient::new(&state)
+                .update_collection(
+                    &"COL1".into(),
+                    None,
+                    Some(&"PARENT1".into()),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                collection.data.parent_collection,
+                Some(json!("PARENT1"))
             );
-        });
-        let state = test_state(format!("http://{addr}"), true);
+        }
 
-        let result = ZoteroClient::new(&state)
-            .delete_tags(&["old_tag".to_owned(), "other tag".to_owned()])
-            .await;
-        assert!(result.is_ok());
+        #[tokio::test]
+        async fn moves_to_top_level_when_parent_key_is_empty_string() {
+            let current = json!({
+                "key": "COL1",
+                "version": 3,
+                "data": { "key": "COL1", "name": "Old Name", "parentCollection": "PARENT1" }
+            });
+            let updated = json!({
+                "key": "COL1",
+                "version": 4,
+                "data": { "key": "COL1", "name": "Old Name", "parentCollection": false }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &current.to_string()),
+                http_response("200 OK", &updated.to_string()),
+            ]);
+            let state = test_state(base, true);
+
+            let collection = ZoteroClient::new(&state)
+                .update_collection(&"COL1".into(), None, Some(&"".into()))
+                .await
+                .unwrap();
+            assert_eq!(collection.data.parent_collection, Some(json!(false)));
+        }
+    }
+
+    mod rename_tag {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            let state = test_state(String::new(), false);
+            let err = ZoteroClient::new(&state)
+                .rename_tag("old_tag", "new_tag")
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn swaps_tag_across_matching_items() {
+            let items = json!([
+                {
+                    "key": "ITEM1",
+                    "version": 1,
+                    "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle", "tags": [{ "tag": "old_tag" }] }
+                },
+                {
+                    "key": "ITEM2",
+                    "version": 1,
+                    "data": { "key": "ITEM2", "version": 1, "itemType": "journalArticle", "tags": [{ "tag": "old_tag" }] }
+                }
+            ]);
+            let patch1 = json!({
+                "key": "ITEM1",
+                "version": 2,
+                "data": { "key": "ITEM1", "version": 2, "itemType": "journalArticle", "tags": [{ "tag": "new_tag" }] }
+            });
+            let patch2 = json!({
+                "key": "ITEM2",
+                "version": 2,
+                "data": { "key": "ITEM2", "version": 2, "itemType": "journalArticle", "tags": [{ "tag": "new_tag" }] }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &items.to_string()),
+                http_response("200 OK", &patch1.to_string()),
+                http_response("200 OK", &patch2.to_string()),
+            ]);
+            let state = test_state(base, true);
+
+            let count = ZoteroClient::new(&state)
+                .rename_tag("old_tag", "new_tag")
+                .await
+                .unwrap();
+            assert_eq!(count, 2);
+        }
+    }
+
+    mod delete_tags {
+        use super::*;
+
+        #[tokio::test]
+        async fn rejects_when_write_is_disabled() {
+            let state = test_state(String::new(), false);
+            let err = ZoteroClient::new(&state)
+                .delete_tags(&["old_tag".to_owned()])
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::PermissionDenied(_)));
+        }
+
+        #[tokio::test]
+        async fn sends_joined_tag_query_and_succeeds() {
+            let base = mock_server(vec![
+                http_response_with_headers(
+                    "200 OK",
+                    &[("Last-Modified-Version", "9")],
+                    "[]",
+                ),
+                http_response("204 No Content", ""),
+            ]);
+            let state = test_state(base, true);
+
+            let result = ZoteroClient::new(&state)
+                .delete_tags(&["old_tag".to_owned(), "other tag".to_owned()])
+                .await;
+            assert!(result.is_ok());
+        }
+    }
+
+    mod diff_tags {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+        use crate::zotero::models::TagOrigin;
+
+        #[test]
+        fn diffs_existing_added_and_removed_tags() {
+            let existing = vec![
+                ZoteroTag {
+                    tag: "tag1".to_owned(),
+                    origin: TagOrigin::User,
+                },
+                ZoteroTag {
+                    tag: "tag2".to_owned(),
+                    origin: TagOrigin::User,
+                },
+            ];
+            let add = vec!["tag3".to_owned()];
+            let remove = vec!["tag1".to_owned()];
+
+            let diff = diff_tags(existing, &add, &remove);
+
+            assert_eq!(diff, vec![
+                json!({ "tag": "tag2" }),
+                json!({ "tag": "tag3" }),
+            ]);
+        }
     }
 }

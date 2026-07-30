@@ -489,94 +489,180 @@ pub(crate) struct LocalApiStatus {
 }
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
-
     use super::*;
 
-    #[test]
-    fn deserializes_item_leaving_omitted_optional_fields_as_none() {
-        // Arrange
-        let raw_json = serde_json::json!({
-            "key": "ABC12345",
-            "version": 42,
-            "data": {
+    mod item_type {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn round_trips_known_and_unknown_item_types() {
+            let article = ItemType::JournalArticle;
+            let article_str: String = article.clone().into();
+            assert_eq!(article_str, "journalArticle");
+            assert_eq!(ItemType::from(article_str), article);
+
+            let custom = ItemType::from("customWebpage".to_owned());
+            let custom_str: String = custom.clone().into();
+            assert_eq!(custom_str, "customWebpage");
+            assert_eq!(custom, ItemType::Other("customWebpage".to_owned()));
+        }
+
+        #[test]
+        fn defaults_to_other_variant() {
+            assert_eq!(ItemType::default(), ItemType::Other(String::new()));
+        }
+    }
+
+    mod annotation_type {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn round_trips_known_and_unknown_annotation_types() {
+            let highlight = AnnotationType::Highlight;
+            let highlight_str: String = highlight.clone().into();
+            assert_eq!(highlight_str, "highlight");
+            assert_eq!(AnnotationType::from(highlight_str), highlight);
+
+            let ink = AnnotationType::from("ink".to_owned());
+            let ink_str: String = ink.clone().into();
+            assert_eq!(ink_str, "ink");
+            assert_eq!(ink, AnnotationType::Other("ink".to_owned()));
+        }
+    }
+
+    mod tag_origin {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn converts_user_automatic_and_other_variants() {
+            assert_eq!(TagOrigin::from(0), TagOrigin::User);
+            assert_eq!(TagOrigin::from(1), TagOrigin::Automatic);
+            assert_eq!(TagOrigin::from(42), TagOrigin::Other(42));
+
+            let user_num: u8 = TagOrigin::User.into();
+            let auto_num: u8 = TagOrigin::Automatic.into();
+            let other_num: u8 = TagOrigin::Other(42).into();
+            assert_eq!(user_num, 0);
+            assert_eq!(auto_num, 1);
+            assert_eq!(other_num, 42);
+        }
+    }
+
+    mod string_key {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn implements_display_from_and_equality_comparisons() {
+            let item_key = ItemKey::from("ITEM123");
+            assert_eq!(item_key.to_string(), "ITEM123");
+            assert_eq!(item_key.as_ref(), "ITEM123");
+            assert_eq!(item_key, "ITEM123");
+            assert_eq!(item_key.to_string(), "ITEM123".to_owned());
+
+            let col_key = CollectionKey::from("COL123".to_owned());
+            assert_eq!(col_key.to_string(), "COL123");
+            assert_eq!(col_key, "COL123");
+        }
+    }
+
+    mod deserialization {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn leaves_omitted_optional_fields_as_none() {
+            let raw_json = serde_json::json!({
+                "key": "ABC12345",
+                "version": 42,
+                "data": {
+                    "key": "ABC12345",
+                    "version": 42,
+                    "itemType": "journalArticle",
+                    "title": "Quantum Computing Advances"
+                }
+            });
+
+            let item: ZoteroItem = serde_json::from_value(raw_json).unwrap();
+
+            assert_eq!(item.key, "ABC12345");
+            assert_eq!(
+                item.data.title.as_deref(),
+                Some("Quantum Computing Advances")
+            );
+            assert!(item.data.doi.is_none());
+        }
+
+        #[test]
+        fn parses_creator_camel_case_names() {
+            let raw_json = serde_json::json!({
+                "creatorType": "author",
+                "firstName": "Ada",
+                "lastName": "Lovelace"
+            });
+
+            let creator: ZoteroCreator =
+                serde_json::from_value(raw_json).unwrap();
+
+            assert_eq!(creator.creator_type, Some(CreatorType::Author));
+            assert_eq!(creator.first_name.as_deref(), Some("Ada"));
+            assert_eq!(creator.last_name.as_deref(), Some("Lovelace"));
+        }
+
+        #[test]
+        fn defaults_deleted_to_false_when_absent() {
+            let raw_json = serde_json::json!({
+                "key": "ABC12345",
+                "version": 42,
+                "data": {
+                    "key": "ABC12345",
+                    "version": 42,
+                    "itemType": "journalArticle"
+                }
+            });
+
+            let item: ZoteroItem = serde_json::from_value(raw_json).unwrap();
+
+            assert!(!item.data.deleted);
+        }
+
+        #[test]
+        fn round_trips_deleted_flag() {
+            let raw_json = serde_json::json!({
                 "key": "ABC12345",
                 "version": 42,
                 "itemType": "journalArticle",
-                "title": "Quantum Computing Advances"
-            }
-        });
+                "deleted": true
+            });
 
-        // Act
-        let item: ZoteroItem = serde_json::from_value(raw_json).unwrap();
+            let data: ZoteroItemData =
+                serde_json::from_value(raw_json).unwrap();
+            assert!(data.deleted);
 
-        // Assert
-        assert_eq!(item.key, "ABC12345");
-        assert_eq!(
-            item.data.title.as_deref(),
-            Some("Quantum Computing Advances")
-        );
-        assert!(item.data.doi.is_none());
-    }
+            let serialized = serde_json::to_string(&data).unwrap();
+            assert!(serialized.contains("\"deleted\":true"));
+        }
 
-    #[test]
-    fn deserializes_creator_camel_case_names() {
-        let raw_json = serde_json::json!({
-            "creatorType": "author",
-            "firstName": "Ada",
-            "lastName": "Lovelace"
-        });
-
-        let creator: ZoteroCreator = serde_json::from_value(raw_json).unwrap();
-
-        assert_eq!(creator.creator_type, Some(CreatorType::Author));
-        assert_eq!(creator.first_name.as_deref(), Some("Ada"));
-        assert_eq!(creator.last_name.as_deref(), Some("Lovelace"));
-    }
-
-    #[test]
-    fn deleted_defaults_to_false_when_absent_from_json() {
-        let raw_json = serde_json::json!({
-            "key": "ABC12345",
-            "version": 42,
-            "data": {
+        #[test]
+        fn parses_native_citation_key_field() {
+            let raw_json = serde_json::json!({
                 "key": "ABC12345",
                 "version": 42,
-                "itemType": "journalArticle"
-            }
-        });
+                "itemType": "journalArticle",
+                "citationKey": "smith2020deep"
+            });
 
-        let item: ZoteroItem = serde_json::from_value(raw_json).unwrap();
-
-        assert!(!item.data.deleted);
-    }
-
-    #[test]
-    fn deleted_round_trips_true() {
-        let raw_json = serde_json::json!({
-            "key": "ABC12345",
-            "version": 42,
-            "itemType": "journalArticle",
-            "deleted": true
-        });
-
-        let data: ZoteroItemData = serde_json::from_value(raw_json).unwrap();
-        assert!(data.deleted);
-
-        let serialized = serde_json::to_string(&data).unwrap();
-        assert!(serialized.contains("\"deleted\":true"));
-    }
-
-    #[test]
-    fn deserializes_native_citation_key_field() {
-        let raw_json = serde_json::json!({
-            "key": "ABC12345",
-            "version": 42,
-            "itemType": "journalArticle",
-            "citationKey": "smith2020deep"
-        });
-
-        let data: ZoteroItemData = serde_json::from_value(raw_json).unwrap();
-        assert_eq!(data.citation_key.as_deref(), Some("smith2020deep"));
+            let data: ZoteroItemData =
+                serde_json::from_value(raw_json).unwrap();
+            assert_eq!(data.citation_key.as_deref(), Some("smith2020deep"));
+        }
     }
 }

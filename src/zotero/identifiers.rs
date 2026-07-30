@@ -268,13 +268,42 @@ async fn resolve_isbn(
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
     use serde_json::json;
 
-    use super::{
-        super::client::tests::fixtures::{http_response, mock_server},
-        *,
-    };
+    use super::*;
+
+    mod fixtures {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
+
+        pub(super) fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        pub(super) fn mock_server(responses: Vec<String>) -> String {
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind listener");
+            let addr = listener.local_addr().expect("local addr");
+            std::thread::spawn(move || {
+                for response in responses {
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
+                    let mut buf = [0_u8; 1024];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            });
+            format!("http://{addr}")
+        }
+    }
+
+    use fixtures::*;
 
     fn state_with(
         crossref: String,
@@ -289,84 +318,171 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn resolve_doi_maps_crossref_fields() {
-        let body = json!({"message": {
-            "title": ["A Great Paper"],
-            "author": [{"given": "Sam", "family": "McAuthor"}],
-            "published": {"date-parts": [[2021]]},
-            "DOI": "10.1/xyz",
-            "URL": "https://doi.org/10.1/xyz",
-            "container-title": ["Journal of Things"]
-        }});
-        let base =
-            mock_server(vec![http_response("200 OK", &body.to_string())]);
-        let state = state_with(base, String::new(), String::new());
+    mod resolve_doi {
+        use pretty_assertions::assert_eq;
 
-        let draft = resolve_metadata(&state, IdentifierKind::Doi, "10.1/xyz")
-            .await
-            .unwrap();
-        assert_eq!(draft.title, "A Great Paper");
-        assert_eq!(draft.item_type, ItemType::JournalArticle);
-        assert_eq!(
-            draft.creators.first().and_then(|c| c.last_name.as_deref()),
-            Some("McAuthor")
-        );
-        assert_eq!(draft.date, "2021");
+        use super::*;
+
+        #[tokio::test]
+        async fn parses_crossref_response_into_item_draft() {
+            let body = json!({"message": {
+                "title": ["A Great Paper"],
+                "author": [{"given": "Sam", "family": "McAuthor"}],
+                "published": {"date-parts": [[2021]]},
+                "DOI": "10.1/xyz",
+                "URL": "https://doi.org/10.1/xyz",
+                "container-title": ["Journal of Things"]
+            }});
+            let base =
+                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let state = state_with(base, String::new(), String::new());
+
+            let draft =
+                resolve_metadata(&state, IdentifierKind::Doi, "10.1/xyz")
+                    .await
+                    .unwrap();
+            assert_eq!(draft.title, "A Great Paper");
+            assert_eq!(draft.item_type, ItemType::JournalArticle);
+            assert_eq!(
+                draft.creators.first().and_then(|c| c.last_name.as_deref()),
+                Some("McAuthor")
+            );
+            assert_eq!(draft.date, "2021");
+        }
+
+        #[tokio::test]
+        async fn returns_not_found_on_404() {
+            let base = mock_server(vec![http_response("404 Not Found", "{}")]);
+            let state = state_with(base, String::new(), String::new());
+
+            let err =
+                resolve_metadata(&state, IdentifierKind::Doi, "10.1/missing")
+                    .await
+                    .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::NotFound(_)));
+        }
     }
 
-    #[tokio::test]
-    async fn resolve_doi_returns_not_found_on_404() {
-        let base = mock_server(vec![http_response("404 Not Found", "{}")]);
-        let state = state_with(base, String::new(), String::new());
+    mod resolve_arxiv {
+        use pretty_assertions::assert_eq;
 
-        let err = resolve_metadata(&state, IdentifierKind::Doi, "10.1/missing")
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ZoteroMcpError::NotFound(_)));
+        use super::*;
+
+        #[tokio::test]
+        async fn parses_semantic_scholar_response_into_item_draft() {
+            let body = json!({
+                "title": "Attention Is All You Need",
+                "authors": [{"name": "A. Vaswani"}],
+                "year": 2017,
+                "abstract": "We propose...",
+                "externalIds": {"DOI": null},
+                "venue": "NeurIPS"
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let state = state_with(String::new(), base, String::new());
+
+            let draft =
+                resolve_metadata(&state, IdentifierKind::Arxiv, "1706.03762")
+                    .await
+                    .unwrap();
+            assert_eq!(draft.title, "Attention Is All You Need");
+            assert_eq!(draft.item_type, ItemType::Preprint);
+            assert_eq!(draft.url, "https://arxiv.org/abs/1706.03762");
+        }
+
+        #[tokio::test]
+        async fn returns_not_found_on_404() {
+            let base = mock_server(vec![http_response("404 Not Found", "{}")]);
+            let state = state_with(String::new(), base, String::new());
+
+            let err =
+                resolve_metadata(&state, IdentifierKind::Arxiv, "0000.00000")
+                    .await
+                    .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::NotFound(_)));
+        }
     }
 
-    #[tokio::test]
-    async fn resolve_arxiv_maps_semantic_scholar_fields() {
-        let body = json!({
-            "title": "Attention Is All You Need",
-            "authors": [{"name": "A. Vaswani"}],
-            "year": 2017,
-            "abstract": "We propose...",
-            "externalIds": {"DOI": null},
-            "venue": "NeurIPS"
-        });
-        let base =
-            mock_server(vec![http_response("200 OK", &body.to_string())]);
-        let state = state_with(String::new(), base, String::new());
+    mod resolve_isbn {
+        use pretty_assertions::assert_eq;
 
-        let draft =
-            resolve_metadata(&state, IdentifierKind::Arxiv, "1706.03762")
-                .await
-                .unwrap();
-        assert_eq!(draft.title, "Attention Is All You Need");
-        assert_eq!(draft.item_type, ItemType::Preprint);
-        assert_eq!(draft.url, "https://arxiv.org/abs/1706.03762");
+        use super::*;
+
+        #[tokio::test]
+        async fn parses_open_library_response_into_item_draft() {
+            let body = json!({"ISBN:9780134685991": {
+                "title": "Effective Java",
+                "authors": [{"name": "Joshua Bloch"}],
+                "publish_date": "2018",
+                "publishers": [{"name": "Addison-Wesley"}]
+            }});
+            let base =
+                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let state = state_with(String::new(), String::new(), base);
+
+            let draft =
+                resolve_metadata(&state, IdentifierKind::Isbn, "9780134685991")
+                    .await
+                    .unwrap();
+            assert_eq!(draft.title, "Effective Java");
+            assert_eq!(draft.item_type, ItemType::Book);
+            assert_eq!(draft.publisher, "Addison-Wesley");
+        }
+
+        #[tokio::test]
+        async fn returns_not_found_when_isbn_is_missing_from_response() {
+            let body = json!({});
+            let base =
+                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let state = state_with(String::new(), String::new(), base);
+
+            let err =
+                resolve_metadata(&state, IdentifierKind::Isbn, "9780000000000")
+                    .await
+                    .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::NotFound(_)));
+        }
     }
 
-    #[tokio::test]
-    async fn resolve_isbn_maps_open_library_fields() {
-        let body = json!({"ISBN:9780134685991": {
-            "title": "Effective Java",
-            "authors": [{"name": "Joshua Bloch"}],
-            "publish_date": "2018",
-            "publishers": [{"name": "Addison-Wesley"}]
-        }});
-        let base =
-            mock_server(vec![http_response("200 OK", &body.to_string())]);
-        let state = state_with(String::new(), String::new(), base);
+    mod helpers {
+        use pretty_assertions::assert_eq;
 
-        let draft =
-            resolve_metadata(&state, IdentifierKind::Isbn, "9780134685991")
-                .await
-                .unwrap();
-        assert_eq!(draft.title, "Effective Java");
-        assert_eq!(draft.item_type, ItemType::Book);
-        assert_eq!(draft.publisher, "Addison-Wesley");
+        use super::*;
+
+        #[test]
+        fn str_at_resolves_nested_path() {
+            let json = json!({
+                "a": {
+                    "b": [
+                        {"c": "target_value"}
+                    ]
+                }
+            });
+            assert_eq!(
+                str_at(&json, &["a", "b", "0", "c"]),
+                Some("target_value")
+            );
+        }
+
+        #[test]
+        fn str_at_returns_none_on_missing_or_wrong_type() {
+            let json = json!({"a": 123});
+            assert_eq!(str_at(&json, &["a"]), None);
+            assert_eq!(str_at(&json, &["b"]), None);
+        }
+
+        #[test]
+        fn i64_at_resolves_number() {
+            let json = json!({"year": 2024});
+            assert_eq!(i64_at(&json, &["year"]), Some(2024));
+        }
+
+        #[test]
+        fn i64_at_returns_none_on_missing_or_wrong_type() {
+            let json = json!({"year": "2024"});
+            assert_eq!(i64_at(&json, &["year"]), None);
+            assert_eq!(i64_at(&json, &["missing"]), None);
+        }
     }
 }

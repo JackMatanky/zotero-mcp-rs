@@ -628,358 +628,528 @@ fn format_notes_section(item: &ZoteroItem, children: &[ZoteroItem]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
     use serde_json::json;
 
-    use super::{
-        super::client::tests::fixtures::{
-            http_response, mock_server, test_state,
-        },
-        *,
-    };
+    use super::*;
 
-    #[tokio::test]
-    async fn get_recent_items_deserializes_correctly() {
-        let items = json!([{
-            "key": "ITEM1",
-            "version": 1,
-            "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle", "title": "Test Title" }
-        }]);
-        let base =
-            mock_server(vec![http_response("200 OK", &items.to_string())]);
-        let state = test_state(base, false);
+    mod fixtures {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
 
-        let res = ZoteroClient::new(&state).get_recent_items(10).await.unwrap();
-        assert_eq!(res.len(), 1);
-        assert_eq!(res.first().expect("item").key, "ITEM1");
-    }
+        use crate::state::AppState;
 
-    #[tokio::test]
-    async fn get_item_returns_not_found_on_404() {
-        let base = mock_server(vec![http_response("404 Not Found", "")]);
-        let state = test_state(base, false);
-
-        let err = ZoteroClient::new(&state)
-            .get_item(&"NONEXISTENT".into())
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ZoteroMcpError::NotFound(_)));
-    }
-
-    #[tokio::test]
-    async fn get_item_fulltext_returns_empty_when_no_content_field() {
-        let base = mock_server(vec![http_response("200 OK", "{}")]);
-        let state = test_state(base, false);
-
-        let text = ZoteroClient::new(&state)
-            .get_item_fulltext(&"ITEM1".into())
-            .await
-            .unwrap();
-        assert_eq!(text, "");
-    }
-
-    #[tokio::test]
-    async fn search_by_tag_filters_items() {
-        let items = json!([{
-            "key": "ITEM1",
-            "version": 1,
-            "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Tagged Item", "tags": [{ "tag": "quantum" }] }
-        }]);
-        let base =
-            mock_server(vec![http_response("200 OK", &items.to_string())]);
-        let state = test_state(base, false);
-
-        let res = ZoteroClient::new(&state)
-            .search_by_tag("quantum", 10)
-            .await
-            .unwrap();
-        assert_eq!(res.len(), 1);
-        assert_eq!(res.first().expect("item").key, "ITEM1");
-    }
-
-    #[tokio::test]
-    async fn search_by_citation_key_matches_extra() {
-        let items = json!([{
-            "key": "ITEM1",
-            "version": 1,
-            "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Citekey Item", "extra": "Citation Key: smith2020deep" }
-        }]);
-        let base =
-            mock_server(vec![http_response("200 OK", &items.to_string())]);
-        let state = test_state(base, false);
-
-        let res = ZoteroClient::new(&state)
-            .search_by_citation_key("smith2020deep")
-            .await
-            .unwrap();
-        assert_eq!(res.expect("item found").key, "ITEM1");
-    }
-
-    #[tokio::test]
-    async fn search_by_citation_key_matches_native_field() {
-        let items = json!([{
-            "key": "ITEM1",
-            "version": 1,
-            "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Citekey Item", "citationKey": "smith2020deep" }
-        }]);
-        let base =
-            mock_server(vec![http_response("200 OK", &items.to_string())]);
-        let state = test_state(base, false);
-
-        let res = ZoteroClient::new(&state)
-            .search_by_citation_key("smith2020deep")
-            .await
-            .unwrap();
-        assert_eq!(res.expect("item found").key, "ITEM1");
-    }
-
-    #[tokio::test]
-    async fn search_by_citation_key_native_field_takes_precedence_over_stale_extra()
-     {
-        let items = json!([{
-            "key": "ITEM1",
-            "version": 1,
-            "data": {
-                "key": "ITEM1",
-                "itemType": "journalArticle",
-                "title": "Citekey Item",
-                "citationKey": "other2019",
-                "extra": "Citation Key: smith2020deep"
+        pub(super) fn test_state(
+            zotero_api_url: String,
+            write_enabled: bool,
+        ) -> AppState {
+            AppState {
+                zotero_api_url,
+                better_bibtex_url: String::new(),
+                better_notes_url: String::new(),
+                crossref_url: String::new(),
+                semantic_scholar_url: String::new(),
+                open_library_url: String::new(),
+                write_enabled,
+                ..AppState::from_env()
             }
-        }]);
-        let base =
-            mock_server(vec![http_response("200 OK", &items.to_string())]);
-        let state = test_state(base, false);
+        }
 
-        let res = ZoteroClient::new(&state)
-            .search_by_citation_key("smith2020deep")
-            .await
-            .unwrap();
-        assert!(res.is_none());
-    }
+        pub(super) fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+        }
 
-    #[tokio::test]
-    async fn advanced_search_filters_items_by_conditions() {
-        let items = json!([
-            {
-                "key": "ITEM1",
-                "version": 1,
-                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Quantum Computing" }
-            },
-            {
-                "key": "ITEM2",
-                "version": 1,
-                "data": { "key": "ITEM2", "itemType": "book", "title": "Classical Mechanics" }
-            }
-        ]);
-        let base =
-            mock_server(vec![http_response("200 OK", &items.to_string())]);
-        let state = test_state(base, false);
-
-        let conds = vec![
-            json!({"field": "title", "operator": "contains", "value": "quantum"}),
-        ];
-        let res =
-            ZoteroClient::new(&state).advanced_search(conds, 10).await.unwrap();
-        assert_eq!(res.len(), 1);
-        assert_eq!(res.first().expect("item").key, "ITEM1");
-    }
-
-    #[tokio::test]
-    async fn advanced_search_filters_items_by_citation_key() {
-        let items = json!([
-            {
-                "key": "ITEM1",
-                "version": 1,
-                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Quantum Computing", "citationKey": "smith2020deep" }
-            },
-            {
-                "key": "ITEM2",
-                "version": 1,
-                "data": { "key": "ITEM2", "itemType": "book", "title": "Classical Mechanics", "citationKey": "jones2019classical" }
-            }
-        ]);
-        let base =
-            mock_server(vec![http_response("200 OK", &items.to_string())]);
-        let state = test_state(base, false);
-
-        let conds = vec![
-            json!({"field": "citationKey", "operator": "equals", "value": "smith2020deep"}),
-        ];
-        let res =
-            ZoteroClient::new(&state).advanced_search(conds, 10).await.unwrap();
-        assert_eq!(res.len(), 1);
-        assert_eq!(res.first().expect("item").key, "ITEM1");
-    }
-
-    #[tokio::test]
-    async fn get_library_coverage_computes_metrics() {
-        let items = json!([
-            {
-                "key": "ITEM1",
-                "version": 1,
-                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Paper 1", "doi": "10.1234/test" }
-            }
-        ]);
-        let children = json!([
-            {
-                "key": "ATT1",
-                "version": 1,
-                "data": { "key": "ATT1", "itemType": "attachment", "contentType": "application/pdf" }
-            },
-            {
-                "key": "NOTE1",
-                "version": 1,
-                "data": { "key": "NOTE1", "itemType": "note", "note": "some note" }
-            }
-        ]);
-        let base = mock_server(vec![
-            http_response("200 OK", &items.to_string()),
-            http_response("200 OK", &children.to_string()),
-        ]);
-        let state = test_state(base, false);
-
-        let coverage =
-            ZoteroClient::new(&state).get_library_coverage(None).await.unwrap();
-        assert_eq!(
-            coverage.get("total_items").and_then(serde_json::Value::as_u64),
-            Some(1)
-        );
-        assert_eq!(
-            coverage.get("items_with_doi").and_then(serde_json::Value::as_u64),
-            Some(1)
-        );
-        assert_eq!(
-            coverage.get("items_with_pdf").and_then(serde_json::Value::as_u64),
-            Some(1)
-        );
-        assert_eq!(
-            coverage
-                .get("items_with_notes")
-                .and_then(serde_json::Value::as_u64),
-            Some(1)
-        );
-    }
-
-    #[tokio::test]
-    async fn synthesize_annotations_highlights_and_notes_to_markdown() {
-        let item = json!({
-            "key": "ITEM1",
-            "version": 1,
-            "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Quantum Physics Paper", "doi": "10.1234/q1" }
-        });
-        let children = json!([
-            {
-                "key": "ANN1",
-                "version": 1,
-                "data": {
-                    "key": "ANN1",
-                    "itemType": "annotation",
-                    "annotationPageLabel": "12",
-                    "annotationText": "Key discovery in quantum state",
-                    "annotationComment": "Important finding"
+        pub(super) fn mock_server(responses: Vec<String>) -> String {
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind listener");
+            let addr = listener.local_addr().expect("local addr");
+            std::thread::spawn(move || {
+                for response in responses {
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
+                    let mut buf = [0_u8; 1024];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(response.as_bytes());
                 }
-            },
-            {
-                "key": "NOTE1",
+            });
+            format!("http://{addr}")
+        }
+    }
+
+    use fixtures::*;
+
+    mod get_recent_items {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn deserializes_items_from_api() {
+            let items = json!([{
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle", "title": "Test Title" }
+            }]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let state = test_state(base, false);
+
+            let res =
+                ZoteroClient::new(&state).get_recent_items(10).await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(res.first().expect("item").key, "ITEM1");
+        }
+    }
+
+    mod get_item {
+        use super::*;
+
+        #[tokio::test]
+        async fn returns_not_found_when_item_does_not_exist() {
+            let base = mock_server(vec![http_response("404 Not Found", "")]);
+            let state = test_state(base, false);
+
+            let err = ZoteroClient::new(&state)
+                .get_item(&"NONEXISTENT".into())
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ZoteroMcpError::NotFound(_)));
+        }
+    }
+
+    mod get_item_fulltext {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn returns_empty_string_when_content_field_is_missing() {
+            let base = mock_server(vec![http_response("200 OK", "{}")]);
+            let state = test_state(base, false);
+
+            let text = ZoteroClient::new(&state)
+                .get_item_fulltext(&"ITEM1".into())
+                .await
+                .unwrap();
+            assert_eq!(text, "");
+        }
+    }
+
+    mod search_by_tag {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn returns_items_matching_tag() {
+            let items = json!([{
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Tagged Item", "tags": [{ "tag": "quantum" }] }
+            }]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let state = test_state(base, false);
+
+            let res = ZoteroClient::new(&state)
+                .search_by_tag("quantum", 10)
+                .await
+                .unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(res.first().expect("item").key, "ITEM1");
+        }
+    }
+
+    mod search_by_citation_key {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn matches_citation_key_in_extra_field() {
+            let items = json!([{
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Citekey Item", "extra": "Citation Key: smith2020deep" }
+            }]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let state = test_state(base, false);
+
+            let res = ZoteroClient::new(&state)
+                .search_by_citation_key("smith2020deep")
+                .await
+                .unwrap();
+            assert_eq!(res.expect("item found").key, "ITEM1");
+        }
+
+        #[tokio::test]
+        async fn matches_citation_key_in_native_field() {
+            let items = json!([{
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Citekey Item", "citationKey": "smith2020deep" }
+            }]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let state = test_state(base, false);
+
+            let res = ZoteroClient::new(&state)
+                .search_by_citation_key("smith2020deep")
+                .await
+                .unwrap();
+            assert_eq!(res.expect("item found").key, "ITEM1");
+        }
+
+        #[tokio::test]
+        async fn prioritizes_native_field_over_stale_extra() {
+            let items = json!([{
+                "key": "ITEM1",
                 "version": 1,
                 "data": {
+                    "key": "ITEM1",
+                    "itemType": "journalArticle",
+                    "title": "Citekey Item",
+                    "citationKey": "other2019",
+                    "extra": "Citation Key: smith2020deep"
+                }
+            }]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let state = test_state(base, false);
+
+            let res = ZoteroClient::new(&state)
+                .search_by_citation_key("smith2020deep")
+                .await
+                .unwrap();
+            assert!(res.is_none());
+        }
+    }
+
+    mod advanced_search {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn filters_items_by_title_condition() {
+            let items = json!([
+                {
+                    "key": "ITEM1",
+                    "version": 1,
+                    "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Quantum Computing" }
+                },
+                {
+                    "key": "ITEM2",
+                    "version": 1,
+                    "data": { "key": "ITEM2", "itemType": "book", "title": "Classical Mechanics" }
+                }
+            ]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let state = test_state(base, false);
+
+            let conds = vec![
+                json!({"field": "title", "operator": "contains", "value": "quantum"}),
+            ];
+            let res = ZoteroClient::new(&state)
+                .advanced_search(conds, 10)
+                .await
+                .unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(res.first().expect("item").key, "ITEM1");
+        }
+
+        #[tokio::test]
+        async fn filters_items_by_citation_key_condition() {
+            let items = json!([
+                {
+                    "key": "ITEM1",
+                    "version": 1,
+                    "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Quantum Computing", "citationKey": "smith2020deep" }
+                },
+                {
+                    "key": "ITEM2",
+                    "version": 1,
+                    "data": { "key": "ITEM2", "itemType": "book", "title": "Classical Mechanics", "citationKey": "jones2019classical" }
+                }
+            ]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let state = test_state(base, false);
+
+            let conds = vec![
+                json!({"field": "citationKey", "operator": "equals", "value": "smith2020deep"}),
+            ];
+            let res = ZoteroClient::new(&state)
+                .advanced_search(conds, 10)
+                .await
+                .unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(res.first().expect("item").key, "ITEM1");
+        }
+
+        #[tokio::test]
+        async fn filters_items_by_is_not_operator() {
+            let items = json!([
+                {
+                    "key": "ITEM1",
+                    "version": 1,
+                    "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Quantum Mechanics" }
+                },
+                {
+                    "key": "ITEM2",
+                    "version": 1,
+                    "data": { "key": "ITEM2", "itemType": "book", "title": "Classical Mechanics" }
+                }
+            ]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let state = test_state(base, false);
+
+            let conds = vec![
+                json!({"field": "title", "operator": "is_not", "value": "quantum"}),
+            ];
+            let res = ZoteroClient::new(&state)
+                .advanced_search(conds, 10)
+                .await
+                .unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(res.first().expect("item").key, "ITEM2");
+        }
+    }
+
+    mod get_library_coverage {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn computes_doi_pdf_and_note_counts() {
+            let items = json!([
+                {
+                    "key": "ITEM1",
+                    "version": 1,
+                    "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Paper 1", "doi": "10.1234/test" }
+                }
+            ]);
+            let children = json!([
+                {
+                    "key": "ATT1",
+                    "version": 1,
+                    "data": { "key": "ATT1", "itemType": "attachment", "contentType": "application/pdf" }
+                },
+                {
                     "key": "NOTE1",
-                    "itemType": "note",
-                    "note": "Summary of paper methods"
+                    "version": 1,
+                    "data": { "key": "NOTE1", "itemType": "note", "note": "some note" }
                 }
-            }
-        ]);
-        let base = mock_server(vec![
-            http_response("200 OK", &item.to_string()),
-            http_response("200 OK", &children.to_string()),
-        ]);
-        let state = test_state(base, false);
+            ]);
+            let base = mock_server(vec![
+                http_response("200 OK", &items.to_string()),
+                http_response("200 OK", &children.to_string()),
+            ]);
+            let state = test_state(base, false);
 
-        let md = ZoteroClient::new(&state)
-            .synthesize_annotations(&"ITEM1".into())
-            .await
-            .unwrap();
-        assert!(md.contains("# Annotations & Notes: Quantum Physics Paper"));
-        assert!(md.contains("> \"Key discovery in quantum state\" (p. 12)"));
-        assert!(md.contains("**Comment:** Important finding"));
-        assert!(md.contains("Summary of paper methods"));
+            let coverage = ZoteroClient::new(&state)
+                .get_library_coverage(None)
+                .await
+                .unwrap();
+            assert_eq!(
+                coverage.get("total_items").and_then(serde_json::Value::as_u64),
+                Some(1)
+            );
+            assert_eq!(
+                coverage
+                    .get("items_with_doi")
+                    .and_then(serde_json::Value::as_u64),
+                Some(1)
+            );
+            assert_eq!(
+                coverage
+                    .get("items_with_pdf")
+                    .and_then(serde_json::Value::as_u64),
+                Some(1)
+            );
+            assert_eq!(
+                coverage
+                    .get("items_with_notes")
+                    .and_then(serde_json::Value::as_u64),
+                Some(1)
+            );
+        }
     }
-    #[tokio::test]
-    async fn search_collections_returns_matching_items() {
-        let collections = json!([
-            { "key": "C1", "version": 1, "data": { "key": "C1", "name": "Quantum Physics" } },
-            { "key": "C2", "version": 1, "data": { "key": "C2", "name": "Quantum Mechanics" } },
-            { "key": "C3", "version": 1, "data": { "key": "C3", "name": "Biology" } }
-        ]);
-        let base = mock_server(vec![http_response(
-            "200 OK",
-            &collections.to_string(),
-        )]);
-        let state = test_state(base, false);
 
-        let results = ZoteroClient::new(&state)
-            .search_collections("quantum")
-            .await
-            .unwrap();
-        assert_eq!(results.len(), 2);
-    }
+    mod synthesize_annotations {
+        use super::*;
 
-    #[tokio::test]
-    async fn find_duplicates_detects_duplicates_by_title_and_doi() {
-        let items = json!([
-            {
+        #[tokio::test]
+        async fn renders_markdown_summary_with_page_labels() {
+            let item = json!({
                 "key": "ITEM1",
                 "version": 1,
-                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Unique Article Title", "doi": "10.1234/unique" }
-            },
-            {
-                "key": "ITEM2",
-                "version": 1,
-                "data": { "key": "ITEM2", "itemType": "journalArticle", "title": "Unique Article Title", "doi": "10.1234/unique" }
-            }
-        ]);
-        let base =
-            mock_server(vec![http_response("200 OK", &items.to_string())]);
-        let state = test_state(base, false);
+                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Quantum Physics Paper", "doi": "10.1234/q1" }
+            });
+            let children = json!([
+                {
+                    "key": "ANN1",
+                    "version": 1,
+                    "data": {
+                        "key": "ANN1",
+                        "itemType": "annotation",
+                        "annotationPageLabel": "12",
+                        "annotationText": "Key discovery in quantum state",
+                        "annotationComment": "Important finding"
+                    }
+                },
+                {
+                    "key": "NOTE1",
+                    "version": 1,
+                    "data": {
+                        "key": "NOTE1",
+                        "itemType": "note",
+                        "note": "Summary of paper methods"
+                    }
+                }
+            ]);
+            let base = mock_server(vec![
+                http_response("200 OK", &item.to_string()),
+                http_response("200 OK", &children.to_string()),
+            ]);
+            let state = test_state(base, false);
 
-        let duplicates =
-            ZoteroClient::new(&state).find_duplicates(None).await.unwrap();
-        assert_eq!(duplicates.len(), 2);
+            let md = ZoteroClient::new(&state)
+                .synthesize_annotations(&"ITEM1".into())
+                .await
+                .unwrap();
+            assert!(
+                md.contains("# Annotations & Notes: Quantum Physics Paper")
+            );
+            assert!(
+                md.contains("> \"Key discovery in quantum state\" (p. 12)")
+            );
+            assert!(md.contains("**Comment:** Important finding"));
+            assert!(md.contains("Summary of paper methods"));
+        }
     }
 
-    #[tokio::test]
-    async fn list_tags_returns_tag_names() {
-        let tags = json!([{"tag": "quantum", "meta": {"numItems": 3}}]);
-        let base =
-            mock_server(vec![http_response("200 OK", &tags.to_string())]);
-        let state = test_state(base, false);
+    mod search_collections {
+        use pretty_assertions::assert_eq;
 
-        let result = ZoteroClient::new(&state).list_tags(100).await.unwrap();
-        assert_eq!(result, vec!["quantum".to_owned()]);
+        use super::*;
+
+        #[tokio::test]
+        async fn returns_collections_matching_query_case_insensitively() {
+            let collections = json!([
+                { "key": "C1", "version": 1, "data": { "key": "C1", "name": "Quantum Physics" } },
+                { "key": "C2", "version": 1, "data": { "key": "C2", "name": "Quantum Mechanics" } },
+                { "key": "C3", "version": 1, "data": { "key": "C3", "name": "Biology" } }
+            ]);
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &collections.to_string(),
+            )]);
+            let state = test_state(base, false);
+
+            let results = ZoteroClient::new(&state)
+                .search_collections("quantum")
+                .await
+                .unwrap();
+            assert_eq!(results.len(), 2);
+        }
     }
 
-    #[tokio::test]
-    async fn get_unfiled_items_filters_out_items_with_collections() {
-        let items = json!([
-            {
-                "key": "ITEM1",
-                "version": 1,
-                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Filed Item", "collections": ["COL1"] }
-            },
-            {
-                "key": "ITEM2",
-                "version": 1,
-                "data": { "key": "ITEM2", "itemType": "journalArticle", "title": "Unfiled Item", "collections": [] }
-            }
-        ]);
-        let base =
-            mock_server(vec![http_response("200 OK", &items.to_string())]);
-        let state = test_state(base, false);
+    mod find_duplicates {
+        use pretty_assertions::assert_eq;
 
-        let result =
-            ZoteroClient::new(&state).get_unfiled_items(100).await.unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result.first().expect("item").key, "ITEM2");
+        use super::*;
+
+        #[tokio::test]
+        async fn detects_duplicate_groups_by_title_and_doi() {
+            let items = json!([
+                {
+                    "key": "ITEM1",
+                    "version": 1,
+                    "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Unique Article Title", "doi": "10.1234/unique" }
+                },
+                {
+                    "key": "ITEM2",
+                    "version": 1,
+                    "data": { "key": "ITEM2", "itemType": "journalArticle", "title": "Unique Article Title", "doi": "10.1234/unique" }
+                }
+            ]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let state = test_state(base, false);
+
+            let duplicates =
+                ZoteroClient::new(&state).find_duplicates(None).await.unwrap();
+            assert_eq!(duplicates.len(), 2);
+        }
+    }
+
+    mod list_tags {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn returns_list_of_tag_names() {
+            let tags = json!([{"tag": "quantum", "meta": {"numItems": 3}}]);
+            let base =
+                mock_server(vec![http_response("200 OK", &tags.to_string())]);
+            let state = test_state(base, false);
+
+            let result =
+                ZoteroClient::new(&state).list_tags(100).await.unwrap();
+            assert_eq!(result, vec!["quantum".to_owned()]);
+        }
+    }
+
+    mod get_unfiled_items {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn returns_items_without_assigned_collections() {
+            let items = json!([
+                {
+                    "key": "ITEM1",
+                    "version": 1,
+                    "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Filed Item", "collections": ["COL1"] }
+                },
+                {
+                    "key": "ITEM2",
+                    "version": 1,
+                    "data": { "key": "ITEM2", "itemType": "journalArticle", "title": "Unfiled Item", "collections": [] }
+                }
+            ]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let state = test_state(base, false);
+
+            let result =
+                ZoteroClient::new(&state).get_unfiled_items(100).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result.first().expect("item").key, "ITEM2");
+        }
+    }
+
+    mod helpers {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn compute_percentage_handles_zero_total() {
+            assert_eq!(compute_percentage(0, 0), 0.0);
+            assert_eq!(compute_percentage(5, 10), 50.0);
+        }
     }
 }
