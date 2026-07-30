@@ -1,0 +1,14 @@
+{
+  "name": "zotero-better-notes-bridge",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Companion Zotero script bridging Zotero.BetterNotes.api over the Zotero MCP server's loopback HTTP interface. Must run inside Zotero's own JS process (see src/zotero-better-notes-bridge.ts header) -- it cannot be a Rust component.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp dist/zotero-better-notes-bridge.js ./zotero-better-notes-bridge.js",
+    "watch": "tsc -p tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "zotero-types": "^4.1.3"
+  }
+}
