@@ -1,17 +1,15 @@
 //! MCP tool handlers and argument models for Better `BibTeX` integration.
 
-use std::collections::HashMap;
-
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
+pub(crate) use crate::better_bibtex::AutoExportAddRequest as AutoExportAddArgs;
 use crate::{
     ZoteroMcpServer,
     better_bibtex::{
-        AutoexportAddRequest, AuxFilePath, BetterBibtexClient,
-        BibliographyFormat, CollectionPath, ExportFilePath, SearchQuery,
-        TranslatorName,
+        AuxFilePath, BetterBibtexClient, BibliographyFormat, CollectionPath,
+        SearchQuery, TranslatorName,
     },
     zotero::{CitationKey, ItemKey},
 };
@@ -65,21 +63,6 @@ pub(crate) struct ScanAuxArgs {
 pub(crate) struct PandocFilterArgs {
     /// Citation keys to filter.
     pub(crate) citekeys: Vec<CitationKey>,
-}
-
-/// Arguments for `better_bibtex_autoexport_add`.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct AutoexportAddArgs {
-    /// Better `BibTeX` collection path.
-    pub(crate) collection: CollectionPath,
-    /// Destination export file path.
-    pub(crate) path: ExportFilePath,
-    /// Translator name or GUID.
-    pub(crate) translator: TranslatorName,
-    /// Interactive export display options.
-    pub(crate) display_options: Option<HashMap<String, bool>>,
-    /// Replace an existing auto-export with incompatible parameters.
-    pub(crate) replace: Option<bool>,
 }
 
 /// Arguments for `better_bibtex_search`.
@@ -205,19 +188,12 @@ impl ZoteroMcpServer {
     /// [`ErrorData`]: rmcp::ErrorData
     pub(crate) async fn better_bibtex_autoexport_add_impl(
         &self,
-        args: AutoexportAddArgs,
+        args: AutoExportAddArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
-        let request = AutoexportAddRequest {
-            collection: args.collection,
-            translator: args.translator,
-            path: args.path,
-            display_options: args.display_options,
-            replace: args.replace,
-        };
-        match client.autoexport_add(&request).await {
+        match client.autoexport_add(&args).await {
             Ok(_) => {
-                Ok(super::text_success("Autoexport configured successfully"))
+                Ok(super::text_success("Auto-export configured successfully"))
             }
             Err(e) => Ok(super::text_error(&e)),
         }

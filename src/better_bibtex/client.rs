@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use crate::{
     better_bibtex::{
         models::{
-            AutoexportAddRequest, AuxFilePath, BibliographyFormat, CitekeyMap,
+            AutoExportAddRequest, AuxFilePath, BibliographyFormat, CitekeyMap,
             CollectionPath, JsonRpcRequest, JsonRpcResponse, RegenerateKeyMap,
             SearchQuery, TranslatorName,
         },
@@ -178,7 +178,7 @@ impl<'a> BetterBibtexClient<'a> {
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn autoexport_add(
         &self,
-        request: &AutoexportAddRequest,
+        request: &AutoExportAddRequest,
     ) -> Result<Value, ZoteroMcpError> {
         self.state.check_write_permission()?;
         let mut params = vec![

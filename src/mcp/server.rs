@@ -16,7 +16,7 @@ use rmcp::{
 use crate::{
     mcp::{
         better_bibtex::{
-            AutoexportAddArgs, BetterBibtexSearchArgs, BibliographyArgs,
+            AutoExportAddArgs, BetterBibtexSearchArgs, BibliographyArgs,
             ExportItemsArgs, GetCitekeysArgs, PandocFilterArgs,
             RegenerateKeysArgs, ScanAuxArgs,
         },
@@ -806,7 +806,7 @@ impl ZoteroMcpServer {
     /// failures are returned as MCP error content.
     pub(crate) async fn better_bibtex_autoexport_add(
         &self,
-        Parameters(args): Parameters<AutoexportAddArgs>,
+        Parameters(args): Parameters<AutoExportAddArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.better_bibtex_autoexport_add_impl(args).await
     }

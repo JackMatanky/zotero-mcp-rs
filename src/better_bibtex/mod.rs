@@ -10,6 +10,6 @@ pub(crate) mod sqlite;
 
 pub(crate) use client::BetterBibtexClient;
 pub(crate) use models::{
-    AutoexportAddRequest, AuxFilePath, BibliographyFormat, CollectionPath,
-    ExportFilePath, SearchQuery, TranslatorName,
+    AutoExportAddRequest, AuxFilePath, BibliographyFormat, CollectionPath,
+    SearchQuery, TranslatorName,
 };

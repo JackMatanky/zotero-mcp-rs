@@ -138,8 +138,8 @@ pub(crate) struct BibliographyFormat {
 }
 
 /// Request payload for `autoexport.add`.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct AutoexportAddRequest {
+#[derive(Clone, Debug, Default, Deserialize, schemars::JsonSchema)]
+pub(crate) struct AutoExportAddRequest {
     /// Better `BibTeX` collection path.
     pub(crate) collection: CollectionPath,
     /// Translator name or GUID.
