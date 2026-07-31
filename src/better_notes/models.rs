@@ -5,6 +5,59 @@ use serde::{Deserialize, Serialize};
 
 use crate::zotero::ItemKey;
 
+/// Name of a Better Notes template, e.g. `"default"` or a custom template name.
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Deserialize,
+    Serialize,
+    JsonSchema,
+)]
+#[serde(transparent)]
+pub(crate) struct TemplateName(pub(crate) String);
+
+impl TemplateName {
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for TemplateName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for TemplateName {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for TemplateName {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl AsRef<str> for TemplateName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl PartialEq<str> for TemplateName {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
 /// Output format for Better Notes note export.
 #[derive(
     Copy,

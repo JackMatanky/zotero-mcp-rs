@@ -11,6 +11,7 @@ mod better_notes;
 mod errors;
 mod mcp;
 mod pdf;
+mod security;
 mod state;
 mod zotero;
 

@@ -7,4 +7,4 @@ mod client;
 mod models;
 
 pub(crate) use client::BetterNotesClient;
-pub(crate) use models::NoteExportFormat;
+pub(crate) use models::{NoteExportFormat, TemplateName};

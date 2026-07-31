@@ -1433,7 +1433,7 @@ mod tests {
 
         let res = server
             .better_notes_run_template(Parameters(RunTemplateArgs {
-                template_name: "Export".to_owned(),
+                template_name: "Export".into(),
                 item_key: "NOTE1".into(),
             }))
             .await

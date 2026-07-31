@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::{
     better_notes::models::{
         NoteExportFormat, NoteExportResponse, NoteItemResponse, NoteRelations,
-        NoteTreeResponse, RelationsResponse, TemplateResponse,
+        NoteTreeResponse, RelationsResponse, TemplateName, TemplateResponse,
     },
     errors::ZoteroMcpError,
     state::AppState,
@@ -96,10 +96,10 @@ impl<'a> BetterNotesClient<'a> {
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn run_template(
         &self,
-        name: &str,
+        name: &TemplateName,
         item_key: &ItemKey,
     ) -> Result<String, ZoteroMcpError> {
-        self.state.check_template_name_size(name)?;
+        self.state.check_template_name_size(name.as_str())?;
         let payload = serde_json::json!({
             "name": name,
             "itemKey": item_key,
@@ -520,7 +520,7 @@ mod tests {
 
             // Act
             let result = BetterNotesClient::new(&state)
-                .run_template("Export", &"NOTE1".into())
+                .run_template(&"Export".into(), &"NOTE1".into())
                 .await
                 .unwrap();
 
@@ -536,7 +536,7 @@ mod tests {
 
             // Act
             let err = BetterNotesClient::new(&state)
-                .run_template("Export", &ItemKey::from("NOTE1"))
+                .run_template(&"Export".into(), &ItemKey::from("NOTE1"))
                 .await
                 .unwrap_err();
 

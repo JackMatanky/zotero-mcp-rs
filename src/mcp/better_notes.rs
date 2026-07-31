@@ -14,7 +14,7 @@ use serde::Deserialize;
 
 use crate::{
     ZoteroMcpServer,
-    better_notes::{BetterNotesClient, NoteExportFormat},
+    better_notes::{BetterNotesClient, NoteExportFormat, TemplateName},
     zotero::ItemKey,
 };
 
@@ -43,8 +43,8 @@ pub(crate) struct FromMarkdownArgs {
 /// Arguments for executing a Better Notes template.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RunTemplateArgs {
-    /// Name of the template to execute.
-    pub(crate) template_name: String,
+    /// Name of the template ([`TemplateName`]) to execute.
+    pub(crate) template_name: TemplateName,
     /// Target Zotero item key ([`ItemKey`]) for template execution.
     pub(crate) item_key: ItemKey,
 }
