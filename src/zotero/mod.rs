@@ -16,6 +16,7 @@ mod collections;
 pub(crate) mod identifiers;
 mod items;
 mod models;
+mod relations;
 mod search;
 mod tags;
 
