@@ -28,3 +28,6 @@ __MACOSX/
 # --------------------- Gitingest Digests --------------------- #
 *digest.txt
 docs/refs/digests/
+
+# git worktrees
+.worktrees/
