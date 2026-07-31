@@ -117,7 +117,14 @@ async fn fetch_json(
             message: resp.status().to_string(),
         });
     }
-    Ok(resp.json().await?)
+    let body = state
+        .read_limited_text(
+            resp,
+            state.security.max_http_body_bytes,
+            "metadata response",
+        )
+        .await?;
+    Ok(serde_json::from_str(&body)?)
 }
 
 /// Reads a nested string field via a `.`-separated path of object keys and
@@ -378,6 +385,26 @@ mod tests {
                     .unwrap_err();
             assert!(matches!(err, ZoteroMcpError::NotFound(_)));
         }
+
+        #[tokio::test]
+        async fn resolve_doi_rejects_oversized_crossref_response() {
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"message":"too large"}"#,
+            )]);
+            let mut state = state_with(base, String::new(), String::new());
+            state.security.max_http_body_bytes = 3;
+
+            let err = resolve_metadata(&state, IdentifierKind::Doi, "10.1/xyz")
+                .await
+                .unwrap_err();
+
+            assert!(matches!(
+                err,
+                ZoteroMcpError::InputRejected(message)
+                    if message.contains("metadata response")
+            ));
+        }
     }
 
     mod resolve_arxiv {
@@ -459,6 +486,27 @@ mod tests {
                     .await
                     .unwrap_err();
             assert!(matches!(err, ZoteroMcpError::NotFound(_)));
+        }
+
+        #[tokio::test]
+        async fn resolve_isbn_rejects_oversized_open_library_response() {
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"ISBN:9780134685991":"too large"}"#,
+            )]);
+            let mut state = state_with(String::new(), String::new(), base);
+            state.security.max_http_body_bytes = 3;
+
+            let err =
+                resolve_metadata(&state, IdentifierKind::Isbn, "9780134685991")
+                    .await
+                    .unwrap_err();
+
+            assert!(matches!(
+                err,
+                ZoteroMcpError::InputRejected(message)
+                    if message.contains("metadata response")
+            ));
         }
     }
 

@@ -102,7 +102,8 @@ pub(crate) struct GetPdfPathArgs {
 /// Arguments for `zotero_read_pdf_pages`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ReadPdfPagesArgs {
-    /// Zotero item key or direct file path to PDF.
+    /// Zotero item key; direct PDF paths require
+    /// `ZOTERO_DIRECT_FILE_PATHS=true` and an allowed read directory.
     pub(crate) item_key_or_path: String,
     /// 1-based page numbers to extract (e.g. `[1, 2, 3]`).
     pub(crate) pages: Option<Vec<usize>>,
@@ -528,7 +529,17 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let pdf_path = if std::path::Path::new(&args.item_key_or_path).exists()
         {
-            args.item_key_or_path.clone()
+            if let Err(e) = self.state.check_direct_file_paths_enabled() {
+                return Ok(super::text_error(&e));
+            }
+            match self.state.check_existing_read_path(
+                std::path::Path::new(&args.item_key_or_path),
+                &self.state.security.allowed_read_dirs,
+                "PDF read",
+            ) {
+                Ok(path) => path,
+                Err(e) => return Ok(super::text_error(&e)),
+            }
         } else {
             let client = ZoteroClient::new(&self.state);
             let item_key_str = &args.item_key_or_path;
@@ -556,7 +567,7 @@ impl ZoteroMcpServer {
             };
 
             match found_path {
-                Some(p) => p,
+                Some(p) => std::path::PathBuf::from(p),
                 None => {
                     return Ok(CallToolResult::error(vec![
                         rmcp::model::Content::text(format!(
@@ -567,10 +578,15 @@ impl ZoteroMcpServer {
             }
         };
 
+        if let Err(e) = self.state.check_pdf_file(&pdf_path) {
+            return Ok(super::text_error(&e));
+        }
+
         let pages_ref = args.pages.as_deref();
         Ok(super::json_result(extract_pdf_pages(
-            std::path::Path::new(&pdf_path),
+            &pdf_path,
             pages_ref,
+            self.state.security.max_pdf_bytes,
         )))
     }
 

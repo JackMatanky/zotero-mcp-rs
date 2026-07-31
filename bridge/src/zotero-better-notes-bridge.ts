@@ -32,6 +32,10 @@ type BridgeBody = Record<string, unknown>;
 type BridgeHandler = (body: BridgeBody) => Promise<unknown>;
 /** Output format accepted by `/notes/export`. */
 type NoteExportFormat = "markdown" | "html";
+const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024;
+const MAX_HTML_BYTES = 2 * 1024 * 1024;
+const MAX_TEMPLATE_NAME_BYTES = 128;
+
 
 if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
     Zotero.debug("[BetterNotesBridge] Initializing HTTP endpoint handlers...");
@@ -94,6 +98,24 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
         }
 
         /**
+         * Rejects oversized string input by UTF-8 byte length.
+         *
+         * @param value - Input string.
+         * @param field - User-visible field name.
+         * @param maxBytes - Maximum accepted UTF-8 bytes.
+         * @throws Error if `value` exceeds `maxBytes`.
+         */
+        function assertMaxUtf8Bytes(
+            value: string,
+            field: string,
+            maxBytes: number,
+        ): void {
+            if (new TextEncoder().encode(value).length > maxBytes) {
+                throw new Error(`${field} exceeds ${maxBytes} bytes`);
+            }
+        }
+
+        /**
          * Reads and validates `body.format` for note export.
          *
          * @param body - Parsed JSON request body.
@@ -146,6 +168,7 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
             body: BridgeBody,
         ): Promise<unknown> {
             const html = readStringBodyField(body, "html");
+            assertMaxUtf8Bytes(html ?? "", "html", MAX_HTML_BYTES);
             if (html !== undefined) {
                 return { markdown: await api.convert.html2md(html) };
             }
@@ -170,6 +193,11 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
             if (markdown === undefined) {
                 throw new Error("Missing markdown");
             }
+            assertMaxUtf8Bytes(
+                markdown,
+                "markdown",
+                MAX_MARKDOWN_BYTES,
+            );
 
             const noteItem = new Zotero.Item("note");
             if (parentKey) {
@@ -214,6 +242,7 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
             if (!name || !itemKey) {
                 throw new Error("Missing name or itemKey");
             }
+            assertMaxUtf8Bytes(name, "template name", MAX_TEMPLATE_NAME_BYTES);
             const item = await requireItem(itemKey);
             const result = await api.template.runItemTemplate(name, {
                 itemIds: [item.id],

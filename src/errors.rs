@@ -47,6 +47,10 @@ pub(crate) enum ZoteroMcpError {
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
 
+    /// User-controlled input failed local security policy.
+    #[error("Input rejected: {0}")]
+    InputRejected(String),
+
     /// Requested Zotero library item, collection, or resource was not found.
     #[error("Item not found: {0}")]
     NotFound(String),

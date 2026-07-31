@@ -4,6 +4,8 @@
 //! wraps the JSON-RPC request/response envelope and maps failures to
 //! [`ZoteroMcpError::BetterBibTeX`].
 
+use std::path::Path;
+
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -164,6 +166,19 @@ impl<'a> BetterBibtexClient<'a> {
         request: &AutoExportAddRequest,
     ) -> Result<Value, ZoteroMcpError> {
         self.state.check_write_permission()?;
+        if !self.state.security.file_paths_enabled {
+            return Err(ZoteroMcpError::InputRejected(
+                "File path features are disabled; set \
+                 ZOTERO_MCP_PROFILE=workspace or \
+                 ZOTERO_FILE_PATHS_ENABLED=true"
+                    .to_owned(),
+            ));
+        }
+        self.state.check_output_path(
+            Path::new(request.path.as_ref()),
+            &self.state.security.allowed_export_dirs,
+            "auto-export output",
+        )?;
         let mut params = vec![
             serde_json::to_value(&request.collection)?,
             serde_json::to_value(&request.translator)?,
@@ -202,6 +217,19 @@ impl<'a> BetterBibtexClient<'a> {
         aux_path: &AuxFilePath,
     ) -> Result<Value, ZoteroMcpError> {
         self.state.check_write_permission()?;
+        if !self.state.security.file_paths_enabled {
+            return Err(ZoteroMcpError::InputRejected(
+                "File path features are disabled; set \
+                 ZOTERO_MCP_PROFILE=workspace or \
+                 ZOTERO_FILE_PATHS_ENABLED=true"
+                    .to_owned(),
+            ));
+        }
+        self.state.check_existing_read_path(
+            Path::new(aux_path.as_ref()),
+            &self.state.security.allowed_aux_dirs,
+            "AUX scan",
+        )?;
         let params = (collection, aux_path);
         self.call_rpc("collection.scanAUX", params).await
     }
@@ -273,7 +301,6 @@ impl<'a> BetterBibtexClient<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     mod fixtures {
         use std::{
@@ -284,7 +311,7 @@ mod tests {
 
         use reqwest::Client;
 
-        use super::AppState;
+        use crate::state::{AppState, SecurityConfig};
 
         /// Builds an [`AppState`] pointing `better_bibtex_url` at a fixture
         /// server, with `write_enabled` set for write-gate tests.
@@ -301,6 +328,7 @@ mod tests {
                 semantic_scholar_url: String::new(),
                 open_library_url: String::new(),
                 write_enabled,
+                security: SecurityConfig::default(),
             }
         }
 
@@ -637,6 +665,159 @@ mod tests {
                 result.get(&CitationKey::from("KEY1")),
                 Some(&Some(CitationKey::from("newkey1")))
             );
+        }
+    }
+
+    mod autoexport_add {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server_with_requests, test_state},
+            request_json,
+        };
+        use crate::better_bibtex::models::ExportFilePath;
+
+        fn request(path: String) -> AutoExportAddRequest {
+            AutoExportAddRequest {
+                collection: CollectionPath::from("/Library"),
+                translator: TranslatorName::from("Better BibTeX"),
+                path: ExportFilePath::from(path),
+                display_options: None,
+                replace: None,
+            }
+        }
+
+        #[tokio::test]
+        async fn autoexport_rejects_output_path_when_file_paths_disabled() {
+            let mut state = test_state(String::new(), true);
+            state.security.file_paths_enabled = false;
+
+            let err = BetterBibtexClient::new(&state)
+                .autoexport_add(&request("/tmp/out.bib".to_owned()))
+                .await
+                .unwrap_err();
+
+            assert!(matches!(
+                err,
+                ZoteroMcpError::InputRejected(message)
+                    if message.contains("File path features are disabled")
+            ));
+        }
+
+        #[tokio::test]
+        async fn autoexport_rejects_output_path_outside_allowed_export_dir() {
+            let allowed = tempfile::TempDir::new().unwrap();
+            let outside = tempfile::TempDir::new().unwrap();
+            let output = outside.path().join("out.bib");
+            let mut state = test_state(String::new(), true);
+            state.security.file_paths_enabled = true;
+            state.security.allowed_export_dirs =
+                vec![allowed.path().canonicalize().unwrap()];
+
+            let err = BetterBibtexClient::new(&state)
+                .autoexport_add(&request(output.display().to_string()))
+                .await
+                .unwrap_err();
+
+            assert!(matches!(
+                err,
+                ZoteroMcpError::InputRejected(message)
+                    if message.contains("auto-export output")
+            ));
+        }
+
+        #[tokio::test]
+        async fn autoexport_sends_request_when_output_path_parent_is_allowed() {
+            let root = tempfile::TempDir::new().unwrap();
+            let output = root.path().join("out.bib");
+            let (base, requests) =
+                mock_server_with_requests(vec![http_response(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","result":{"ok":true}}"#,
+                )]);
+            let mut state = test_state(base, true);
+            state.security.file_paths_enabled = true;
+            state.security.allowed_export_dirs =
+                vec![root.path().canonicalize().unwrap()];
+            let output_str = output.display().to_string();
+
+            BetterBibtexClient::new(&state)
+                .autoexport_add(&request(output_str.clone()))
+                .await
+                .unwrap();
+
+            let request = requests.recv().expect("captured request");
+            let body = request_json(&request);
+            assert_eq!(body["method"], "autoexport.add");
+            assert_eq!(body["params"][2], output_str);
+        }
+    }
+
+    mod scan_aux {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            super::*,
+            fixtures::{http_response, mock_server_with_requests, test_state},
+            request_json,
+        };
+
+        #[tokio::test]
+        async fn scan_aux_rejects_aux_path_outside_allowed_aux_dir() {
+            let allowed = tempfile::TempDir::new().unwrap();
+            let outside = tempfile::TempDir::new().unwrap();
+            let aux = outside.path().join("paper.aux");
+            std::fs::write(&aux, b"\\citation{key}").unwrap();
+            let mut state = test_state(String::new(), true);
+            state.security.file_paths_enabled = true;
+            state.security.allowed_aux_dirs =
+                vec![allowed.path().canonicalize().unwrap()];
+
+            let err = BetterBibtexClient::new(&state)
+                .scan_aux(
+                    &CollectionPath::from("/Library"),
+                    &AuxFilePath::from(aux.display().to_string()),
+                )
+                .await
+                .unwrap_err();
+
+            assert!(matches!(
+                err,
+                ZoteroMcpError::InputRejected(message)
+                    if message.contains("AUX scan")
+            ));
+        }
+
+        #[tokio::test]
+        async fn scan_aux_sends_request_when_aux_path_is_allowed() {
+            let root = tempfile::TempDir::new().unwrap();
+            let aux = root.path().join("paper.aux");
+            std::fs::write(&aux, b"\\citation{key}").unwrap();
+            let (base, requests) =
+                mock_server_with_requests(vec![http_response(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","result":{"ok":true}}"#,
+                )]);
+            let mut state = test_state(base, true);
+            state.security.file_paths_enabled = true;
+            state.security.allowed_aux_dirs =
+                vec![root.path().canonicalize().unwrap()];
+            let aux_str = aux.display().to_string();
+
+            BetterBibtexClient::new(&state)
+                .scan_aux(
+                    &CollectionPath::from("/Library"),
+                    &AuxFilePath::from(aux_str.clone()),
+                )
+                .await
+                .unwrap();
+
+            let request = requests.recv().expect("captured request");
+            let body = request_json(&request);
+            assert_eq!(body["method"], "collection.scanAUX");
+            assert_eq!(body["params"][0], "/Library");
+            assert_eq!(body["params"][1], aux_str);
         }
     }
 }

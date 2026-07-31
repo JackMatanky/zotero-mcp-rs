@@ -949,7 +949,7 @@ mod tests {
     use super::*;
     use crate::{
         better_notes::NoteExportFormat, mcp::better_notes::NoteExportArgs,
-        zotero::AnnotationType,
+        state::SecurityConfig, zotero::AnnotationType,
     };
 
     mod fixtures {
@@ -1016,6 +1016,87 @@ mod tests {
     }
 
     use fixtures::*;
+
+    fn tool_text(res: &CallToolResult) -> String {
+        res.content
+            .first()
+            .and_then(|c| c.as_text())
+            .map(|t| t.text.to_string())
+            .unwrap_or_default()
+    }
+
+    #[tokio::test]
+    async fn zotero_read_pdf_pages_rejects_direct_path_by_default() {
+        let temp = tempfile::Builder::new().suffix(".pdf").tempfile().unwrap();
+        let server = ZoteroMcpServer::new(AppState {
+            security: SecurityConfig::default(),
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                item_key_or_path: temp.path().display().to_string(),
+                pages: None,
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(true));
+        assert!(tool_text(&res).contains("Direct file paths are disabled"));
+    }
+
+    #[tokio::test]
+    async fn zotero_read_pdf_pages_allows_direct_path_inside_allowed_root_when_profile_allows()
+     {
+        let root = tempfile::TempDir::new().unwrap();
+        let pdf = root.path().join("bad.pdf");
+        std::fs::write(&pdf, b"not a pdf").unwrap();
+        let mut security = SecurityConfig::default();
+        security.direct_file_paths = true;
+        security.allowed_read_dirs = vec![root.path().canonicalize().unwrap()];
+        let server = ZoteroMcpServer::new(AppState {
+            security,
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                item_key_or_path: pdf.display().to_string(),
+                pages: None,
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(true));
+        assert!(tool_text(&res).contains("PDF extraction error"));
+    }
+
+    #[tokio::test]
+    async fn zotero_read_pdf_pages_rejects_direct_path_outside_allowed_root() {
+        let allowed = tempfile::TempDir::new().unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        let pdf = outside.path().join("bad.pdf");
+        std::fs::write(&pdf, b"not a pdf").unwrap();
+        let mut security = SecurityConfig::default();
+        security.direct_file_paths = true;
+        security.allowed_read_dirs =
+            vec![allowed.path().canonicalize().unwrap()];
+        let server = ZoteroMcpServer::new(AppState {
+            security,
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                item_key_or_path: pdf.display().to_string(),
+                pages: None,
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(true));
+        assert!(tool_text(&res).contains("outside allowed"));
+    }
 
     #[tokio::test]
     async fn better_notes_export_tool_returns_markdown_success() {

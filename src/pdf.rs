@@ -18,17 +18,27 @@ use crate::errors::ZoteroMcpError;
 /// # Errors
 ///
 /// - [`NotFound`] if `file_path` does not exist
+/// - [`InputRejected`] if `file_path` is larger than `max_pdf_bytes`
 /// - [`PdfExtract`] if `pdf-extract` fails to parse the file
 ///
+/// [`InputRejected`]: ZoteroMcpError::InputRejected
 /// [`NotFound`]: ZoteroMcpError::NotFound
 /// [`PdfExtract`]: ZoteroMcpError::PdfExtract
 pub(crate) fn extract_pdf_pages(
     file_path: &Path,
     page_numbers: Option<&[usize]>,
+    max_pdf_bytes: u64,
 ) -> Result<String, ZoteroMcpError> {
     if !file_path.exists() {
         return Err(ZoteroMcpError::NotFound(format!(
             "PDF file not found: {}",
+            file_path.display()
+        )));
+    }
+    let len = std::fs::metadata(file_path)?.len();
+    if len > max_pdf_bytes {
+        return Err(ZoteroMcpError::InputRejected(format!(
+            "PDF file {} exceeds {max_pdf_bytes} bytes",
             file_path.display()
         )));
     }
@@ -80,7 +90,7 @@ mod tests {
             let path = Path::new("/nonexistent/file.pdf");
 
             // Act
-            let result = extract_pdf_pages(path, None);
+            let result = extract_pdf_pages(path, None, 50 * 1024 * 1024);
 
             // Assert
             assert!(matches!(result, Err(ZoteroMcpError::NotFound(_))));
@@ -93,10 +103,24 @@ mod tests {
             temp.write_all(b"Not a real PDF file header").unwrap();
 
             // Act
-            let result = extract_pdf_pages(temp.path(), None);
+            let result = extract_pdf_pages(temp.path(), None, 50 * 1024 * 1024);
 
             // Assert
             assert!(matches!(result, Err(ZoteroMcpError::PdfExtract(_))));
+        }
+
+        #[test]
+        fn rejects_file_larger_than_max_before_parsing() {
+            // Arrange
+            let mut temp =
+                tempfile::Builder::new().suffix(".pdf").tempfile().unwrap();
+            temp.write_all(b"more").unwrap();
+
+            // Act
+            let result = extract_pdf_pages(temp.path(), None, 3);
+
+            // Assert
+            assert!(matches!(result, Err(ZoteroMcpError::InputRejected(_))));
         }
     }
 

@@ -144,7 +144,8 @@ pub(crate) struct AutoExportAddRequest {
     pub(crate) collection: CollectionPath,
     /// Translator name or GUID.
     pub(crate) translator: TranslatorName,
-    /// Destination export file path.
+    /// Destination export file path; requires file path features and an
+    /// allowed export directory.
     pub(crate) path: ExportFilePath,
     /// Interactive export display options.
     pub(crate) display_options: Option<HashMap<String, bool>>,

@@ -77,6 +77,7 @@ impl<'a> BetterNotesClient<'a> {
         }
 
         self.state.check_write_permission()?;
+        self.state.check_markdown_size(markdown)?;
         let payload = Payload {
             parent_key,
             markdown,
@@ -98,6 +99,7 @@ impl<'a> BetterNotesClient<'a> {
         name: &str,
         item_key: &ItemKey,
     ) -> Result<String, ZoteroMcpError> {
+        self.state.check_template_name_size(name)?;
         let payload = serde_json::json!({
             "name": name,
             "itemKey": item_key,
@@ -177,14 +179,20 @@ impl<'a> BetterNotesClient<'a> {
             )));
         }
 
-        let body = resp.text().await?;
+        let body = self
+            .state
+            .read_limited_text(
+                resp,
+                self.state.security.max_http_body_bytes,
+                &format!("{endpoint} response"),
+            )
+            .await?;
         Ok(serde_json::from_str(&body)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     mod fixtures {
         use std::{
@@ -195,7 +203,7 @@ mod tests {
 
         use reqwest::Client;
 
-        use super::AppState;
+        use crate::state::{AppState, SecurityConfig};
 
         /// Builds an [`AppState`] pointing `better_notes_url` at a fixture
         /// server, with `write_enabled` set for write-gate tests.
@@ -212,6 +220,7 @@ mod tests {
                 semantic_scholar_url: String::new(),
                 open_library_url: String::new(),
                 write_enabled,
+                security: SecurityConfig::default(),
             }
         }
 
@@ -297,6 +306,28 @@ mod tests {
             assert!(matches!(
                 &err,
                 ZoteroMcpError::BetterNotes(msg) if msg.contains("400") && msg.contains("/notes/export")
+            ));
+        }
+
+        #[tokio::test]
+        async fn post_json_rejects_oversized_response_body() {
+            // Arrange
+            let body = r#"{"content":"hello"}"#;
+            let base = mock_server(vec![http_response("200 OK", body)]);
+            let mut state = test_state(base, false);
+            state.security.max_http_body_bytes = 3;
+
+            // Act
+            let err = BetterNotesClient::new(&state)
+                .export(&"NOTE1".into(), None)
+                .await
+                .unwrap_err();
+
+            // Assert
+            assert!(matches!(
+                err,
+                ZoteroMcpError::InputRejected(message)
+                    if message.contains("/notes/export response")
             ));
         }
     }
@@ -402,6 +433,27 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn convert_from_markdown_rejects_oversized_markdown_before_posting()
+         {
+            // Arrange
+            let mut state = test_state(String::new(), true);
+            state.security.max_markdown_bytes = 3;
+
+            // Act
+            let err = BetterNotesClient::new(&state)
+                .convert_from_markdown(None, "hello")
+                .await
+                .unwrap_err();
+
+            // Assert
+            assert!(matches!(
+                err,
+                ZoteroMcpError::InputRejected(message)
+                    if message.contains("markdown")
+            ));
+        }
+
+        #[tokio::test]
         async fn sends_parent_key_when_present() {
             // Arrange
             let (base, requests) =
@@ -474,6 +526,26 @@ mod tests {
 
             // Assert
             assert_eq!(result, "# Rendered");
+        }
+
+        #[tokio::test]
+        async fn run_template_rejects_oversized_template_name_before_posting() {
+            // Arrange
+            let mut state = test_state(String::new(), false);
+            state.security.max_template_name_bytes = 3;
+
+            // Act
+            let err = BetterNotesClient::new(&state)
+                .run_template("Export", &ItemKey::from("NOTE1"))
+                .await
+                .unwrap_err();
+
+            // Assert
+            assert!(matches!(
+                err,
+                ZoteroMcpError::InputRejected(message)
+                    if message.contains("template name")
+            ));
         }
     }
 

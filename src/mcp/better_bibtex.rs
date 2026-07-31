@@ -54,7 +54,8 @@ pub(crate) struct ScanAuxArgs {
     /// Better `BibTeX` collection path to import references into.
     /// Defaults to `//`, the personal-library root.
     pub(crate) collection: Option<CollectionPath>,
-    /// Absolute path to the `LaTeX` `.aux` file.
+    /// Absolute path to the `LaTeX` `.aux` file; requires file path features
+    /// and an allowed AUX directory.
     pub(crate) aux_path: AuxFilePath,
 }
 
