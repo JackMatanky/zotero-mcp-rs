@@ -62,3 +62,125 @@ fn json_result<T: Serialize, E: ToString>(
         Err(e) => text_error(&e),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde::Serialize;
+
+    use super::*;
+
+    mod formatting {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[derive(Serialize)]
+        struct SampleData {
+            id: u32,
+            name: String,
+        }
+
+        #[test]
+        fn text_success_wraps_text_in_successful_result() {
+            // Act
+            let res = text_success("Operation completed");
+
+            assert_eq!(res.is_error, Some(false));
+            assert_eq!(res.content.len(), 1);
+            let text = res
+                .content
+                .first()
+                .and_then(|c| c.as_text())
+                .map(|t| t.text.as_str());
+            assert_eq!(text, Some("Operation completed"));
+        }
+
+        #[test]
+        fn text_error_wraps_error_in_error_result() {
+            // Act
+            let res = text_error("Something went wrong");
+
+            // Assert
+            assert_eq!(res.is_error, Some(true));
+            assert_eq!(res.content.len(), 1);
+            let text = res
+                .content
+                .first()
+                .and_then(|c| c.as_text())
+                .map(|t| t.text.as_str());
+            assert_eq!(text, Some("Something went wrong"));
+        }
+
+        #[test]
+        fn text_result_converts_ok_to_success() {
+            // Arrange
+            let res_ok: Result<String, &str> = Ok("Success payload".to_owned());
+
+            // Act
+            let tool_res = text_result(res_ok);
+
+            assert_eq!(tool_res.is_error, Some(false));
+        }
+
+        #[test]
+        fn text_result_converts_err_to_error() {
+            // Arrange
+            let res_err: Result<String, &str> = Err("Failure payload");
+
+            // Act
+            let tool_res = text_result(res_err);
+
+            // Assert
+            assert_eq!(tool_res.is_error, Some(true));
+        }
+
+        #[test]
+        fn json_success_formats_value_as_pretty_json() {
+            // Arrange
+            let data = SampleData {
+                id: 42,
+                name: "Test Item".to_owned(),
+            };
+
+            // Act
+            let res = json_success(&data);
+
+            assert_eq!(res.is_error, Some(false));
+            let text = res
+                .content
+                .first()
+                .and_then(|c| c.as_text())
+                .map(|t| t.text.as_str())
+                .unwrap_or_default();
+            assert!(text.contains("\"id\": 42"));
+            assert!(text.contains("\"name\": \"Test Item\""));
+        }
+
+        #[test]
+        fn json_result_converts_ok_to_json_success() {
+            // Arrange
+            let data = SampleData {
+                id: 1,
+                name: "Ok Item".to_owned(),
+            };
+            let res_ok: Result<SampleData, &str> = Ok(data);
+
+            // Act
+            let tool_res = json_result(res_ok);
+
+            assert_eq!(tool_res.is_error, Some(false));
+        }
+
+        #[test]
+        fn json_result_converts_err_to_text_error() {
+            // Arrange
+            let res_err: Result<SampleData, &str> = Err("JSON error");
+
+            // Act
+            let tool_res = json_result(res_err);
+
+            // Assert
+            assert_eq!(tool_res.is_error, Some(true));
+        }
+    }
+}

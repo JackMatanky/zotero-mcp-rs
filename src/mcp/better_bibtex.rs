@@ -227,3 +227,196 @@ impl ZoteroMcpServer {
         Ok(super::json_result(client.search(&args.query).await))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::state::AppState;
+
+    mod fixtures {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
+
+        use super::AppState;
+
+        pub(super) fn better_bibtex_state(
+            better_bibtex_url: String,
+        ) -> AppState {
+            AppState {
+                zotero_api_url: String::new(),
+                better_bibtex_url,
+                better_notes_url: String::new(),
+                crossref_url: String::new(),
+                semantic_scholar_url: String::new(),
+                open_library_url: String::new(),
+                write_enabled: true,
+                ..AppState::from_env()
+            }
+        }
+
+        pub(super) fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        pub(super) fn mock_server(responses: Vec<String>) -> String {
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind listener");
+            let addr = listener.local_addr().expect("local addr");
+            std::thread::spawn(move || {
+                for response in responses {
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
+                    let mut buf = [0_u8; 1024];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            });
+            format!("http://{addr}")
+        }
+    }
+
+    use fixtures::*;
+
+    mod citekeys {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn gets_citekeys_for_item_keys() {
+            // Arrange
+            let body = json!({
+                "jsonrpc": "2.0",
+                "result": { "ITEM1": "citekey1" }
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let server = ZoteroMcpServer::new(better_bibtex_state(base));
+
+            // Act
+            let res = server
+                .better_bibtex_get_citekeys_impl(GetCitekeysArgs {
+                    item_keys: vec!["ITEM1".into()],
+                })
+                .await
+                .expect("get citekeys ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+        }
+
+        #[tokio::test]
+        async fn regenerates_citekeys_for_keys() {
+            // Arrange
+            let body = json!({
+                "jsonrpc": "2.0",
+                "result": { "KEY1": "newkey1" }
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let server = ZoteroMcpServer::new(better_bibtex_state(base));
+
+            // Act
+            let res = server
+                .better_bibtex_regenerate_citekeys_impl(RegenerateKeysArgs {
+                    citekeys: vec!["KEY1".into()],
+                })
+                .await
+                .expect("regenerate ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+        }
+    }
+
+    mod export {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn exports_items_to_requested_translator() {
+            // Arrange
+            let body = json!({
+                "jsonrpc": "2.0",
+                "result": "@article{foo, author={Smith}}"
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let server = ZoteroMcpServer::new(better_bibtex_state(base));
+
+            // Act
+            let res = server
+                .better_bibtex_export_items_impl(ExportItemsArgs {
+                    citekeys: vec!["foo".into()],
+                    translator: TranslatorName::from("Better BibLaTeX"),
+                })
+                .await
+                .expect("export ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+        }
+
+        #[tokio::test]
+        async fn formats_bibliography_from_citekeys() {
+            // Arrange
+            let body = json!({
+                "jsonrpc": "2.0",
+                "result": "Formatted Bibliography"
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let server = ZoteroMcpServer::new(better_bibtex_state(base));
+
+            // Act
+            let res = server
+                .better_bibtex_format_bibliography_impl(BibliographyArgs {
+                    citekeys: vec!["foo".into()],
+                    format: None,
+                })
+                .await
+                .expect("bibliography ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+        }
+    }
+
+    mod search {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn searches_library_with_query() {
+            // Arrange
+            let body = json!({
+                "jsonrpc": "2.0",
+                "result": [{ "citekey": "foo", "title": "Test" }]
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let server = ZoteroMcpServer::new(better_bibtex_state(base));
+
+            // Act
+            let res = server
+                .better_bibtex_search_impl(BetterBibtexSearchArgs {
+                    query: SearchQuery::from("Smith"),
+                })
+                .await
+                .expect("search ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+        }
+    }
+}

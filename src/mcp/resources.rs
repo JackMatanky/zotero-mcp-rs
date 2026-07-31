@@ -157,3 +157,201 @@ fn json_resource<T: Serialize>(
         }],
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::state::AppState;
+
+    mod fixtures {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
+
+        use super::AppState;
+
+        pub(super) fn zotero_state(zotero_api_url: String) -> AppState {
+            AppState {
+                zotero_api_url,
+                better_bibtex_url: String::new(),
+                better_notes_url: String::new(),
+                crossref_url: String::new(),
+                semantic_scholar_url: String::new(),
+                open_library_url: String::new(),
+                write_enabled: true,
+                ..AppState::from_env()
+            }
+        }
+
+        pub(super) fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        pub(super) fn mock_server(responses: Vec<String>) -> String {
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind listener");
+            let addr = listener.local_addr().expect("local addr");
+            std::thread::spawn(move || {
+                for response in responses {
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
+                    let mut buf = [0_u8; 1024];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            });
+            format!("http://{addr}")
+        }
+    }
+
+    use fixtures::*;
+
+    mod resources {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn list_resources_returns_collections_uri() {
+            // Act
+            let res = ZoteroMcpServer::list_resources_impl();
+
+            // Assert
+            assert_eq!(res.resources.len(), 1);
+            assert_eq!(
+                res.resources.first().expect("resource").raw.uri,
+                "zotero://collections"
+            );
+        }
+
+        #[tokio::test]
+        async fn read_resource_returns_item_json_content() {
+            // Arrange
+            let item = json!({
+                "key": "ITEM123",
+                "version": 1,
+                "data": { "key": "ITEM123", "itemType": "journalArticle", "title": "Resource Test Paper" }
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &item.to_string())]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let res = server
+                .read_resource_impl("zotero://items/ITEM123")
+                .await
+                .expect("read resource");
+
+            // Assert
+            assert_eq!(res.contents.len(), 1);
+            let content = res.contents.first().expect("resource content");
+            let is_text = matches!(
+                content,
+                rmcp::model::ResourceContents::TextResourceContents { text, .. }
+                if text.contains("Resource Test Paper")
+            );
+            assert!(is_text);
+        }
+
+        #[tokio::test]
+        async fn read_resource_returns_collections_json_content() {
+            // Arrange
+            let collections = json!([{
+                "key": "COL1",
+                "version": 1,
+                "data": { "key": "COL1", "name": "Physics", "parentCollection": false }
+            }]);
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &collections.to_string(),
+            )]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let res = server
+                .read_resource_impl("zotero://collections")
+                .await
+                .expect("read collections");
+
+            // Assert
+            assert_eq!(res.contents.len(), 1);
+        }
+
+        #[tokio::test]
+        async fn read_resource_returns_error_for_unrecognized_uri() {
+            // Arrange
+            let server = ZoteroMcpServer::new(zotero_state(String::new()));
+
+            // Act
+            let err = server
+                .read_resource_impl("zotero://unknown_resource")
+                .await
+                .expect_err("should fail");
+
+            // Assert
+            assert_eq!(err.code, rmcp::model::ErrorCode::INVALID_PARAMS);
+        }
+    }
+
+    mod prompts {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn list_prompts_returns_literature_review_prompt() {
+            // Act
+            let list = ZoteroMcpServer::list_prompts_impl();
+
+            // Assert
+            assert_eq!(list.prompts.len(), 1);
+            assert_eq!(
+                list.prompts.first().expect("prompt").name,
+                "zotero_literature_review"
+            );
+        }
+
+        #[test]
+        fn get_prompt_renders_literature_review_with_collection_key() {
+            // Arrange
+            let mut args = serde_json::Map::new();
+            args.insert("collection_key".to_owned(), json!("COL123"));
+
+            // Act
+            let prompt = ZoteroMcpServer::get_prompt_impl(
+                "zotero_literature_review",
+                Some(&args),
+            )
+            .expect("get prompt");
+
+            // Assert
+            assert_eq!(prompt.messages.len(), 1);
+            let msg = prompt.messages.first().expect("message");
+            if let rmcp::model::PromptMessageContent::Text {
+                text,
+            } = &msg.content
+            {
+                assert!(text.contains("COL123"));
+            } else {
+                panic!("expected text content");
+            }
+        }
+
+        #[test]
+        fn get_prompt_returns_error_for_unknown_prompt() {
+            // Act
+            let err = ZoteroMcpServer::get_prompt_impl("unknown_prompt", None)
+                .expect_err("unknown prompt should fail");
+
+            // Assert
+            assert_eq!(err.code, rmcp::model::ErrorCode::INVALID_PARAMS);
+        }
+    }
+}

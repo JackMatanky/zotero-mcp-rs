@@ -148,3 +148,239 @@ impl ZoteroMcpServer {
         Ok(super::json_result(client.get_tree(&args.item_key).await))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::state::AppState;
+
+    mod fixtures {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
+
+        use super::AppState;
+
+        pub(super) fn better_notes_state(better_notes_url: String) -> AppState {
+            AppState {
+                zotero_api_url: String::new(),
+                better_bibtex_url: String::new(),
+                better_notes_url,
+                crossref_url: String::new(),
+                semantic_scholar_url: String::new(),
+                open_library_url: String::new(),
+                write_enabled: true,
+                ..AppState::from_env()
+            }
+        }
+
+        pub(super) fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        pub(super) fn mock_server(responses: Vec<String>) -> String {
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind listener");
+            let addr = listener.local_addr().expect("local addr");
+            std::thread::spawn(move || {
+                for response in responses {
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
+                    let mut buf = [0_u8; 1024];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            });
+            format!("http://{addr}")
+        }
+    }
+
+    use fixtures::*;
+
+    mod export {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn exports_note_as_markdown() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r##"{"content":"# Exported"}"##,
+            )]);
+            let server = ZoteroMcpServer::new(better_notes_state(base));
+
+            // Act
+            let res = server
+                .better_notes_export_impl(NoteExportArgs {
+                    item_key: "NOTE1".into(),
+                    format: Some(NoteExportFormat::Markdown),
+                })
+                .await
+                .expect("export ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+            let text = res
+                .content
+                .first()
+                .and_then(|c| c.as_text())
+                .map(|t| t.text.as_str());
+            assert_eq!(text, Some("# Exported"));
+        }
+
+        #[tokio::test]
+        async fn exports_note_as_html() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"content":"<h1>Exported</h1>"}"#,
+            )]);
+            let server = ZoteroMcpServer::new(better_notes_state(base));
+
+            // Act
+            let res = server
+                .better_notes_export_impl(NoteExportArgs {
+                    item_key: "NOTE1".into(),
+                    format: Some(NoteExportFormat::Html),
+                })
+                .await
+                .expect("export ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+            let text = res
+                .content
+                .first()
+                .and_then(|c| c.as_text())
+                .map(|t| t.text.as_str());
+            assert_eq!(text, Some("<h1>Exported</h1>"));
+        }
+    }
+
+    mod templates {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn runs_template_and_returns_rendered_text() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r##"{"result":"# Rendered"}"##,
+            )]);
+            let server = ZoteroMcpServer::new(better_notes_state(base));
+
+            // Act
+            let res = server
+                .better_notes_run_template_impl(RunTemplateArgs {
+                    template_name: "Export".into(),
+                    item_key: "NOTE1".into(),
+                })
+                .await
+                .expect("template ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+            let text = res
+                .content
+                .first()
+                .and_then(|c| c.as_text())
+                .map(|t| t.text.as_str());
+            assert_eq!(text, Some("# Rendered"));
+        }
+    }
+
+    mod import {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn imports_markdown_into_note() {
+            // Arrange
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                r#"{"itemKey":"NEWNOTE1"}"#,
+            )]);
+            let server = ZoteroMcpServer::new(better_notes_state(base));
+
+            // Act
+            let res = server
+                .better_notes_from_markdown_impl(FromMarkdownArgs {
+                    parent_key: Some("PARENT1".into()),
+                    markdown: "# Note Title".to_owned(),
+                })
+                .await
+                .expect("import ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+            let text = res
+                .content
+                .first()
+                .and_then(|c| c.as_text())
+                .map(|t| t.text.as_str());
+            assert_eq!(text, Some("NEWNOTE1"));
+        }
+    }
+
+    mod relations_and_trees {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn fetches_note_relations() {
+            // Arrange
+            let body = json!({
+                "relations": { "outbound": [], "inbound": [] }
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let server = ZoteroMcpServer::new(better_notes_state(base));
+
+            // Act
+            let res = server
+                .better_notes_get_relations_impl(NoteRelationsArgs {
+                    item_key: "NOTE1".into(),
+                })
+                .await
+                .expect("relations ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+        }
+
+        #[tokio::test]
+        async fn fetches_note_tree() {
+            // Arrange
+            let body = json!({
+                "tree": { "key": "NOTE1", "children": [] }
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let server = ZoteroMcpServer::new(better_notes_state(base));
+
+            // Act
+            let res = server
+                .better_notes_get_tree_impl(NoteTreeArgs {
+                    item_key: "NOTE1".into(),
+                })
+                .await
+                .expect("tree ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+        }
+    }
+}

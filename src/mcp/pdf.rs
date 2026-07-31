@@ -301,3 +301,220 @@ struct BridgeFileRoot {
     /// Filesystem path to the root directory.
     path: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use serde_json::json;
+
+    use super::*;
+    use crate::zotero::ZoteroItem;
+
+    mod path_resolution {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+        #[test]
+        fn file_url_to_path_parses_valid_file_url() {
+            // Arrange
+            let href = "file:///tmp/document.pdf";
+
+            // Act
+            let path = file_url_to_path(href);
+
+            // Assert
+            assert_eq!(path, Some(PathBuf::from("/tmp/document.pdf")));
+        }
+
+        #[test]
+        fn file_url_to_path_returns_none_for_non_file_url() {
+            // Arrange
+            let href = "https://example.com/document.pdf";
+
+            // Act
+            let path = file_url_to_path(href);
+
+            // Assert
+            assert_eq!(path, None);
+        }
+
+        #[test]
+        fn resolve_linked_attachment_path_resolves_attachment_prefix() {
+            // Arrange
+            let raw_path = "attachments:subfolder/paper.pdf";
+            let base_dir = PathBuf::from("/zotero/base");
+            let bridge_roots =
+                vec![("zotero-linked-base".to_owned(), base_dir.clone())];
+
+            // Act
+            let resolved =
+                resolve_linked_attachment_path(raw_path, &bridge_roots);
+
+            // Assert
+            assert_eq!(resolved, Some(base_dir.join("subfolder/paper.pdf")));
+        }
+
+        #[test]
+        fn resolve_linked_attachment_path_returns_raw_path_when_unprefixed() {
+            // Arrange
+            let raw_path = "subfolder/paper.pdf";
+            let bridge_roots = vec![(
+                "zotero-linked-base".to_owned(),
+                PathBuf::from("/zotero/base"),
+            )];
+
+            // Act
+            let resolved =
+                resolve_linked_attachment_path(raw_path, &bridge_roots);
+
+            // Assert
+            assert_eq!(resolved, Some(PathBuf::from("subfolder/paper.pdf")));
+        }
+
+        #[test]
+        fn enclosure_file_path_extracts_path_from_imported_attachment() {
+            // Arrange
+            let item: ZoteroItem = serde_json::from_value(json!({
+                "key": "PDF01",
+                "version": 1,
+                "links": {
+                    "enclosure": {
+                        "href": "file:///storage/PDF01/paper.pdf",
+                        "type": "application/pdf",
+                        "title": "paper.pdf"
+                    }
+                },
+                "data": {
+                    "key": "PDF01",
+                    "version": 1,
+                    "itemType": "attachment",
+                    "linkMode": "imported_file",
+                    "contentType": "application/pdf",
+                    "filename": "paper.pdf"
+                }
+            }))
+            .unwrap();
+
+            // Act
+            let path = enclosure_file_path(&item);
+
+            // Assert
+            assert_eq!(path, Some(PathBuf::from("/storage/PDF01/paper.pdf")));
+        }
+
+        #[test]
+        fn resolve_attachment_pdf_path_returns_none_for_non_attachment_item() {
+            // Arrange
+            let item: ZoteroItem = serde_json::from_value(json!({
+                "key": "ITEM01",
+                "version": 1,
+                "data": {
+                    "key": "ITEM01",
+                    "version": 1,
+                    "itemType": "journalArticle"
+                }
+            }))
+            .unwrap();
+
+            // Act
+            let resolved = resolve_attachment_pdf_path(&item, &[]);
+
+            // Assert
+            assert!(resolved.is_none());
+        }
+
+        #[test]
+        fn find_pdf_path_returns_first_valid_attachment() {
+            // Arrange
+            let children: Vec<ZoteroItem> = serde_json::from_value(json!([
+                {
+                    "key": "NOTE01",
+                    "version": 1,
+                    "data": {
+                        "key": "NOTE01",
+                        "version": 1,
+                        "itemType": "note"
+                    }
+                },
+                {
+                    "key": "PDF01",
+                    "version": 1,
+                    "links": {
+                        "enclosure": {
+                            "href": "file:///tmp/paper.pdf",
+                            "type": "application/pdf"
+                        }
+                    },
+                    "data": {
+                        "key": "PDF01",
+                        "version": 1,
+                        "itemType": "attachment",
+                        "linkMode": "imported_file",
+                        "contentType": "application/pdf",
+                        "filename": "paper.pdf"
+                    }
+                }
+            ]))
+            .unwrap();
+
+            // Act
+            let resolved = find_pdf_path(&children, &[]);
+
+            // Assert
+            assert!(resolved.is_some());
+            let res = resolved.unwrap();
+            assert_eq!(res.path, PathBuf::from("/tmp/paper.pdf"));
+            assert!(!res.requires_root_check);
+        }
+    }
+
+    mod roots_and_security {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+        #[test]
+        fn file_root_kind_deserializes_kebab_case_and_identifies_pdf_roots() {
+            // Arrange & Act
+            let storage: FileRootKind =
+                serde_json::from_str("\"zotero-storage\"").unwrap();
+            let linked: FileRootKind =
+                serde_json::from_str("\"zotero-linked-base\"").unwrap();
+            let attanger: FileRootKind =
+                serde_json::from_str("\"attanger-dest\"").unwrap();
+            let other: FileRootKind =
+                serde_json::from_str("\"unrecognized-root\"").unwrap();
+
+            // Assert
+            assert_eq!(storage, FileRootKind::ZoteroStorage);
+            assert_eq!(linked, FileRootKind::ZoteroLinkedBase);
+            assert_eq!(attanger, FileRootKind::AttangerDest);
+            assert_eq!(other, FileRootKind::Other);
+
+            assert_eq!(storage.as_str(), "zotero-storage");
+            assert_eq!(other.as_str(), "other");
+        }
+
+        #[test]
+        fn merge_pdf_roots_combines_configured_and_bridge_roots() {
+            // Arrange
+            let configured = vec![PathBuf::from("/configured/dir")];
+            let bridge = vec![
+                ("zotero-storage".to_owned(), PathBuf::from("/bridge/storage")),
+                (
+                    "unknown-category".to_owned(),
+                    PathBuf::from("/bridge/ignored"),
+                ),
+            ];
+
+            // Act
+            let merged = merge_pdf_roots(&configured, &bridge);
+
+            // Assert
+            assert_eq!(merged.len(), 3);
+            assert_eq!(merged[0], PathBuf::from("/configured/dir"));
+            assert_eq!(merged[1], PathBuf::from("/bridge/storage"));
+            assert_eq!(merged[2], PathBuf::from("/bridge/ignored"));
+        }
+    }
+}
