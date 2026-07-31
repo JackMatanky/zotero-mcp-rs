@@ -74,9 +74,11 @@ export function loadBridge(options = {}) {
       if (options.storageThrows) {
         throw new Error("storage failed");
       }
-      return options.storageDirectory ?? {
-        path: options.storagePath ?? "/Users/alice/Zotero/storage",
-      };
+      return (
+        options.storageDirectory ?? {
+          path: options.storagePath ?? "/Users/alice/Zotero/storage",
+        }
+      );
     },
     Prefs: {
       get(name) {

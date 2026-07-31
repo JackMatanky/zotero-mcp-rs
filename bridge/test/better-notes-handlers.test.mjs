@@ -197,7 +197,9 @@ test("returns note relations and tree", async () => {
     { relations: { outbound, inbound } },
   );
   assert.deepEqual(
-    plain(await bridge.handleRequest("POST", "/notes/tree", { itemKey: "NOTE1" })),
+    plain(
+      await bridge.handleRequest("POST", "/notes/tree", { itemKey: "NOTE1" }),
+    ),
     { tree },
   );
   assert.equal(calls.noteTree, 1);
