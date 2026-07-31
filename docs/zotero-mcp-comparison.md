@@ -10,7 +10,7 @@ Comparison of zotero-mcp-rs against popular Zotero MCP servers (research, 2026-0
 | **Stack / arch** | Rust + rmcp, stdio | Python (FastMCP), PyPI | Zotero plugin + built-in MCP, TS | Zotero plugin (TS, Transformers.js) + built-in MCP | TypeScript, npx | Rust, stdio | Python (PyPI/uv) |
 | **Transport** | stdio | stdio + Streamable HTTP + SSE | Streamable HTTP | Streamable HTTP (`:23119/zotseek/mcp`) | stdio | stdio | stdio |
 | **Zotero connection** | Local HTTP API (`/users/0` only) + BBT/BetterNotes bridges | Local + Web API + hybrid (local reads / web writes), group libs, WebDAV | In-process (plugin) | In-process (plugin), 100% local; group libs opt-in | Web API v3 (API key + user ID) | Own plugin HTTP API (23119/mcp) | Local HTTP API |
-| **# tools** | **51** | **~30** | 20 | search-focused, read-only | 15 | 5 | 5 |
+| **# tools** | **54** | **~30** | 20 | search-focused, read-only | 15 | 5 | 5 |
 | **Resources / prompts** | 2 resources + 1 prompt | prompts + resources | — | — (results carry `zotero://` deep links to matched page) | workflow `instructions` + Claude skill | — | — |
 | **Search** | quicksearch, by tag, by citekey; advanced ⚠️ client-side over last 100 items | ✅ keyword, advanced multi-criteria, tags, citekey, notes/annotations | ✅ boolean, filters, relevance, offsets | ✅ hybrid semantic+keyword (RRF), multi-query AND/OR, section-aware, passage previews | ✅ by query or sorted field | citekey lookup only | author/title only, 30 items |
 | **Semantic search (embeddings)** | ❌ | ✅ ChromaDB + sentence-transformers / OpenAI / Gemini / Ollama, auto-update | ✅ OpenAI/Ollama + SQLite-vec | ✅ **100% local** (nomic-embed-text-v1.5, 4 curated models, WebGPU-ready) | ❌ | ❌ | ❌ |
@@ -29,7 +29,7 @@ Comparison of zotero-mcp-rs against popular Zotero MCP servers (research, 2026-0
 | **.docx citation injection** | ❌ | ❌ | ❌ | ❌ | ✅ inject_citations (5 styles) | ❌ | ❌ |
 | **Duplicates / analytics** | ✅ find_duplicates, library_coverage ⚠️ (100-item ceiling) | ✅ find **+ merge** duplicates (consolidates children, dry-run) | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Citation intelligence** | ❌ | ✅ Scite tallies + retraction alerts (optional extra) | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **Related-item relations** | ❌ (BBT relations via BetterNotes only) | ✅ get/add/remove relations (dc:relation, owl:sameAs) | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Related-item relations** | ✅ get/add/remove related items (dc:relation) | ✅ get/add/remove relations (dc:relation, owl:sameAs) | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Write safety default** | ✅ **read-only** until `ZOTERO_WRITE_ENABLED=1`; path allowlist profiles | ⚠️ local mode = read-only; writes need API key (hybrid) | ⚠️ write tools can be disabled in prefs | ✅ MCP is opt-in & read-only; plugin UI can create collections | ✅ no deletions unless `UNSAFE_OPERATIONS` set | ✅ annotations only | ⚠️ add-by-DOI always on |
 | **Security model** | loopback-only + canonicalize-prefix path checks, size caps, 4 profiles | API key (web/hybrid), local read-only, WebDAV creds | local-only plugin | 100% local/offline, zero network for search/index, no API keys | API key auth; deletions opt-in | loopback plugin | local API, no key |
 | **Extra tooling** | BBT/BetterNotes bridges, `zotero_status`, analytics | standalone `zotero-cli`, Docker images, setup/update commands, 294 tests | client config generator, fulltext DB stats | auto-index, find-similar, PDF-selection search, indexing status column, crash-resilient, plugin API | — | `/read` slash command, color scheme | — |
