@@ -1170,13 +1170,6 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired to MCP server registration in a follow-up task"
-        )
-    )]
     pub(crate) async fn zotero_get_related_items_impl(
         &self,
         args: GetRelatedItemsArgs,
@@ -1191,13 +1184,6 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired to MCP server registration in a follow-up task"
-        )
-    )]
     pub(crate) async fn zotero_add_item_relation_impl(
         &self,
         args: AddItemRelationArgs,
@@ -1218,13 +1204,6 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired to MCP server registration in a follow-up task"
-        )
-    )]
     pub(crate) async fn zotero_remove_item_relation_impl(
         &self,
         args: RemoveItemRelationArgs,

@@ -32,18 +32,19 @@ use crate::{
         },
         connector_tools::{FetchArgs, SearchArgs},
         zotero::{
-            AddByIdentifierArgs, AdvancedSearchArgs, AttachFileArgs,
-            BatchUpdateTagsArgs, CreateAnnotationArgs, CreateCollectionArgs,
-            CreateNoteArgs, DeleteCollectionArgs, DeleteItemArgs,
-            DeleteTagsArgs, EmptyArgs, FindDuplicatesArgs,
+            AddByIdentifierArgs, AddItemRelationArgs, AdvancedSearchArgs,
+            AttachFileArgs, BatchUpdateTagsArgs, CreateAnnotationArgs,
+            CreateCollectionArgs, CreateNoteArgs, DeleteCollectionArgs,
+            DeleteItemArgs, DeleteTagsArgs, EmptyArgs, FindDuplicatesArgs,
             GetCollectionItemsArgs, GetItemArgs, GetItemChildrenArgs,
             GetItemFulltextArgs, GetItemMetadataArgs, GetNotesArgs,
             GetPdfOutlineArgs, GetPdfPathArgs, GetRecentArgs,
-            GetUnfiledItemsArgs, LibraryCoverageArgs, ListTagsArgs,
-            ManageCollectionsArgs, ReadPdfPagesArgs, RenameTagArgs,
-            SearchByCitationKeyArgs, SearchByTagArgs, SearchCollectionsArgs,
-            SearchItemsArgs, SynthesizeAnnotationsArgs, TrashItemArgs,
-            UpdateCollectionArgs, UpdateItemArgs,
+            GetRelatedItemsArgs, GetUnfiledItemsArgs, LibraryCoverageArgs,
+            ListTagsArgs, ManageCollectionsArgs, ReadPdfPagesArgs,
+            RemoveItemRelationArgs, RenameTagArgs, SearchByCitationKeyArgs,
+            SearchByTagArgs, SearchCollectionsArgs, SearchItemsArgs,
+            SynthesizeAnnotationsArgs, TrashItemArgs, UpdateCollectionArgs,
+            UpdateItemArgs,
         },
     },
     state::AppState,
@@ -451,6 +452,54 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<BatchUpdateTagsArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_batch_update_tags_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_get_related_items",
+        description = "Get items related to an item via Zotero's dc:relation \
+                       links"
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_related_items(
+        &self,
+        Parameters(args): Parameters<GetRelatedItemsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_get_related_items_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_add_item_relation",
+        description = "Link two items as related (bidirectional, dc:relation) \
+                       (requires write permission)"
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_add_item_relation(
+        &self,
+        Parameters(args): Parameters<AddItemRelationArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_add_item_relation_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_remove_item_relation",
+        description = "Remove the relation between two items (bidirectional, \
+                       dc:relation) (requires write permission)"
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_remove_item_relation(
+        &self,
+        Parameters(args): Parameters<RemoveItemRelationArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_remove_item_relation_impl(args).await
     }
 
     #[tool(
