@@ -740,6 +740,9 @@ mod tests {
         fn try_from_rejects_bare_item_key_string() {
             let uri = RelationUri::from("ITEM123");
             assert!(ItemKey::try_from(&uri).is_err());
+
+            let full_length_key = RelationUri::from("ABCDEFGH");
+            assert!(ItemKey::try_from(&full_length_key).is_err());
         }
 
         #[test]
