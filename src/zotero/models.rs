@@ -132,6 +132,56 @@ string_key!(
     "Zotero citation key: wrapper for citation keys to enforce type safety \
      and key semantics across search and item metadata."
 );
+string_key!(
+    RelationUri,
+    "Zotero relation URI: an item URI stored as a value in an item's \
+     `relations` map, of the form `http://zotero.org/users/0/items/{KEY}` or \
+     `http://zotero.org/groups/{ID}/items/{KEY}`. Bridges [`ItemKey`] and the \
+     URI strings Zotero writes for relations: [`From<&ItemKey>`](ItemKey) \
+     builds a `/users/0` URI on write, while \
+     [`ItemKey::try_from`](ItemKey) recovers the trailing key on read, \
+     regardless of the URI prefix."
+);
+
+/// Prefix used when constructing item relation URIs to write back to Zotero,
+/// matching the Local API's own `/users/0` namespace.
+const ITEM_RELATION_URI_BASE: &str = "http://zotero.org/users/0/items/";
+
+impl From<&ItemKey> for RelationUri {
+    #[inline]
+    fn from(key: &ItemKey) -> Self {
+        Self(format!("{ITEM_RELATION_URI_BASE}{}", key.as_str()))
+    }
+}
+
+impl TryFrom<&RelationUri> for ItemKey {
+    type Error = RelationUriError;
+
+    fn try_from(uri: &RelationUri) -> Result<Self, Self::Error> {
+        let value = uri.as_str();
+        if !value.contains("/items/") {
+            return Err(RelationUriError);
+        }
+        let key = value.rsplit('/').next().unwrap_or_default();
+        if key.len() == 8 && key.chars().all(|c| c.is_ascii_alphanumeric()) {
+            Ok(ItemKey::from(key))
+        } else {
+            Err(RelationUriError)
+        }
+    }
+}
+
+/// Error returned when a [`RelationUri`] does not carry a valid Zotero item
+/// key as its trailing URI segment.
+#[derive(Debug)]
+pub(crate) struct RelationUriError;
+
+impl std::fmt::Display for RelationUriError {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("not a Zotero item URI")
+    }
+}
 
 /// Zotero library version counter.
 #[derive(
@@ -648,6 +698,62 @@ mod tests {
             let col_key = CollectionKey::from("COL123".to_owned());
             assert_eq!(col_key.to_string(), "COL123");
             assert_eq!(col_key, "COL123");
+        }
+    }
+
+    mod relation_uri {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn from_item_key_round_trips() {
+            let key = ItemKey::from("ABC12345");
+            let uri = RelationUri::from(&key);
+            assert_eq!(
+                uri.to_string(),
+                "http://zotero.org/users/0/items/ABC12345"
+            );
+
+            let recovered = ItemKey::try_from(&uri).unwrap();
+            assert_eq!(recovered, key);
+        }
+
+        #[test]
+        fn try_from_extracts_key_from_user_library_uri() {
+            let uri =
+                RelationUri::from("http://zotero.org/users/0/items/ABC12345");
+            let key = ItemKey::try_from(&uri).unwrap();
+            assert_eq!(key, "ABC12345");
+        }
+
+        #[test]
+        fn try_from_extracts_key_from_group_library_uri() {
+            let uri = RelationUri::from(
+                "http://zotero.org/groups/36222/items/E6IGUT5Z",
+            );
+            let key = ItemKey::try_from(&uri).unwrap();
+            assert_eq!(key, "E6IGUT5Z");
+        }
+
+        #[test]
+        fn try_from_rejects_bare_item_key_string() {
+            let uri = RelationUri::from("ITEM123");
+            assert!(ItemKey::try_from(&uri).is_err());
+        }
+
+        #[test]
+        fn try_from_rejects_malformed_uris() {
+            let empty = RelationUri::from("");
+            assert!(ItemKey::try_from(&empty).is_err());
+
+            let no_items_segment =
+                RelationUri::from("http://zotero.org/users/0/ABC12345");
+            assert!(ItemKey::try_from(&no_items_segment).is_err());
+
+            let bad_key_shape =
+                RelationUri::from("http://zotero.org/users/0/items/ABC");
+            assert!(ItemKey::try_from(&bad_key_shape).is_err());
         }
     }
 
