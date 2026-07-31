@@ -1025,11 +1025,47 @@ mod tests {
             .unwrap_or_default()
     }
 
+    fn security_with_pdf_limit(max_pdf_bytes: u64) -> SecurityConfig {
+        SecurityConfig {
+            max_pdf_bytes,
+            ..SecurityConfig::default()
+        }
+    }
+
+    fn parent_journal_item() -> serde_json::Value {
+        json!({
+            "key": "ITEM0001",
+            "version": 1,
+            "data": {
+                "key": "ITEM0001",
+                "version": 1,
+                "itemType": "journalArticle",
+            },
+        })
+    }
+
+    fn zotero_pdf_server(children: serde_json::Value) -> String {
+        mock_server(vec![
+            http_response("200 OK", &parent_journal_item().to_string()),
+            http_response("200 OK", &children.to_string()),
+        ])
+    }
+
+    fn bridge_pdf_root(kind: &str, path: &std::path::Path) -> String {
+        let body = json!({
+            "roots": [{
+                "kind": kind,
+                "path": path.canonicalize().unwrap(),
+            }],
+        });
+        mock_server(vec![http_response("200 OK", &body.to_string())])
+    }
+
     #[tokio::test]
     async fn zotero_read_pdf_pages_rejects_direct_path_by_default() {
         let temp = tempfile::Builder::new().suffix(".pdf").tempfile().unwrap();
         let server = ZoteroMcpServer::new(AppState {
-            security: SecurityConfig::default(),
+            security: security_with_pdf_limit(1024),
             ..AppState::from_env()
         });
 
@@ -1046,7 +1082,72 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn zotero_read_pdf_pages_allows_direct_path_inside_allowed_root_when_profile_allows()
+    async fn zotero_read_pdf_pages_allows_direct_path_inside_bridge_pdf_root_without_direct_flag()
+     {
+        let root = tempfile::TempDir::new().unwrap();
+        let pdf = root.path().join("bad.pdf");
+        std::fs::write(&pdf, b"not a pdf").unwrap();
+        let body = json!({
+            "roots": [{
+                "kind": "attanger-dest",
+                "path": root.path().canonicalize().unwrap(),
+            }],
+        });
+        let bridge_base =
+            mock_server(vec![http_response("200 OK", &body.to_string())]);
+        let server = ZoteroMcpServer::new(AppState {
+            better_notes_url: bridge_base,
+            security: security_with_pdf_limit(1024),
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                item_key_or_path: pdf.display().to_string(),
+                pages: None,
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(true));
+        assert!(tool_text(&res).contains("PDF extraction error"));
+    }
+
+    #[tokio::test]
+    async fn zotero_read_pdf_pages_rejects_direct_path_outside_bridge_pdf_roots()
+     {
+        let root = tempfile::TempDir::new().unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        let pdf = outside.path().join("bad.pdf");
+        std::fs::write(&pdf, b"not a pdf").unwrap();
+        let body = json!({
+            "roots": [{
+                "kind": "attanger-dest",
+                "path": root.path().canonicalize().unwrap(),
+            }],
+        });
+        let bridge_base =
+            mock_server(vec![http_response("200 OK", &body.to_string())]);
+        let server = ZoteroMcpServer::new(AppState {
+            better_notes_url: bridge_base,
+            security: security_with_pdf_limit(1024),
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                item_key_or_path: pdf.display().to_string(),
+                pages: None,
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(true));
+        assert!(tool_text(&res).contains("Direct file paths are disabled"));
+    }
+
+    #[tokio::test]
+    async fn zotero_read_pdf_pages_allows_direct_path_inside_configured_root_when_bridge_unavailable()
      {
         let root = tempfile::TempDir::new().unwrap();
         let pdf = root.path().join("bad.pdf");
@@ -1055,6 +1156,7 @@ mod tests {
         security.direct_file_paths = true;
         security.allowed_read_dirs = vec![root.path().canonicalize().unwrap()];
         let server = ZoteroMcpServer::new(AppState {
+            better_notes_url: "http://127.0.0.1:9/better-notes".to_owned(),
             security,
             ..AppState::from_env()
         });
@@ -1098,6 +1200,171 @@ mod tests {
         assert!(tool_text(&res).contains("outside allowed"));
     }
 
+    #[tokio::test]
+    async fn zotero_read_pdf_pages_reads_imported_attachment_enclosure_without_allowed_dirs()
+     {
+        let pdf = tempfile::Builder::new().suffix(".pdf").tempfile().unwrap();
+        std::fs::write(pdf.path(), b"not a pdf").unwrap();
+        let file_url =
+            url::Url::from_file_path(pdf.path()).unwrap().to_string();
+        let children = json!([{
+            "key": "PDF00001",
+            "version": 1,
+            "links": {
+                "enclosure": {
+                    "href": file_url,
+                    "type": "application/pdf",
+                    "title": "bad.pdf",
+                },
+            },
+            "data": {
+                "key": "PDF00001",
+                "version": 1,
+                "itemType": "attachment",
+                "linkMode": "imported_file",
+                "contentType": "application/pdf",
+                "filename": "bad.pdf",
+            },
+        }]);
+        let zotero_base = zotero_pdf_server(children);
+        let server = ZoteroMcpServer::new(AppState {
+            zotero_api_url: zotero_base,
+            better_notes_url: "http://127.0.0.1:9/better-notes".to_owned(),
+            security: security_with_pdf_limit(1024),
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                item_key_or_path: "ITEM0001".to_owned(),
+                pages: None,
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(true));
+        assert!(tool_text(&res).contains("PDF extraction error"));
+    }
+
+    #[tokio::test]
+    async fn zotero_read_pdf_pages_reads_linked_attanger_attachment_inside_bridge_root()
+     {
+        let root = tempfile::TempDir::new().unwrap();
+        let pdf = root.path().join("bad.pdf");
+        std::fs::write(&pdf, b"not a pdf").unwrap();
+        let children = json!([{
+            "key": "PDF00001",
+            "version": 1,
+            "data": {
+                "key": "PDF00001",
+                "version": 1,
+                "itemType": "attachment",
+                "linkMode": "linked_file",
+                "contentType": "application/pdf",
+                "path": pdf.display().to_string(),
+            },
+        }]);
+        let zotero_base = zotero_pdf_server(children);
+        let bridge_base = bridge_pdf_root("attanger-dest", root.path());
+        let server = ZoteroMcpServer::new(AppState {
+            zotero_api_url: zotero_base,
+            better_notes_url: bridge_base,
+            security: security_with_pdf_limit(1024),
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                item_key_or_path: "ITEM0001".to_owned(),
+                pages: None,
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(true));
+        assert!(tool_text(&res).contains("PDF extraction error"));
+    }
+
+    #[tokio::test]
+    async fn zotero_read_pdf_pages_rejects_linked_attachment_outside_pdf_roots()
+    {
+        let root = tempfile::TempDir::new().unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        let pdf = outside.path().join("bad.pdf");
+        std::fs::write(&pdf, b"not a pdf").unwrap();
+        let children = json!([{
+            "key": "PDF00001",
+            "version": 1,
+            "data": {
+                "key": "PDF00001",
+                "version": 1,
+                "itemType": "attachment",
+                "linkMode": "linked_file",
+                "contentType": "application/pdf",
+                "path": pdf.display().to_string(),
+            },
+        }]);
+        let zotero_base = zotero_pdf_server(children);
+        let bridge_base = bridge_pdf_root("attanger-dest", root.path());
+        let server = ZoteroMcpServer::new(AppState {
+            zotero_api_url: zotero_base,
+            better_notes_url: bridge_base,
+            security: security_with_pdf_limit(1024),
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                item_key_or_path: "ITEM0001".to_owned(),
+                pages: None,
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(true));
+        assert!(tool_text(&res).contains("outside allowed"));
+    }
+
+    #[tokio::test]
+    async fn zotero_read_pdf_pages_resolves_relative_linked_attachment_from_zotero_base_root()
+     {
+        let base = tempfile::TempDir::new().unwrap();
+        let subdir = base.path().join("subdir");
+        std::fs::create_dir_all(&subdir).unwrap();
+        let pdf = subdir.join("bad.pdf");
+        std::fs::write(&pdf, b"not a pdf").unwrap();
+        let children = json!([{
+            "key": "PDF00001",
+            "version": 1,
+            "data": {
+                "key": "PDF00001",
+                "version": 1,
+                "itemType": "attachment",
+                "linkMode": "linked_file",
+                "contentType": "application/pdf",
+                "path": "attachments:subdir/bad.pdf",
+            },
+        }]);
+        let zotero_base = zotero_pdf_server(children);
+        let bridge_base = bridge_pdf_root("zotero-linked-base", base.path());
+        let server = ZoteroMcpServer::new(AppState {
+            zotero_api_url: zotero_base,
+            better_notes_url: bridge_base,
+            security: security_with_pdf_limit(1024),
+            ..AppState::from_env()
+        });
+
+        let res = server
+            .zotero_read_pdf_pages(Parameters(ReadPdfPagesArgs {
+                item_key_or_path: "ITEM0001".to_owned(),
+                pages: None,
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(res.is_error, Some(true));
+        assert!(tool_text(&res).contains("PDF extraction error"));
+    }
     #[tokio::test]
     async fn better_notes_export_tool_returns_markdown_success() {
         let base = mock_server(vec![http_response(

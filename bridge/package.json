@@ -1,8 +1,8 @@
 {
-  "name": "zotero-better-notes-bridge",
+  "name": "zotero-companion-bridge",
   "private": true,
   "version": "1.0.0",
-  "description": "Companion Zotero script bridging Zotero.BetterNotes.api to the Zotero MCP server's loopback HTTP interface at /better-notes/*.",
+  "description": "Companion Zotero script bridging Zotero in-process APIs to the Zotero MCP server's loopback HTTP interface.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "watch": "tsc -p tsconfig.json --watch",

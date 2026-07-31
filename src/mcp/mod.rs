@@ -3,6 +3,7 @@
 mod better_bibtex;
 mod better_notes;
 mod connector_tools;
+mod pdf;
 mod resources;
 mod server;
 mod zotero;

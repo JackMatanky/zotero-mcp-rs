@@ -1,9 +1,14 @@
 //! MCP tool handlers and argument models for Zotero Local API tools.
 
+use std::path::{Path, PathBuf};
+
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
+use super::pdf::{
+    canonicalize_existing_path, find_pdf_path, resolve_attachment_pdf_path,
+};
 use crate::{
     ZoteroMcpServer,
     better_bibtex::{BetterBibtexClient, TranslatorName},
@@ -12,7 +17,7 @@ use crate::{
     zotero::{
         AnnotationDraft, AnnotationType, CitationKey, CollectionItemAction,
         CollectionKey, ItemKey, ItemType, SearchCondition, SearchField,
-        SearchOperator, TagName, TrashAction, ZoteroClient, ZoteroItem,
+        SearchOperator, TagName, TrashAction, ZoteroClient,
     },
 };
 
@@ -102,8 +107,8 @@ pub(crate) struct GetPdfPathArgs {
 /// Arguments for `zotero_read_pdf_pages`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ReadPdfPagesArgs {
-    /// Zotero item key; direct PDF paths require
-    /// `ZOTERO_DIRECT_FILE_PATHS=true` and an allowed read directory.
+    /// Zotero item key; direct PDF paths must resolve under configured or
+    /// Zotero-reported PDF roots, otherwise direct-path opt-in is required.
     pub(crate) item_key_or_path: String,
     /// 1-based page numbers to extract (e.g. `[1, 2, 3]`).
     pub(crate) pages: Option<Vec<usize>>,
@@ -502,11 +507,21 @@ impl ZoteroMcpServer {
             Err(e) => return Ok(super::text_error(&e)),
         };
 
+        let bridge_roots = Vec::new();
         let found_path = if item.data.item_type == ItemType::Attachment {
-            item.data.path
+            item.data
+                .path
+                .as_deref()
+                .map(PathBuf::from)
+                .or_else(|| {
+                    resolve_attachment_pdf_path(&item, &bridge_roots)
+                        .map(|resolved| resolved.path)
+                })
+                .map(|path| path.display().to_string())
         } else {
             match client.get_item_children(&args.item_key).await {
-                Ok(children) => find_pdf_path(&children),
+                Ok(children) => find_pdf_path(&children, &bridge_roots)
+                    .map(|resolved| resolved.path.display().to_string()),
                 Err(e) => return Ok(super::text_error(&e)),
             }
         };
@@ -527,15 +542,12 @@ impl ZoteroMcpServer {
         &self,
         args: ReadPdfPagesArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let pdf_path = if std::path::Path::new(&args.item_key_or_path).exists()
-        {
-            if let Err(e) = self.state.check_direct_file_paths_enabled() {
-                return Ok(super::text_error(&e));
-            }
-            match self.state.check_existing_read_path(
-                std::path::Path::new(&args.item_key_or_path),
-                &self.state.security.allowed_read_dirs,
-                "PDF read",
+        let bridge_roots = self.fetch_bridge_pdf_roots().await;
+        let pdf_path = if Path::new(&args.item_key_or_path).exists() {
+            match self.validate_pdf_read_path(
+                Path::new(&args.item_key_or_path),
+                &bridge_roots,
+                true,
             ) {
                 Ok(path) => path,
                 Err(e) => return Ok(super::text_error(&e)),
@@ -556,31 +568,44 @@ impl ZoteroMcpServer {
                 }
             };
 
-            let found_path = if item.data.item_type == ItemType::Attachment {
-                item.data.path
+            let resolved = if item.data.item_type == ItemType::Attachment {
+                resolve_attachment_pdf_path(&item, &bridge_roots)
             } else {
-                client
-                    .get_item_children(&item_key)
-                    .await
-                    .ok()
-                    .and_then(|children| find_pdf_path(&children))
+                client.get_item_children(&item_key).await.ok().and_then(
+                    |children| find_pdf_path(&children, &bridge_roots),
+                )
             };
 
-            match found_path {
-                Some(p) => std::path::PathBuf::from(p),
-                None => {
-                    return Ok(CallToolResult::error(vec![
-                        rmcp::model::Content::text(format!(
-                            "No PDF file path found for key: {item_key_str}"
-                        )),
-                    ]));
+            let Some(resolved) = resolved else {
+                return Ok(CallToolResult::error(vec![
+                    rmcp::model::Content::text(format!(
+                        "No PDF file path found for key: {item_key_str}"
+                    )),
+                ]));
+            };
+
+            if resolved.requires_root_check {
+                match self.validate_pdf_read_path(
+                    &resolved.path,
+                    &bridge_roots,
+                    false,
+                ) {
+                    Ok(path) => path,
+                    Err(e) => return Ok(super::text_error(&e)),
                 }
+            } else {
+                let checked = match canonicalize_existing_path(&resolved.path) {
+                    Ok(checked) => checked,
+                    Err(e) => {
+                        return Ok(super::text_error(&e));
+                    }
+                };
+                if let Err(e) = self.state.check_pdf_file(&checked) {
+                    return Ok(super::text_error(&e));
+                }
+                checked
             }
         };
-
-        if let Err(e) = self.state.check_pdf_file(&pdf_path) {
-            return Ok(super::text_error(&e));
-        }
 
         let pages_ref = args.pages.as_deref();
         Ok(super::json_result(extract_pdf_pages(
@@ -1075,19 +1100,4 @@ impl ZoteroMcpServer {
             Err(e) => Ok(super::text_error(&e)),
         }
     }
-}
-fn find_pdf_path(children: &[ZoteroItem]) -> Option<String> {
-    children.iter().find_map(|child| {
-        let is_pdf = child.data.item_type == ItemType::Attachment
-            && child
-                .data
-                .content_type
-                .as_deref()
-                .is_some_and(|ct| ct.contains("pdf"));
-        if is_pdf {
-            child.data.path.clone()
-        } else {
-            None
-        }
-    })
 }

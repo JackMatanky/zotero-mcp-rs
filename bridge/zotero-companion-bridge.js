@@ -1,34 +1,34 @@
 "use strict";
 /**
- * Zotero Better Notes companion bridge script.
+ * Zotero companion bridge script.
  *
- * Exposes a slice of `Zotero.BetterNotes.api` over the Zotero MCP server's
- * loopback HTTP interface (`/better-notes/*`) so the Rust MCP server
- * (`src/better_notes/client.rs`) can export notes, convert Markdown/HTML,
- * run templates, and read note relations/trees.
+ * Exposes Zotero in-process capabilities over the Zotero MCP server's loopback
+ * HTTP interface. Better Notes handlers proxy a slice of
+ * `Zotero.BetterNotes.api`; `/file-roots` reports Zotero-managed attachment
+ * directories for PDF path policy.
  *
  * @remarks
- * `Zotero.BetterNotes.api` is an in-process JavaScript object that only
- * exists inside Zotero's own Firefox/Gecko-based extension runtime — unlike
- * Better BibTeX, Better Notes exposes no HTTP or RPC endpoint of its own.
- * Reaching it requires executing JS in that same process, sharing its
- * `Zotero`/`Zotero.Items` globals, Web Workers, and IndexedDB-backed note
- * storage. There is no FFI, socket, or other cross-process interface a
- * separate Rust binary could call instead, so this script must run as a
- * Zotero-loaded script (via Developer Utilities or a startup script), with
- * the Rust MCP server talking to it over HTTP like any other Zotero
- * companion bridge.
+ * `Zotero.BetterNotes.api` and Zotero preference/storage APIs only exist
+ * inside Zotero's own Firefox/Gecko-based extension runtime. Reaching them
+ * requires executing JS in that same process, sharing its `Zotero` globals,
+ * Web Workers, and IndexedDB-backed note storage. There is no FFI, socket, or
+ * other cross-process interface a separate Rust binary could call instead, so
+ * this script must run as a Zotero-loaded script (via Developer Utilities or a
+ * startup script), with the Rust MCP server talking to it over HTTP like any
+ * other Zotero companion bridge.
  *
- * Compiled from `zotero-better-notes-bridge.ts` — see `bridge/README.md`
- * for the build command. Do not edit the emitted `.js` directly.
+ * Compiled from `zotero-companion-bridge.ts` — see `bridge/README.md` for the
+ * build command. Do not edit the emitted `.js` directly.
  */
+/** Maximum accepted Markdown request body size, in UTF-8 bytes. */
 const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024;
+/** Maximum accepted HTML request body size, in UTF-8 bytes. */
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
+/** Maximum accepted Better Notes template name size, in UTF-8 bytes. */
 const MAX_TEMPLATE_NAME_BYTES = 128;
-if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
+if (typeof Zotero !== "undefined") {
     Zotero.debug("[BetterNotesBridge] Initializing HTTP endpoint handlers...");
     if (!Zotero.BetterNotesBridge) {
-        const api = Zotero.BetterNotes.api;
         /**
          * Looks up a Zotero library item by key.
          *
@@ -44,16 +44,92 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
             return item;
         }
         /**
+         * Returns the Better Notes API after confirming the plugin has loaded.
+         *
+         * @returns The loaded Better Notes API object.
+         * @throws Error if Better Notes is missing or not initialized yet.
+         */
+        function requireBetterNotesApi() {
+            const api = Zotero.BetterNotes?.api;
+            if (!api) {
+                throw new Error("Better Notes API is not loaded");
+            }
+            return api;
+        }
+        /**
+         * Appends a root only when Zotero returned a non-empty string path.
+         *
+         * Zotero prefs can be absent, booleans, or other values depending on
+         * installed plugins and initialization state; those are intentionally
+         * ignored rather than serialized.
+         *
+         * @param roots - Mutable result list being assembled for `/file-roots`.
+         * @param kind - Root category understood by Rust PDF path policy.
+         * @param path - Candidate path returned by Zotero or plugin prefs.
+         */
+        function pushRoot(roots, kind, path) {
+            if (typeof path === "string" && path.length > 0) {
+                roots.push({ kind, path });
+            }
+        }
+        /**
+         * Reads a Zotero pref without letting unavailable optional plugins
+         * break `/file-roots`.
+         *
+         * @param name - Zotero preference name.
+         * @returns The preference value, or `undefined` when lookup fails.
+         */
+        function readPref(name) {
+            try {
+                return Zotero.Prefs?.get(name);
+            }
+            catch {
+                return undefined;
+            }
+        }
+        /**
+         * Reads Zotero's storage directory without failing the whole root list.
+         *
+         * @returns The storage path, or `undefined` when Zotero cannot provide
+         * it in the current runtime state.
+         */
+        function readStoragePath() {
+            try {
+                return Zotero.getStorageDirectory?.()?.path;
+            }
+            catch {
+                return undefined;
+            }
+        }
+        /**
+         * Reports Zotero-managed PDF roots. This endpoint must work even when
+         * Better Notes is not installed.
+         *
+         * @param _body - Ignored request body; `/file-roots` takes no input.
+         * @returns Zotero-managed PDF roots available in this runtime.
+         */
+        async function handleFileRoots(_body) {
+            const roots = [];
+            pushRoot(roots, "zotero-storage", readStoragePath());
+            pushRoot(roots, "zotero-linked-base", readPref("baseAttachmentPath"));
+            const attangerEnabled = readPref("extensions.zotero.zoteroattanger.enable") !== false;
+            const attangerLinking = readPref("extensions.zotero.zoteroattanger.attachType") ===
+                "linking";
+            if (attangerEnabled && attangerLinking) {
+                pushRoot(roots, "attanger-dest", readPref("extensions.zotero.zoteroattanger.destDir"));
+            }
+            return { roots };
+        }
+        /**
          * Reports whether the Better Notes API is loaded and ready.
          *
-         * @returns `{ online: true, ready: true }`.
+         * @returns `{ online: true, ready }`, where `ready` reports whether
+         * Better Notes' API is currently loaded.
          */
         async function handleStatus() {
             return {
                 online: true,
-                // Better Notes doesn't expose a version field on `api`; report
-                // readiness instead of fabricating a version string.
-                ready: true,
+                ready: Boolean(Zotero.BetterNotes?.api),
             };
         }
         /**
@@ -115,8 +191,9 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
             if (!itemKey) {
                 throw new Error("Missing itemKey");
             }
-            const item = await requireItem(itemKey);
             const format = readNoteExportFormat(body);
+            const item = await requireItem(itemKey);
+            const api = requireBetterNotesApi();
             if (format === "html") {
                 return { content: await api.convert.note2html(item) };
             }
@@ -135,6 +212,7 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
         async function handleNoteToMarkdown(body) {
             const html = readStringBodyField(body, "html");
             assertMaxUtf8Bytes(html ?? "", "html", MAX_HTML_BYTES);
+            const api = requireBetterNotesApi();
             if (html !== undefined) {
                 return { markdown: await api.convert.html2md(html) };
             }
@@ -147,8 +225,9 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
          * @param body - `{ parentKey?: string; markdown: string }`.
          * @returns `{ itemKey: string }`, the created note item's key.
          * @throws Error if `markdown` is missing or invalid, `parentKey` is
-         * invalid or does not resolve to an item, or the new note's status
-         * cannot be read back after saving.
+         * invalid or does not resolve to an item, the new note's status cannot
+         * be read back after saving, or Better Notes conversion fails. If
+         * conversion fails after the empty note is saved, the note is erased.
          */
         async function handleNoteFromMarkdown(body) {
             const parentKey = readStringBodyField(body, "parentKey");
@@ -157,6 +236,7 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
                 throw new Error("Missing markdown");
             }
             assertMaxUtf8Bytes(markdown, "markdown", MAX_MARKDOWN_BYTES);
+            const api = requireBetterNotesApi();
             const noteItem = new Zotero.Item("note");
             if (parentKey) {
                 const parent = await requireItem(parentKey);
@@ -165,17 +245,23 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
             }
             noteItem.setNote("");
             await noteItem.saveTx();
-            const noteStatus = api.sync.getNoteStatus(noteItem.id);
-            if (!noteStatus) {
-                throw new Error(`Failed to read note status for ${noteItem.key}`);
+            try {
+                const noteStatus = api.sync.getNoteStatus(noteItem.id);
+                if (!noteStatus) {
+                    throw new Error(`Failed to read note status for ${noteItem.key}`);
+                }
+                const mdStatus = api.sync.getMDStatusFromContent(markdown);
+                const parsedContent = await api.convert.md2note(mdStatus, noteItem, {
+                    isImport: true,
+                });
+                noteItem.setNote(noteStatus.meta + parsedContent + noteStatus.tail);
+                await noteItem.saveTx();
+                return { itemKey: noteItem.key };
             }
-            const mdStatus = api.sync.getMDStatusFromContent(markdown);
-            const parsedContent = await api.convert.md2note(mdStatus, noteItem, {
-                isImport: true,
-            });
-            noteItem.setNote(noteStatus.meta + parsedContent + noteStatus.tail);
-            await noteItem.saveTx();
-            return { itemKey: noteItem.key };
+            catch (error) {
+                await noteItem.eraseTx().catch(() => undefined);
+                throw error;
+            }
         }
         /**
          * Runs Better Notes template `body.name` against `body.itemKey`.
@@ -193,6 +279,7 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
             }
             assertMaxUtf8Bytes(name, "template name", MAX_TEMPLATE_NAME_BYTES);
             const item = await requireItem(itemKey);
+            const api = requireBetterNotesApi();
             const result = await api.template.runItemTemplate(name, {
                 itemIds: [item.id],
             });
@@ -213,6 +300,7 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
                 throw new Error("Missing itemKey");
             }
             const item = await requireItem(itemKey);
+            const api = requireBetterNotesApi();
             const [outbound, inbound] = await Promise.all([
                 api.relation.getNoteLinkOutboundRelation(item.id),
                 api.relation.getNoteLinkInboundRelation(item.id),
@@ -233,11 +321,13 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
                 throw new Error("Missing itemKey");
             }
             const item = await requireItem(itemKey);
+            const api = requireBetterNotesApi();
             return { tree: await api.note.getNoteTree(item) };
         }
         /** Supported bridge endpoint handlers, keyed by request path. */
         const handlers = {
             "/status": handleStatus,
+            "/file-roots": handleFileRoots,
             "/notes/export": handleNoteExport,
             "/notes/to-markdown": handleNoteToMarkdown,
             "/notes/from-markdown": handleNoteFromMarkdown,
@@ -250,16 +340,18 @@ if (typeof Zotero !== "undefined" && Zotero.BetterNotes?.api) {
              * Dispatches an HTTP-bridged request to the handler registered
              * for `path`.
              *
-             * @param _method - HTTP method of the originating request
-             * (unused; every endpoint here is invoked the same way regardless
-             * of method).
+             * @param method - HTTP method of the originating request.
              * @param path - Bridge endpoint path, e.g. `"/notes/export"` for
              * note export or `"/notes/to-markdown"` for raw HTML conversion.
              * @param body - Parsed JSON request body.
              * @returns The handler's JSON-serializable result.
-             * @throws Error if no handler is registered for `path`.
+             * @throws Error if `method` is not `POST` or no handler is
+             * registered for `path`.
              */
-            async handleRequest(_method, path, body) {
+            async handleRequest(method, path, body) {
+                if (method !== "POST") {
+                    throw new Error(`Unsupported bridge method: ${method}`);
+                }
                 const handler = handlers[path];
                 if (!handler) {
                     throw new Error(`Unknown bridge endpoint: ${path}`);

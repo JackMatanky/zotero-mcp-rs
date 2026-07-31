@@ -231,8 +231,9 @@ declare namespace Zotero {
     }
 
     /**
-     * Registered by `zotero-better-notes-bridge.ts` after initialization to
-     * prevent duplicate bridge setup when the script runs more than once.
+     * Registered by `zotero-companion-bridge.ts` to prevent duplicate
+     * bridge setup when the script runs more than once. `/file-roots` is
+     * available even when Better Notes itself is not loaded.
      */
     let BetterNotesBridge:
         | {

@@ -5,6 +5,7 @@
     "strict": true,
     "noEmitOnError": true,
     "composite": false,
+    // Keep generated scripts at bridge/ so Zotero can load them directly.
     "rootDir": "src",
     "outDir": "."
   },
