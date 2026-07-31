@@ -542,6 +542,58 @@ impl ZoteroMcpServer {
         }
     }
 
+    /// Resolves and security-validates the PDF file path for
+    /// `item_key_or_path`, which may be an item key (parent or attachment)
+    /// or a direct filesystem path.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`], [`ZoteroMcpError::Network`], or
+    ///   [`ZoteroMcpError::Json`] if the item cannot be fetched
+    /// - [`ZoteroMcpError::NotFound`] if the item has no PDF attachment (or its
+    ///   children cannot be fetched)
+    /// - [`ZoteroMcpError::InputRejected`] if the path fails security checks
+    /// - [`ZoteroMcpError::Io`] if canonicalization or PDF validation fails
+    pub(crate) async fn resolve_pdf_path(
+        &self,
+        item_key_or_path: &str,
+    ) -> Result<PathBuf, ZoteroMcpError> {
+        let bridge_roots = self.fetch_bridge_pdf_roots().await;
+        if Path::new(item_key_or_path).exists() {
+            return self.validate_pdf_read_path(
+                Path::new(item_key_or_path),
+                &bridge_roots,
+                true,
+            );
+        }
+
+        let client = ZoteroClient::new(&self.state);
+        let item_key = ItemKey::from(item_key_or_path);
+        let item = client.get_item(&item_key).await?;
+
+        let resolved =
+            if item.data.item_type == ItemType::Attachment {
+                resolve_attachment_pdf_path(&item, &bridge_roots)
+            } else {
+                client.get_item_children(&item_key).await.ok().and_then(
+                    |children| find_pdf_path(&children, &bridge_roots),
+                )
+            };
+        let Some(resolved) = resolved else {
+            return Err(ZoteroMcpError::NotFound(format!(
+                "No PDF file path found for key: {item_key_or_path}"
+            )));
+        };
+
+        if resolved.requires_root_check {
+            self.validate_pdf_read_path(&resolved.path, &bridge_roots, false)
+        } else {
+            let checked = canonicalize_existing_path(&resolved.path)?;
+            self.state.check_pdf_file(&checked)?;
+            Ok(checked)
+        }
+    }
+
     /// Handles PDF page extraction tool calls.
     ///
     /// # Errors
@@ -552,71 +604,11 @@ impl ZoteroMcpServer {
         &self,
         args: ReadPdfPagesArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let bridge_roots = self.fetch_bridge_pdf_roots().await;
-        let pdf_path = if Path::new(&args.item_key_or_path).exists() {
-            match self.validate_pdf_read_path(
-                Path::new(&args.item_key_or_path),
-                &bridge_roots,
-                true,
-            ) {
-                Ok(path) => path,
-                Err(e) => return Ok(super::text_error(&e)),
-            }
-        } else {
-            let client = ZoteroClient::new(&self.state);
-            let item_key_str = &args.item_key_or_path;
-            let item_key = ItemKey::from(item_key_str.as_str());
-            let item = match client.get_item(&item_key).await {
-                Ok(item) => item,
-                Err(e) => {
-                    return Ok(CallToolResult::error(vec![
-                        rmcp::model::Content::text(format!(
-                            "Failed to locate PDF for key '{item_key_str}': \
-                             {e}"
-                        )),
-                    ]));
-                }
-            };
-
-            let resolved = if item.data.item_type == ItemType::Attachment {
-                resolve_attachment_pdf_path(&item, &bridge_roots)
-            } else {
-                client.get_item_children(&item_key).await.ok().and_then(
-                    |children| find_pdf_path(&children, &bridge_roots),
-                )
-            };
-
-            let Some(resolved) = resolved else {
-                return Ok(CallToolResult::error(vec![
-                    rmcp::model::Content::text(format!(
-                        "No PDF file path found for key: {item_key_str}"
-                    )),
-                ]));
-            };
-
-            if resolved.requires_root_check {
-                match self.validate_pdf_read_path(
-                    &resolved.path,
-                    &bridge_roots,
-                    false,
-                ) {
-                    Ok(path) => path,
-                    Err(e) => return Ok(super::text_error(&e)),
-                }
-            } else {
-                let checked = match canonicalize_existing_path(&resolved.path) {
-                    Ok(checked) => checked,
-                    Err(e) => {
-                        return Ok(super::text_error(&e));
-                    }
-                };
-                if let Err(e) = self.state.check_pdf_file(&checked) {
-                    return Ok(super::text_error(&e));
-                }
-                checked
-            }
+        let pdf_path = match self.resolve_pdf_path(&args.item_key_or_path).await
+        {
+            Ok(path) => path,
+            Err(e) => return Ok(super::text_error(&e)),
         };
-
         let pages_ref = args.pages.as_deref();
         Ok(super::json_result(extract_pdf_pages(
             &pdf_path,
