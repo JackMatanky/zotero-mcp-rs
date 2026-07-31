@@ -1,4 +1,9 @@
-//! PDF path resolution helpers for MCP Zotero tools.
+//! PDF path resolution and security policy enforcement for Zotero attachments.
+//!
+//! This module provides path resolution logic for both Zotero-managed
+//! (`imported_file`) and linked (`linked_file`) PDF attachments. It queries
+//! companion bridge endpoints to discover valid Zotero storage directories and
+//! validates target paths against security configuration limits.
 
 use std::path::{Path, PathBuf};
 
@@ -13,24 +18,39 @@ use crate::{
 const ZOTERO_ATTACHMENTS_PREFIX: &str = "attachments:";
 const BRIDGE_FILE_ROOTS_PATH: &str = "/file-roots";
 
+/// Response payload returned by the bridge `/file-roots` endpoint.
 #[derive(Debug, Deserialize)]
 struct BridgeFileRootsResponse {
+    /// List of file roots served by the bridge.
     #[serde(default)]
     roots: Vec<BridgeFileRoot>,
 }
 
+/// Single file root reported by the bridge.
 #[derive(Debug, Deserialize)]
 struct BridgeFileRoot {
+    /// Root category (e.g., `"zotero-storage"`, `"zotero-linked-base"`).
     kind: String,
+    /// Filesystem path to the root directory.
     path: String,
 }
 
+/// Resolved filesystem path for a Zotero PDF attachment item.
 pub(super) struct ResolvedPdfPath {
+    /// Resolved path to the target PDF file.
     pub(super) path: PathBuf,
+    /// Whether security root enforcement check is required for this path.
     pub(super) requires_root_check: bool,
 }
 
 impl ZoteroMcpServer {
+    /// Fetches allowed Zotero PDF storage and linked file root directories from
+    /// the bridge script.
+    ///
+    /// Queries the `/file-roots` bridge endpoint for reported storage
+    /// directories, linked file base directories, and plugin destination roots
+    /// (such as Attanger). Returns an empty [`Vec`] if the bridge is
+    /// unreachable or returns invalid JSON.
     pub(super) async fn fetch_bridge_pdf_roots(
         &self,
     ) -> Vec<(String, PathBuf)> {
@@ -78,6 +98,19 @@ impl ZoteroMcpServer {
             .collect()
     }
 
+    /// Validates that `path` is an existing PDF file allowed by configured
+    /// security policies.
+    ///
+    /// Checks `path` against both user-configured allowed directories and
+    /// reported `bridge_roots`. If `direct_input` is `true` and `path` is not
+    /// under bridge roots, validates that direct file path access is explicitly
+    /// enabled in security configuration.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::InputRejected`] if path access is disallowed, direct
+    ///   paths are disabled, or the file is not a valid PDF / exceeds byte
+    ///   limits
     pub(super) fn validate_pdf_read_path(
         &self,
         path: &Path,
@@ -108,6 +141,11 @@ impl ZoteroMcpServer {
     }
 }
 
+/// Canonicalizes an existing filesystem `path`.
+///
+/// # Errors
+///
+/// - [`ZoteroMcpError::Io`] if `path` does not exist or canonicalization fails
 #[expect(
     clippy::disallowed_methods,
     reason = "canonicalization is the security boundary for imported Zotero \
@@ -119,6 +157,8 @@ pub(super) fn canonicalize_existing_path(
     Ok(std::fs::canonicalize(path)?)
 }
 
+/// Combines user-configured allowed directories with bridge-reported file roots
+/// into a single [`Vec`].
 fn merge_pdf_roots(
     configured: &[PathBuf],
     bridge_roots: &[(String, PathBuf)],
@@ -130,6 +170,8 @@ fn merge_pdf_roots(
         .collect()
 }
 
+/// Returns an iterator over bridge root paths belonging to the
+/// `"zotero-linked-base"` category.
 fn linked_base_roots(
     bridge_roots: &[(String, PathBuf)],
 ) -> impl Iterator<Item = &PathBuf> {
@@ -139,6 +181,9 @@ fn linked_base_roots(
         .map(|(_, path)| path)
 }
 
+/// Converts a `file://` scheme URL `href` into a local [`PathBuf`].
+///
+/// Returns [`None`] if `href` is not a valid `file://` URL.
 fn file_url_to_path(href: &str) -> Option<PathBuf> {
     let url = url::Url::parse(href).ok()?;
     if url.scheme() != "file" {
@@ -147,11 +192,15 @@ fn file_url_to_path(href: &str) -> Option<PathBuf> {
     url.to_file_path().ok()
 }
 
+/// Extracts the local file path from an imported attachment `item`'s enclosure
+/// link.
 fn enclosure_file_path(item: &ZoteroItem) -> Option<PathBuf> {
     let href = item.links.get("enclosure")?.get("href")?.as_str()?;
     file_url_to_path(href)
 }
 
+/// Resolves `raw_path` relative to bridge-reported linked base roots if
+/// prefixed with `attachments:`.
 fn resolve_linked_attachment_path(
     raw_path: &str,
     bridge_roots: &[(String, PathBuf)],
@@ -164,6 +213,11 @@ fn resolve_linked_attachment_path(
     linked_base_roots(bridge_roots).next().map(|root| root.join(relative))
 }
 
+/// Resolves a Zotero attachment `item` to a [`ResolvedPdfPath`].
+///
+/// Handles both `imported_file` and `linked_file` attachment modes using
+/// enclosure links and bridge roots. Returns [`None`] if the item is not a PDF
+/// attachment.
 pub(super) fn resolve_attachment_pdf_path(
     item: &ZoteroItem,
     bridge_roots: &[(String, PathBuf)],
@@ -210,6 +264,8 @@ pub(super) fn resolve_attachment_pdf_path(
     None
 }
 
+/// Searches child items of a Zotero item for the first valid PDF attachment
+/// path.
 pub(super) fn find_pdf_path(
     children: &[ZoteroItem],
     bridge_roots: &[(String, PathBuf)],

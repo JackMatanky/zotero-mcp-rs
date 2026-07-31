@@ -1,4 +1,12 @@
 //! Connector-compatible MCP `search` and `fetch` tools.
+//!
+//! This module provides simplified, high-level compatibility wrappers (`search`
+//! and `fetch`) for MCP clients expecting browser-connector style item
+//! retrieval.
+//!
+//! Tools:
+//! - `search`: Performs general item searches ([`SearchArgs`])
+//! - `fetch`: Retrieves item metadata by identifier ([`FetchArgs`])
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -14,14 +22,14 @@ use crate::{
 /// Arguments for the connector-compatible `search` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchArgs {
-    /// Search query string.
+    /// Search query string matched against title, creator, or metadata fields.
     pub(crate) query: String,
 }
 
 /// Arguments for the connector-compatible `fetch` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FetchArgs {
-    /// Zotero item key or identifier to fetch.
+    /// Zotero item key or item identifier to fetch.
     pub(crate) id: String,
 }
 

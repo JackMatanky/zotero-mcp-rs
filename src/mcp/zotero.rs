@@ -1,4 +1,16 @@
-//! MCP tool handlers and argument models for Zotero Local API tools.
+//! MCP tool handlers and argument models for Zotero Local API operations.
+//!
+//! This module provides argument models and server implementation methods for
+//! core Zotero operations:
+//! - **Read operations**: Recent items, searches, item metadata, collection
+//!   contents, fulltext, PDF pages, notes
+//! - **Write operations**: Note and collection creation, field updates, file
+//!   attachments, tag updates, trashing, deletion
+//! - **Tag administration**: Tag listing, renaming, and batch deletion
+//! - **Identifier resolution**: Item creation via DOI, arXiv ID, or ISBN
+//! - **Discovery & analysis**: Duplicate finding, citation key lookup, advanced
+//!   searches, library coverage analysis
+//! - **Annotation synthesis**: Reading and creating PDF annotations
 
 use std::path::{Path, PathBuf};
 
@@ -52,9 +64,9 @@ pub(crate) struct GetRecentArgs {
 /// Arguments for `zotero_search_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchItemsArgs {
-    /// Search query across title, creator, year, or fulltext.
+    /// Search query matched against title, creator, year, or fulltext.
     pub(crate) query: String,
-    /// Optional collection key to search within.
+    /// Optional collection key ([`CollectionKey`]) to search within.
     pub(crate) collection_key: Option<CollectionKey>,
     /// Maximum number of items to return (default: 20).
     pub(crate) limit: Option<usize>,
@@ -63,44 +75,45 @@ pub(crate) struct SearchItemsArgs {
 /// Arguments for `zotero_get_item`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemArgs {
-    /// Zotero item key.
+    /// Zotero item key ([`ItemKey`]).
     pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_get_item_metadata`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemMetadataArgs {
-    /// Zotero item key.
+    /// Zotero item key ([`ItemKey`]).
     pub(crate) item_key: ItemKey,
-    /// Format: `"json"` or `"bibtex"` (default: `"json"`).
+    /// Format: `"json"` or `"bibtex"` ([`MetadataFormat`]), defaulting to
+    /// `"json"`.
     pub(crate) format: Option<MetadataFormat>,
 }
 
 /// Arguments for `zotero_get_collection_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetCollectionItemsArgs {
-    /// Zotero collection key.
+    /// Zotero collection key ([`CollectionKey`]).
     pub(crate) collection_key: CollectionKey,
 }
 
 /// Arguments for `zotero_get_item_children`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemChildrenArgs {
-    /// Zotero item key.
+    /// Zotero item key ([`ItemKey`]).
     pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_get_item_fulltext`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemFulltextArgs {
-    /// Zotero item key.
+    /// Zotero item key ([`ItemKey`]).
     pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_get_pdf_path`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetPdfPathArgs {
-    /// Zotero item key (parent item or attachment item).
+    /// Zotero item key ([`ItemKey`]) for parent item or attachment item.
     pub(crate) item_key: ItemKey,
 }
 
@@ -117,7 +130,7 @@ pub(crate) struct ReadPdfPagesArgs {
 /// Arguments for `zotero_get_notes`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetNotesArgs {
-    /// Zotero item key.
+    /// Zotero item key ([`ItemKey`]).
     pub(crate) item_key: ItemKey,
 }
 
@@ -126,7 +139,7 @@ pub(crate) struct GetNotesArgs {
 /// Arguments for `zotero_create_note`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateNoteArgs {
-    /// Key of the parent item.
+    /// Key of the parent item ([`ItemKey`]).
     pub(crate) parent_item_key: ItemKey,
     /// HTML or Markdown content for the note.
     pub(crate) note_content: String,
@@ -137,7 +150,7 @@ pub(crate) struct CreateNoteArgs {
 pub(crate) struct CreateCollectionArgs {
     /// Name of the collection to create.
     pub(crate) name: String,
-    /// Optional key of the parent collection.
+    /// Optional parent collection key ([`CollectionKey`]).
     pub(crate) parent_key: Option<CollectionKey>,
 }
 
@@ -151,9 +164,9 @@ pub(crate) struct SearchCollectionsArgs {
 /// Arguments for `zotero_manage_collections`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ManageCollectionsArgs {
-    /// Zotero collection key.
+    /// Zotero collection key ([`CollectionKey`]).
     pub(crate) collection_key: CollectionKey,
-    /// List of item keys to add or remove.
+    /// List of item keys ([`ItemKey`]) to add or remove.
     pub(crate) item_keys: Vec<ItemKey>,
     /// Set to `true` to remove items instead of adding them.
     pub(crate) remove: Option<bool>,
@@ -162,7 +175,7 @@ pub(crate) struct ManageCollectionsArgs {
 /// Arguments for `zotero_update_item`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct UpdateItemArgs {
-    /// Zotero item key.
+    /// Zotero item key ([`ItemKey`]).
     pub(crate) item_key: ItemKey,
     /// JSON object containing fields to update.
     pub(crate) fields: serde_json::Value,
@@ -171,57 +184,57 @@ pub(crate) struct UpdateItemArgs {
 /// Arguments for `zotero_attach_file`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AttachFileArgs {
-    /// Key of the parent item.
+    /// Key of the parent item ([`ItemKey`]).
     pub(crate) parent_item_key: ItemKey,
     /// Display title for the attachment.
     pub(crate) title: String,
     /// File path or URL.
     pub(crate) path_or_url: String,
-    /// Optional content type (default: "application/pdf").
+    /// Optional content type (default: `"application/pdf"`).
     pub(crate) content_type: Option<String>,
 }
 
 /// Arguments for `zotero_batch_update_tags`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BatchUpdateTagsArgs {
-    /// List of item keys.
+    /// List of item keys ([`ItemKey`]).
     pub(crate) item_keys: Vec<ItemKey>,
-    /// Tags to add.
+    /// Tags ([`TagName`]) to add.
     pub(crate) add_tags: Option<Vec<TagName>>,
-    /// Tags to remove.
+    /// Tags ([`TagName`]) to remove.
     pub(crate) remove_tags: Option<Vec<TagName>>,
 }
 
 /// Arguments for `zotero_delete_item`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteItemArgs {
-    /// Key of the item to permanently delete.
+    /// Key of the item ([`ItemKey`]) to permanently delete.
     pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_trash_item` and `zotero_restore_item`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct TrashItemArgs {
-    /// Key of the item to move to or restore from trash.
+    /// Key of the item ([`ItemKey`]) to move to or restore from trash.
     pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_delete_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteCollectionArgs {
-    /// Key of the collection to permanently delete.
+    /// Key of the collection ([`CollectionKey`]) to permanently delete.
     pub(crate) collection_key: CollectionKey,
 }
 
 /// Arguments for `zotero_update_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct UpdateCollectionArgs {
-    /// Zotero collection key.
+    /// Zotero collection key ([`CollectionKey`]).
     pub(crate) collection_key: CollectionKey,
     /// New name for the collection.
     pub(crate) name: Option<String>,
-    /// New parent collection key; pass an empty string to move the
-    /// collection to the top level.
+    /// New parent collection key ([`CollectionKey`]); pass an empty string to
+    /// move the collection to the top level.
     pub(crate) parent_key: Option<CollectionKey>,
 }
 
@@ -237,16 +250,16 @@ pub(crate) struct ListTagsArgs {
 /// Arguments for `zotero_rename_tag`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RenameTagArgs {
-    /// Existing tag name.
+    /// Existing tag name ([`TagName`]).
     pub(crate) old_tag: TagName,
-    /// New tag name.
+    /// New tag name ([`TagName`]).
     pub(crate) new_tag: TagName,
 }
 
 /// Arguments for `zotero_delete_tags`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteTagsArgs {
-    /// Tag names to delete from the library (up to 50).
+    /// Tag names ([`TagName`]) to delete from the library (up to 50).
     pub(crate) tags: Vec<TagName>,
 }
 
@@ -255,12 +268,11 @@ pub(crate) struct DeleteTagsArgs {
 /// Arguments for `zotero_add_by_identifier`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AddByIdentifierArgs {
-    /// Kind of identifier ([`IdentifierKind`](crate::zotero::IdentifierKind):
-    /// `"doi"`, `"arxiv"`, or `"isbn"`).
+    /// Kind of identifier ([`IdentifierKind`](crate::zotero::IdentifierKind)).
     pub(crate) kind: crate::zotero::IdentifierKind,
     /// The DOI, arXiv ID, or ISBN to resolve.
     pub(crate) identifier: String,
-    /// Optional collection key to file the new item into.
+    /// Optional collection key ([`CollectionKey`]) to file the new item into.
     pub(crate) collection_key: Option<CollectionKey>,
 }
 
@@ -269,14 +281,14 @@ pub(crate) struct AddByIdentifierArgs {
 /// Arguments for `zotero_find_duplicates`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FindDuplicatesArgs {
-    /// Optional collection key to scope duplicate search.
+    /// Optional collection key ([`CollectionKey`]) to scope duplicate search.
     pub(crate) collection_key: Option<CollectionKey>,
 }
 
 /// Arguments for `zotero_search_by_tag`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchByTagArgs {
-    /// Tag name to search for.
+    /// Tag name ([`TagName`]) to search for.
     pub(crate) tag: TagName,
     /// Maximum number of items to return (default: 20).
     pub(crate) limit: Option<usize>,
@@ -285,15 +297,14 @@ pub(crate) struct SearchByTagArgs {
 /// Arguments for `zotero_search_by_citation_key`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchByCitationKeyArgs {
-    /// Citation key to match.
+    /// Citation key ([`CitationKey`]) to match.
     pub(crate) citekey: CitationKey,
 }
 
 /// Arguments for `zotero_advanced_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AdvancedSearchArgs {
-    /// List of search conditions, e.g.
-    /// `[{"field": "title", "operator": "contains", "value": "..."}]`.
+    /// List of search conditions ([`SearchCondition`]).
     pub(crate) conditions: Vec<SearchCondition>,
     /// Maximum number of items to return (default: 20).
     pub(crate) limit: Option<usize>,
@@ -302,7 +313,7 @@ pub(crate) struct AdvancedSearchArgs {
 /// Arguments for `zotero_library_coverage`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct LibraryCoverageArgs {
-    /// Optional collection key to scope coverage analysis.
+    /// Optional collection key ([`CollectionKey`]) to scope coverage analysis.
     pub(crate) collection_key: Option<CollectionKey>,
 }
 
@@ -318,16 +329,16 @@ pub(crate) struct GetUnfiledItemsArgs {
 /// Arguments for `zotero_synthesize_annotations`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SynthesizeAnnotationsArgs {
-    /// Zotero item key.
+    /// Zotero item key ([`ItemKey`]).
     pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for `zotero_create_annotation`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateAnnotationArgs {
-    /// Key of the parent PDF attachment.
+    /// Key of the parent PDF attachment ([`ItemKey`]).
     pub(crate) parent_attachment_key: ItemKey,
-    /// Type of annotation: `"highlight"`, `"underline"`, or `"note"`.
+    /// Type of annotation ([`AnnotationType`]).
     pub(crate) annotation_type: AnnotationType,
     /// Selected text (required for highlight/underline, omit for note).
     pub(crate) text: Option<String>,
@@ -337,8 +348,7 @@ pub(crate) struct CreateAnnotationArgs {
     pub(crate) color: Option<String>,
     /// Optional PDF page label where the annotation appears.
     pub(crate) page_label: Option<String>,
-    /// Raw Zotero `annotationPosition` JSON object, e.g.
-    /// `{"pageIndex":0,"rects":[[100,200,300,220]]}`.
+    /// Raw Zotero `annotationPosition` JSON object.
     pub(crate) position: serde_json::Value,
 }
 

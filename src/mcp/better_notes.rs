@@ -1,4 +1,12 @@
 //! MCP tool handlers and argument models for Better Notes integration.
+//!
+//! This module provides handlers for interacting with the Zotero Better Notes
+//! plugin. Supported operations include:
+//! - Exporting notes to Markdown or HTML ([`NoteExportArgs`])
+//! - Creating Zotero notes from Markdown content ([`FromMarkdownArgs`])
+//! - Running note templates ([`RunTemplateArgs`])
+//! - Querying note relations ([`NoteRelationsArgs`])
+//! - Retrieving note tree structures ([`NoteTreeArgs`])
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -15,18 +23,18 @@ use crate::{
 /// Arguments for exporting a Better Notes note to Markdown or HTML.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct NoteExportArgs {
-    /// Note item key to export.
+    /// Note item key ([`ItemKey`]) to export.
     pub(crate) item_key: ItemKey,
-    /// Output format (`"html"` or `"markdown"`), defaulting to `"markdown"`
-    /// when [`None`].
+    /// Output format ([`NoteExportFormat`]), defaulting to Markdown when
+    /// [`None`].
     pub(crate) format: Option<NoteExportFormat>,
 }
 
 /// Arguments for importing Markdown into a Better Notes note.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FromMarkdownArgs {
-    /// Parent item key to attach the converted note to. Omit for a top-level
-    /// note.
+    /// Parent item key ([`ItemKey`]) to attach the converted note to.
+    /// Omit for a top-level note.
     pub(crate) parent_key: Option<ItemKey>,
     /// Markdown string content to convert into HTML.
     pub(crate) markdown: String,
@@ -37,21 +45,21 @@ pub(crate) struct FromMarkdownArgs {
 pub(crate) struct RunTemplateArgs {
     /// Name of the template to execute.
     pub(crate) template_name: String,
-    /// Target Zotero item key for template execution.
+    /// Target Zotero item key ([`ItemKey`]) for template execution.
     pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for retrieving Better Notes note relations.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct NoteRelationsArgs {
-    /// Note item key to retrieve relations for.
+    /// Note item key ([`ItemKey`]) to retrieve relations for.
     pub(crate) item_key: ItemKey,
 }
 
 /// Arguments for retrieving a Better Notes note tree structure.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct NoteTreeArgs {
-    /// Note item key to retrieve tree structure for.
+    /// Note item key ([`ItemKey`]) to retrieve tree structure for.
     pub(crate) item_key: ItemKey,
 }
 

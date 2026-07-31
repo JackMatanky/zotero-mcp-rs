@@ -1,4 +1,16 @@
 //! MCP tool handlers and argument models for Better `BibTeX` integration.
+//!
+//! This module provides handlers for interacting with the Zotero Better
+//! `BibTeX` plugin. Supported operations include:
+//! - Retrieving and regenerating citation keys ([`GetCitekeysArgs`],
+//!   [`RegenerateKeysArgs`])
+//! - Exporting library items in `BibTeX`/`BibLaTeX` formats
+//!   ([`ExportItemsArgs`])
+//! - Formatting bibliographies ([`BibliographyArgs`])
+//! - Scanning `LaTeX` `.aux` files ([`ScanAuxArgs`])
+//! - Pandoc filter integration ([`PandocFilterArgs`])
+//! - Configuring auto-exports ([`AutoExportAddArgs`])
+//! - Performing quick search queries ([`BetterBibtexSearchArgs`])
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -16,60 +28,60 @@ use crate::{
 
 // --- Argument Schemas ---
 
-/// Arguments for `better_bibtex_get_citekeys`.
+/// Arguments for the `better_bibtex_get_citekeys` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetCitekeysArgs {
-    /// Zotero item keys to look up.
+    /// Zotero item keys ([`ItemKey`]) to look up.
     pub(crate) item_keys: Vec<ItemKey>,
 }
 
-/// Arguments for `better_bibtex_regenerate_citekeys`.
+/// Arguments for the `better_bibtex_regenerate_citekeys` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RegenerateKeysArgs {
-    /// Better `BibTeX` citation keys to regenerate.
+    /// Better `BibTeX` citation keys ([`CitationKey`]) to regenerate.
     pub(crate) citekeys: Vec<CitationKey>,
 }
 
-/// Arguments for `better_bibtex_export_items`.
+/// Arguments for the `better_bibtex_export_items` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ExportItemsArgs {
-    /// Better `BibTeX` citation keys to export.
+    /// Better `BibTeX` citation keys ([`CitationKey`]) to export.
     pub(crate) citekeys: Vec<CitationKey>,
-    /// Translator name or GUID.
+    /// Translator name or GUID ([`TranslatorName`]).
     pub(crate) translator: TranslatorName,
 }
 
-/// Arguments for `better_bibtex_format_bibliography`.
+/// Arguments for the `better_bibtex_format_bibliography` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BibliographyArgs {
-    /// Citation keys to format.
+    /// Citation keys ([`CitationKey`]) to format.
     pub(crate) citekeys: Vec<CitationKey>,
-    /// Optional Better `BibTeX` bibliography format object.
+    /// Optional Better `BibTeX` bibliography format settings
+    /// ([`BibliographyFormat`]).
     pub(crate) format: Option<BibliographyFormat>,
 }
 
-/// Arguments for `better_bibtex_scan_aux`.
+/// Arguments for the `better_bibtex_scan_aux` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ScanAuxArgs {
-    /// Better `BibTeX` collection path to import references into.
-    /// Defaults to `//`, the personal-library root.
+    /// Better `BibTeX` collection path ([`CollectionPath`]) to import
+    /// references into. Defaults to `//`, the personal library root.
     pub(crate) collection: Option<CollectionPath>,
-    /// Absolute path to the `LaTeX` `.aux` file; requires file path features
-    /// and an allowed AUX directory.
+    /// Absolute path to the `LaTeX` `.aux` file ([`AuxFilePath`]).
     pub(crate) aux_path: AuxFilePath,
 }
 
-/// Arguments for `better_bibtex_pandoc_filter`.
+/// Arguments for the `better_bibtex_pandoc_filter` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct PandocFilterArgs {
-    /// Citation keys to filter.
+    /// Citation keys ([`CitationKey`]) to filter.
     pub(crate) citekeys: Vec<CitationKey>,
 }
 
-/// Arguments for `better_bibtex_search`.
+/// Arguments for the `better_bibtex_search` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BetterBibtexSearchArgs {
-    /// Better `BibTeX` quick-search query string.
+    /// Better `BibTeX` quick-search query ([`SearchQuery`]).
     pub(crate) query: SearchQuery,
 }
 

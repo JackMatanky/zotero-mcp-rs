@@ -1,5 +1,11 @@
-//! Wires every MCP tool to the Zotero, Better `BibTeX`, and Better Notes
-//! clients.
+//! MCP server implementation and tool router dispatch for Zotero integration.
+//!
+//! This module defines [`ZoteroMcpServer`], which implements the `rmcp`
+//! [`ServerHandler`] trait to serve tool calls, resources, and prompts to
+//! connected MCP clients.
+//!
+//! Tools are routed using the `#[tool_router]` macro, delegating logic to the
+//! underlying Zotero Local API, Better `BibTeX`, and Better Notes handlers.
 
 use std::future::Future;
 

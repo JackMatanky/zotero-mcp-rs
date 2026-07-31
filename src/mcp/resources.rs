@@ -1,4 +1,15 @@
 //! MCP resource and prompt handlers.
+//!
+//! This module implements handler logic for exposing Zotero library resources
+//! and prompt templates via MCP.
+//!
+//! Exposed resources:
+//! - `zotero://collections`: Returns all collection metadata in JSON format.
+//! - `zotero://items/{item_key}`: Returns item data for a specific Zotero item.
+//!
+//! Exposed prompts:
+//! - `zotero_literature_review`: Generates a structured literature review
+//!   prompt for a collection.
 
 use serde::Serialize;
 
@@ -129,6 +140,10 @@ impl ZoteroMcpServer {
     }
 }
 
+/// Formats `value` as pretty JSON and constructs a [`ReadResourceResult`] for
+/// `uri`.
+///
+/// [`ReadResourceResult`]: rmcp::model::ReadResourceResult
 fn json_resource<T: Serialize>(
     uri: &str,
     value: &T,
