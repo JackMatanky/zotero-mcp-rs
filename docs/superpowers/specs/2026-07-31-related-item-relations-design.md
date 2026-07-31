@@ -6,16 +6,24 @@ Date: 2026-07-31
 ## Context
 
 Zotero items can be linked via "Related Items" (`dc:relation`), stored in each
-item's `relations` map as arrays of item URIs:
+item's `relations` map as URI values:
 
 ```json
 {
-  "dc:relation": [
-    "http://zotero.org/users/0/items/ITEM123",
-    "http://zotero.org/groups/1/items/GROUP1"
-  ]
+  "dc:relation": "http://zotero.org/users/0/items/ITEM123",
+  "dc:relation": ["http://zotero.org/users/0/items/ITEM123",
+                  "http://zotero.org/users/0/items/ITEM456"]
 }
 ```
+
+**Critical format detail:** the `relations` value for a predicate is **either
+a single URI string or an array of URI strings** — Zotero switches between
+them depending on how many values exist (confirmed by
+[zotero/dataserver#74](https://github.com/zotero/dataserver/issues/74) and the
+reference client's `isinstance(dc_relations, str)` handling). The API never
+guarantees one form. `dc:relation` is multi-valued (an item can have many
+related items) and should be written as an array. Both forms must be parsed on
+read.
 
 The shared model already deserializes `relations` (`src/zotero/models.rs:484`)
 but treats it as opaque `serde_json::Value`; no tool surfaces or mutates it.
@@ -63,12 +71,21 @@ Note the distinction: **`ItemKey` is never a URI** — it is the bare 8-char
 alphanumeric key everywhere in the codebase. URIs exist only inside
 `relations` values. `RelationUri` is the bridge.
 
+**Read is prefix-agnostic, write uses `/users/0`:** on read, relation URIs may
+carry any prefix (`users/<id>` or `groups/<id>`, as in Zotero's own data
+`"owl:sameAs": "http://zotero.org/groups/36222/items/E6IGUT5Z"`) — `TryFrom`
+extracts only the trailing key segment, so all prefixes resolve. On write, we
+construct `http://zotero.org/users/0/items/{key}`, matching the local API's own
+`/users/0` namespace. `ponytail:` if a real Zotero instance rejects the
+`users/0` prefix on write, infer the prefix from an existing `dc:relation` on
+the source item before constructing new URIs.
+
 ### 2. Pure helpers (`src/zotero/relations.rs`)
 
 | Function | Signature | Behavior |
 | --- | --- | --- |
-| `parse_relation_keys` | `(&serde_json::Value) -> Vec<RelationUri>` | Reads `relations["dc:relation"]`, keeps all string entries as `RelationUri` (newtype is string-backed, so no shape filtering here — the real filter is `ItemKey::try_from` at consumption time). Ignores missing/empty/malformed (non-string) entries. |
-| `apply_relations` | `(current: &serde_json::Value, add: &[RelationUri], remove: &[RelationUri]) -> serde_json::Value` | Set-based idempotent add/remove on the `dc:relation` array; preserves all other predicates (`owl:sameAs`, `dc:replaces`, ...). Returns `{"dc:relation": [...]}` merged into the input. |
+| `parse_relation_keys` | `(&serde_json::Value) -> Vec<RelationUri>` | Reads `relations["dc:relation"]`, accepting **either a single URI string or an array** (Zotero switches forms by value count). Keeps all string entries as `RelationUri` (newtype is string-backed, so no shape filtering here — the real filter is `ItemKey::try_from` at consumption time). Ignores missing/empty/malformed (non-string) entries. |
+| `apply_relations` | `(current: &serde_json::Value, add: &[RelationUri], remove: &[RelationUri]) -> serde_json::Value` | Set-based idempotent add/remove on the `dc:relation` values (parsing either string or array form); **always writes `dc:relation` as an array** (the canonical multi-value form per dataserver#74); preserves all other predicates verbatim (`owl:sameAs`, `dc:replaces`, ...). Returns `{"dc:relation": [...]}` merged into the input. |
 
 Both are pure (no `&self`), unit-tested like `diff_tags`
 (`src/zotero/tags.rs:144`).
@@ -142,10 +159,13 @@ module, `mock_server` canned-response tool tests in `mcp/zotero.rs` tests mod.
    `http://zotero.org/users/0/items/{KEY}`, errors on bare `"ITEM123"` and
    malformed strings.
 2. `parse_relation_keys` — extracts URI strings from a populated `dc:relation`
-   array; returns empty for missing relations, empty array, or non-string
+   array **and from a single-string `dc:relation`** (both forms must work);
+   returns empty for missing relations, empty array, or non-string
    entries (numbers/objects).
 3. `apply_relations` — adds new URI (idempotent on re-add), removes existing
-   URI, preserves other predicates, handles empty current value.
+   URI (from both string and array input forms), **writes array form even when
+   the result has one entry**, preserves other predicates, handles empty
+   current value.
 
 ### Green/refactor phase (implement)
 
