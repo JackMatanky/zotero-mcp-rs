@@ -33,5 +33,6 @@ pub(crate) use models::{
     AnnotationType, CitationKey, CollectionKey, ItemKey, ItemType,
     LibraryVersion, TagName, ZoteroCollection, ZoteroItem,
 };
+#[allow(unused_imports, reason = "facade re-exports for crate consumers")]
 pub(crate) use relations::RelatedItem;
 pub(crate) use search::{SearchCondition, SearchField, SearchOperator};

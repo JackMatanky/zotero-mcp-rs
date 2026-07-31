@@ -28,8 +28,8 @@ use crate::{
     pdf::{extract_pdf_outline, extract_pdf_pages},
     zotero::{
         AnnotationDraft, AnnotationType, CitationKey, CollectionItemAction,
-        CollectionKey, ItemKey, ItemType, RelatedItem, SearchCondition,
-        SearchField, SearchOperator, TagName, TrashAction, ZoteroClient,
+        CollectionKey, ItemKey, ItemType, SearchCondition, SearchField,
+        SearchOperator, TagName, TrashAction, ZoteroClient,
     },
 };
 
@@ -372,18 +372,22 @@ pub(crate) struct GetRelatedItemsArgs {
 /// Arguments for `zotero_add_item_relation`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AddItemRelationArgs {
-    /// Zotero item key ([`ItemKey`]) of the first item to link.
+    /// Zotero item key ([`ItemKey`]) of the first item to link (bidirectional,
+    /// order-independent).
     pub(crate) item_key: ItemKey,
-    /// Zotero item key ([`ItemKey`]) of the second item to link.
+    /// Zotero item key ([`ItemKey`]) of the second item to link
+    /// (bidirectional, order-independent).
     pub(crate) related_item_key: ItemKey,
 }
 
 /// Arguments for `zotero_remove_item_relation`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RemoveItemRelationArgs {
-    /// Zotero item key ([`ItemKey`]) of the first item to unlink.
+    /// Zotero item key ([`ItemKey`]) of the first item to unlink
+    /// (bidirectional, order-independent).
     pub(crate) item_key: ItemKey,
-    /// Zotero item key ([`ItemKey`]) of the second item to unlink.
+    /// Zotero item key ([`ItemKey`]) of the second item to unlink
+    /// (bidirectional, order-independent).
     pub(crate) related_item_key: ItemKey,
 }
 
@@ -1159,7 +1163,8 @@ impl ZoteroMcpServer {
         }
     }
 
-    /// Handles Zotero related-item listing tool calls.
+    /// Handles Zotero related-item listing tool calls, returning the items
+    /// linked to `item_key` as `RelatedItem` JSON.
     ///
     /// # Errors
     ///
@@ -1177,9 +1182,7 @@ impl ZoteroMcpServer {
         args: GetRelatedItemsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        let related: Result<Vec<RelatedItem>, ZoteroMcpError> =
-            client.get_related_items(&args.item_key).await;
-        Ok(super::json_result(related))
+        Ok(super::json_result(client.get_related_items(&args.item_key).await))
     }
 
     /// Handles Zotero related-item linking tool calls.
@@ -2386,6 +2389,7 @@ mod tests {
 
             // Assert
             assert_eq!(res.is_error, Some(false));
+            assert!(tool_text(&res).contains("Item relation added"));
         }
 
         #[tokio::test]
@@ -2451,6 +2455,7 @@ mod tests {
 
             // Assert
             assert_eq!(res.is_error, Some(false));
+            assert!(tool_text(&res).contains("Item relation removed"));
         }
     }
 }
