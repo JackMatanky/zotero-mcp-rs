@@ -25,7 +25,7 @@ use crate::{
     ZoteroMcpServer,
     better_bibtex::{BetterBibtexClient, TranslatorName},
     errors::ZoteroMcpError,
-    pdf::extract_pdf_pages,
+    pdf::{extract_pdf_outline, extract_pdf_pages},
     zotero::{
         AnnotationDraft, AnnotationType, CitationKey, CollectionItemAction,
         CollectionKey, ItemKey, ItemType, SearchCondition, SearchField,
@@ -125,6 +125,14 @@ pub(crate) struct ReadPdfPagesArgs {
     pub(crate) item_key_or_path: String,
     /// 1-based page numbers to extract (e.g. `[1, 2, 3]`).
     pub(crate) pages: Option<Vec<usize>>,
+}
+
+/// Arguments for `zotero_get_pdf_outline`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct GetPdfOutlineArgs {
+    /// Zotero item key; direct PDF paths must resolve under configured or
+    /// Zotero-reported PDF roots, otherwise direct-path opt-in is required.
+    pub(crate) item_key_or_path: String,
 }
 
 /// Arguments for `zotero_get_notes`.
@@ -613,6 +621,27 @@ impl ZoteroMcpServer {
         Ok(super::json_result(extract_pdf_pages(
             &pdf_path,
             pages_ref,
+            self.state.security.max_pdf_bytes,
+        )))
+    }
+
+    /// Handles PDF outline extraction tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_pdf_outline_impl(
+        &self,
+        args: GetPdfOutlineArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let pdf_path = match self.resolve_pdf_path(&args.item_key_or_path).await
+        {
+            Ok(path) => path,
+            Err(e) => return Ok(super::text_error(&e)),
+        };
+        Ok(super::json_result(extract_pdf_outline(
+            &pdf_path,
             self.state.security.max_pdf_bytes,
         )))
     }
@@ -2008,6 +2037,141 @@ mod tests {
             // Assert
             assert_eq!(res.is_error, Some(true));
             assert!(tool_text(&res).contains("PDF extraction error"));
+        }
+    }
+
+    mod pdf_outline {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn rejects_direct_path_by_default() {
+            // Arrange
+            let temp =
+                tempfile::Builder::new().suffix(".pdf").tempfile().unwrap();
+            let server = ZoteroMcpServer::new(AppState {
+                security: security_with_pdf_limit(1024),
+                ..AppState::from_env()
+            });
+
+            // Act
+            let res = server
+                .zotero_get_pdf_outline_impl(GetPdfOutlineArgs {
+                    item_key_or_path: temp.path().display().to_string(),
+                })
+                .await
+                .expect("get pdf outline result");
+
+            // Assert
+            assert_eq!(res.is_error, Some(true));
+            assert!(tool_text(&res).contains("Direct file paths are disabled"));
+        }
+
+        #[tokio::test]
+        async fn returns_outline_for_direct_path_inside_configured_root() {
+            // Arrange
+            let root = tempfile::TempDir::new().unwrap();
+            let pdf = root.path().join("outline.pdf");
+            crate::pdf::write_pdf_with_outline(&pdf);
+            let mut security = SecurityConfig::default();
+            security.direct_file_paths = true;
+            security.allowed_read_dirs =
+                vec![root.path().canonicalize().unwrap()];
+            let server = ZoteroMcpServer::new(AppState {
+                security,
+                ..AppState::from_env()
+            });
+
+            // Act
+            let res = server
+                .zotero_get_pdf_outline_impl(GetPdfOutlineArgs {
+                    item_key_or_path: pdf.display().to_string(),
+                })
+                .await
+                .expect("get pdf outline result");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+            let text = tool_text(&res);
+            assert!(text.contains("Chapter 1"));
+            assert!(text.contains("Section 2.1"));
+        }
+
+        #[tokio::test]
+        async fn returns_empty_outline_for_pdf_without_bookmarks() {
+            // Arrange
+            let root = tempfile::TempDir::new().unwrap();
+            let pdf = root.path().join("plain.pdf");
+            crate::pdf::write_pdf_without_outline(&pdf);
+            let mut security = SecurityConfig::default();
+            security.direct_file_paths = true;
+            security.allowed_read_dirs =
+                vec![root.path().canonicalize().unwrap()];
+            let server = ZoteroMcpServer::new(AppState {
+                security,
+                ..AppState::from_env()
+            });
+
+            // Act
+            let res = server
+                .zotero_get_pdf_outline_impl(GetPdfOutlineArgs {
+                    item_key_or_path: pdf.display().to_string(),
+                })
+                .await
+                .expect("get pdf outline result");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+            assert!(tool_text(&res).contains("[]"));
+        }
+
+        #[tokio::test]
+        async fn reads_imported_attachment_enclosure_outline() {
+            // Arrange
+            let pdf =
+                tempfile::Builder::new().suffix(".pdf").tempfile().unwrap();
+            crate::pdf::write_pdf_with_outline(pdf.path());
+            let file_url =
+                url::Url::from_file_path(pdf.path()).unwrap().to_string();
+            let children = json!([{
+                "key": "PDF00001",
+                "version": 1,
+                "links": {
+                    "enclosure": {
+                        "href": file_url,
+                        "type": "application/pdf",
+                        "title": "outline.pdf",
+                    },
+                },
+                "data": {
+                    "key": "PDF00001",
+                    "version": 1,
+                    "itemType": "attachment",
+                    "linkMode": "imported_file",
+                    "contentType": "application/pdf",
+                    "filename": "outline.pdf",
+                },
+            }]);
+            let zotero_base = zotero_pdf_server(children);
+            let server = ZoteroMcpServer::new(AppState {
+                zotero_api_url: zotero_base,
+                better_notes_url: "http://127.0.0.1:9/better-notes".to_owned(),
+                security: security_with_pdf_limit(1024 * 1024),
+                ..AppState::from_env()
+            });
+
+            // Act
+            let res = server
+                .zotero_get_pdf_outline_impl(GetPdfOutlineArgs {
+                    item_key_or_path: "ITEM0001".to_owned(),
+                })
+                .await
+                .expect("get pdf outline result");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+            assert!(tool_text(&res).contains("Chapter 1"));
         }
     }
 }

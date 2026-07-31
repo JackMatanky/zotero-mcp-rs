@@ -92,8 +92,6 @@ fn filter_pages(full_text: &str, page_numbers: Option<&[usize]>) -> String {
 /// [`InputRejected`]: ZoteroMcpError::InputRejected
 /// [`NotFound`]: ZoteroMcpError::NotFound
 /// [`PdfExtract`]: ZoteroMcpError::PdfExtract
-// ponytail: dead until zotero_get_pdf_outline lands (Task 4), then removed
-#[allow(dead_code, reason = "consumed by Task 4 zotero_get_pdf_outline tool")]
 pub(crate) fn extract_pdf_outline(
     file_path: &Path,
     max_pdf_bytes: u64,
@@ -128,8 +126,6 @@ pub(crate) fn extract_pdf_outline(
         .collect())
 }
 
-// ponytail: dead until zotero_get_pdf_outline lands (Task 4), then removed
-#[allow(dead_code, reason = "consumed by Task 4 zotero_get_pdf_outline tool")]
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub(crate) struct PdfOutlineEntry {
     pub(crate) level: usize,

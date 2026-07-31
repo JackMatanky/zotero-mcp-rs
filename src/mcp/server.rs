@@ -38,12 +38,12 @@ use crate::{
             DeleteTagsArgs, EmptyArgs, FindDuplicatesArgs,
             GetCollectionItemsArgs, GetItemArgs, GetItemChildrenArgs,
             GetItemFulltextArgs, GetItemMetadataArgs, GetNotesArgs,
-            GetPdfPathArgs, GetRecentArgs, GetUnfiledItemsArgs,
-            LibraryCoverageArgs, ListTagsArgs, ManageCollectionsArgs,
-            ReadPdfPagesArgs, RenameTagArgs, SearchByCitationKeyArgs,
-            SearchByTagArgs, SearchCollectionsArgs, SearchItemsArgs,
-            SynthesizeAnnotationsArgs, TrashItemArgs, UpdateCollectionArgs,
-            UpdateItemArgs,
+            GetPdfOutlineArgs, GetPdfPathArgs, GetRecentArgs,
+            GetUnfiledItemsArgs, LibraryCoverageArgs, ListTagsArgs,
+            ManageCollectionsArgs, ReadPdfPagesArgs, RenameTagArgs,
+            SearchByCitationKeyArgs, SearchByTagArgs, SearchCollectionsArgs,
+            SearchItemsArgs, SynthesizeAnnotationsArgs, TrashItemArgs,
+            UpdateCollectionArgs, UpdateItemArgs,
         },
     },
     state::AppState,
@@ -307,6 +307,22 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<ReadPdfPagesArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_read_pdf_pages_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_get_pdf_outline",
+        description = "Extract the PDF outline (table of contents/bookmarks) \
+                       for an item's PDF attachment or a direct PDF path"
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_pdf_outline(
+        &self,
+        Parameters(args): Parameters<GetPdfOutlineArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_get_pdf_outline_impl(args).await
     }
 
     #[tool(
