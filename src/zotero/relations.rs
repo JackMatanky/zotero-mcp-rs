@@ -93,10 +93,6 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Network`] if the request fails at the transport
     ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "wired to MCP tools in a follow-up task")
-    )]
     pub(crate) async fn get_related_items(
         &self,
         item_key: &ItemKey,
@@ -136,10 +132,6 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Network`] if the request fails at the transport
     ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "wired to MCP tools in a follow-up task")
-    )]
     pub(crate) async fn add_item_relation(
         &self,
         a: &ItemKey,
@@ -197,10 +189,6 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Network`] if the request fails at the transport
     ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "wired to MCP tools in a follow-up task")
-    )]
     pub(crate) async fn remove_item_relation(
         &self,
         a: &ItemKey,

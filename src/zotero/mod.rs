@@ -33,4 +33,5 @@ pub(crate) use models::{
     AnnotationType, CitationKey, CollectionKey, ItemKey, ItemType,
     LibraryVersion, TagName, ZoteroCollection, ZoteroItem,
 };
+pub(crate) use relations::RelatedItem;
 pub(crate) use search::{SearchCondition, SearchField, SearchOperator};
