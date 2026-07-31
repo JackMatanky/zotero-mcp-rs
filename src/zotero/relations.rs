@@ -598,6 +598,41 @@ mod tests {
                 item_type: ItemType::Book,
             }]);
         }
+
+        #[tokio::test]
+        async fn propagates_non_404_errors_from_related_item_fetch() {
+            let source = serde_json::json!({
+                "key": "ITEM0001",
+                "version": 1,
+                "data": {
+                    "key": "ITEM0001",
+                    "version": 1,
+                    "itemType": "journalArticle",
+                    "relations": {
+                        "dc:relation": "http://zotero.org/users/0/items/ITEM0002",
+                    },
+                },
+            });
+            // 500 is transient, so the retry policy sends the related-item GET
+            // up to `RETRY_MAX_ATTEMPTS` times before surfacing the error.
+            let base = mock_server(vec![
+                http_response("200 OK", &source.to_string()),
+                http_response("500 Internal Server Error", ""),
+                http_response("500 Internal Server Error", ""),
+                http_response("500 Internal Server Error", ""),
+            ]);
+            let state = test_state(base, false);
+
+            let err = ZoteroClient::new(&state)
+                .get_related_items(&ItemKey::from("ITEM0001"))
+                .await
+                .unwrap_err();
+
+            assert!(matches!(err, ZoteroMcpError::LocalApi {
+                status: 500,
+                ..
+            }));
+        }
     }
 
     #[expect(
