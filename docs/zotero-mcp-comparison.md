@@ -10,12 +10,12 @@ Comparison of zotero-mcp-rs against popular Zotero MCP servers (research, 2026-0
 | **Stack / arch** | Rust + rmcp, stdio | Python (FastMCP), PyPI | Zotero plugin + built-in MCP, TS | Zotero plugin (TS, Transformers.js) + built-in MCP | TypeScript, npx | Rust, stdio | Python (PyPI/uv) |
 | **Transport** | stdio | stdio + Streamable HTTP + SSE | Streamable HTTP | Streamable HTTP (`:23119/zotseek/mcp`) | stdio | stdio | stdio |
 | **Zotero connection** | Local HTTP API (`/users/0` only) + BBT/BetterNotes bridges | Local + Web API + hybrid (local reads / web writes), group libs, WebDAV | In-process (plugin) | In-process (plugin), 100% local; group libs opt-in | Web API v3 (API key + user ID) | Own plugin HTTP API (23119/mcp) | Local HTTP API |
-| **# tools** | **48** | **~30** | 20 | search-focused, read-only | 15 | 5 | 5 |
+| **# tools** | **51** | **~30** | 20 | search-focused, read-only | 15 | 5 | 5 |
 | **Resources / prompts** | 2 resources + 1 prompt | prompts + resources | — | — (results carry `zotero://` deep links to matched page) | workflow `instructions` + Claude skill | — | — |
 | **Search** | quicksearch, by tag, by citekey; advanced ⚠️ client-side over last 100 items | ✅ keyword, advanced multi-criteria, tags, citekey, notes/annotations | ✅ boolean, filters, relevance, offsets | ✅ hybrid semantic+keyword (RRF), multi-query AND/OR, section-aware, passage previews | ✅ by query or sorted field | citekey lookup only | author/title only, 30 items |
 | **Semantic search (embeddings)** | ❌ | ✅ ChromaDB + sentence-transformers / OpenAI / Gemini / Ollama, auto-update | ✅ OpenAI/Ollama + SQLite-vec | ✅ **100% local** (nomic-embed-text-v1.5, 4 curated models, WebGPU-ready) | ❌ | ❌ | ❌ |
 | **Full-text read** | ✅ Zotero index (`get_item_fulltext`) | ✅ fulltext + direct PDF processing | ✅ cached fulltext DB (list/search/get/stats) | ⚠️ full-document semantic chunks w/ page numbers; no raw fulltext endpoint | ✅ `get_item_fulltext` | ✅ MuPDF read by pages or sections | ✅ `read_pdf` (per page, multi-attachment) |
-| **PDF outline / bookmarks** | ❌ | ✅ `get_pdf_outline` (PyMuPDF extra) | ❌ | ❌ | ❌ | ✅ `get_pdf_outline` | ❌ |
+| **PDF outline / bookmarks** | ✅ `zotero_get_pdf_outline` | ✅ `get_pdf_outline` (PyMuPDF extra) | ❌ | ❌ | ❌ | ✅ `get_pdf_outline` | ❌ |
 | **Annotations read** | ✅ synthesize to Markdown | ✅ direct PDF extraction (pdfannots), search, image anns, page-layout detection | ✅ search by color/tags/type | ❌ | ❌ | — | ❌ |
 | **Annotations write** | ✅ highlight/underline/note | ⚠️ create/update notes + annotations; `create_note` (beta) | ⚠️ via plugin UI only | ❌ | ❌ | ✅ highlight + area, semantic colors | ❌ |
 | **Notes** | ✅ read + create + BetterNotes (export/template/relations/tree) | ✅ get/search/create notes | ✅ create/update/append, MD→HTML | ❌ | ❌ | ❌ | ❌ |
