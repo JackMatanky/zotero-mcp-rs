@@ -116,6 +116,74 @@ impl<'a> ZoteroClient<'a> {
         Ok(self.ensure_success(resp).await?.json().await?)
     }
 
+    /// Fetches every page of a paginated list endpoint, stopping when a page
+    /// returns fewer than `page_size` items (Zotero respects `start`/`limit`).
+    ///
+    /// The `url` is used as-is on the first request; `start`/`limit` query
+    /// parameters are appended for each subsequent page.
+    ///
+    /// # Errors
+    ///
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if a response body cannot be decoded
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
+    pub(super) async fn get_all_json<T: DeserializeOwned>(
+        &self,
+        url: &str,
+        page_size: usize,
+    ) -> Result<Vec<T>, ZoteroMcpError> {
+        let mut all = Vec::new();
+        let mut start = 0_usize;
+        loop {
+            let page_url = add_pagination(url, start, page_size);
+            let page: Vec<T> = self.get_json(&page_url).await?;
+            let len = page.len();
+            all.extend(page);
+            if len < page_size {
+                break;
+            }
+            start = start.saturating_add(page_size);
+        }
+        Ok(all)
+    }
+
+    /// Fetches one page of a paginated list endpoint, also returning the
+    /// `Total-Results` response header (the full result count) when present.
+    ///
+    /// Used by server-side search so pagination can report the true total
+    /// without scanning every page.
+    ///
+    /// # Errors
+    ///
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body cannot be decoded
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
+    pub(super) async fn get_items_with_total(
+        &self,
+        url: &str,
+    ) -> Result<(Vec<crate::zotero::models::ZoteroItem>, usize), ZoteroMcpError>
+    {
+        let resp =
+            self.state.send_with_retry(self.state.client.get(url)).await?;
+        let resp = self.ensure_success(resp).await?;
+        let total = resp
+            .headers()
+            .get("Total-Results")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(0);
+        let items = resp.json().await?;
+        Ok((items, total))
+    }
+
     /// Sends a JSON POST request to `url` and returns the first item from the
     /// array response.
     ///
@@ -212,6 +280,17 @@ impl<'a> ZoteroClient<'a> {
                     .to_owned(),
             })
     }
+}
+
+/// Appends `start`/`limit` query parameters to `url`, preserving any existing
+/// query string.
+fn add_pagination(url: &str, start: usize, limit: usize) -> String {
+    let sep = if url.contains('?') {
+        '&'
+    } else {
+        '?'
+    };
+    format!("{url}{sep}start={start}&limit={limit}")
 }
 
 #[cfg(test)]
@@ -501,6 +580,48 @@ mod tests {
                 .unwrap_err();
 
             assert!(matches!(err, ZoteroMcpError::LocalApi { .. }));
+        }
+    }
+
+    mod get_all_json {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            fixtures::{http_response, mock_server, test_state},
+            *,
+        };
+
+        #[tokio::test]
+        async fn fetches_every_page_until_a_short_page() {
+            let base = mock_server(vec![
+                http_response("200 OK", r#"[{"key":"A"},{"key":"B"}]"#),
+                http_response("200 OK", r#"[{"key":"C"}]"#),
+            ]);
+            let state = test_state(base, false);
+
+            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let items: Vec<serde_json::Value> =
+                ZoteroClient::new(&state).get_all_json(&url, 2).await.unwrap();
+
+            assert_eq!(items.len(), 3);
+            let keys: Vec<&str> = items
+                .iter()
+                .map(|i| i["key"].as_str().unwrap_or_default())
+                .collect();
+            assert_eq!(keys, vec!["A", "B", "C"]);
+        }
+
+        #[tokio::test]
+        async fn single_page_when_first_page_is_short() {
+            let base =
+                mock_server(vec![http_response("200 OK", r#"[{"key":"A"}]"#)]);
+            let state = test_state(base, false);
+
+            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let items: Vec<serde_json::Value> =
+                ZoteroClient::new(&state).get_all_json(&url, 2).await.unwrap();
+
+            assert_eq!(items.len(), 1);
         }
     }
 }
