@@ -1061,5 +1061,50 @@ mod tests {
                 "request: {request_line}"
             );
         }
+
+        #[test]
+        fn pushdown_url_encodes_free_text_title() {
+            let state = zotero_state("http://127.0.0.1:23119/api".to_owned());
+            let client = ZoteroClient::new(&state);
+            let url = client
+                .pushdown_url(&[title_contains("Rust Programming")])
+                .unwrap();
+            assert!(url.contains("q=Rust%20Programming"));
+            assert!(url.contains("qmode=titleCreatorYear"));
+        }
+
+        #[test]
+        fn pushdown_url_refuses_non_pushable_operator() {
+            let state = zotero_state("http://127.0.0.1:23119/api".to_owned());
+            let client = ZoteroClient::new(&state);
+            let cond = SearchCondition {
+                field: SearchField::Title,
+                operator: SearchOperator::DoesNotContain,
+                value: "Rust".to_owned(),
+            };
+            assert!(client.pushdown_url(&[cond]).is_none());
+        }
+
+        #[test]
+        fn pushdown_url_encodes_item_type_and_tag() {
+            let state = zotero_state("http://127.0.0.1:23119/api".to_owned());
+            let client = ZoteroClient::new(&state);
+            let conds = vec![
+                SearchCondition {
+                    field: SearchField::ItemType,
+                    operator: SearchOperator::Is,
+                    value: "conferencePaper".to_owned(),
+                },
+                SearchCondition {
+                    field: SearchField::Tag,
+                    operator: SearchOperator::Is,
+                    value: "methods".to_owned(),
+                },
+            ];
+            let url = client.pushdown_url(&conds).unwrap();
+            assert!(url.contains("itemType=conferencePaper"));
+            assert!(url.contains("-note,-attachment,-annotation"));
+            assert!(url.contains("tag=methods"));
+        }
     }
 }
