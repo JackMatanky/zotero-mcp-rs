@@ -22,63 +22,6 @@ use crate::{
     },
 };
 
-/// Reads the `dc:relation` URI values from an item's `relations` map,
-/// accepting either a single URI string or an array of URI strings (Zotero
-/// switches forms by value count). Missing, empty, and non-string entries are
-/// ignored.
-pub(crate) fn parse_relation_keys(
-    relations: &serde_json::Value,
-) -> Vec<RelationUri> {
-    let Some(dc_relation) = relations.get("dc:relation") else {
-        return Vec::new();
-    };
-    match dc_relation {
-        serde_json::Value::String(uri) => vec![RelationUri::from(uri.as_str())],
-        serde_json::Value::Array(uris) => uris
-            .iter()
-            .filter_map(|v| v.as_str().map(RelationUri::from))
-            .collect(),
-        _ => Vec::new(),
-    }
-}
-
-/// Computes the item's `relations` map after adding and removing `dc:relation`
-/// URIs, preserving all other predicates verbatim.
-///
-/// `dc:relation` is always written as an array (the canonical multi-value form
-/// per zotero/dataserver#74), even when it holds a single or zero URIs.
-pub(crate) fn apply_relations(
-    current: &serde_json::Value,
-    add: &[RelationUri],
-    remove: &[RelationUri],
-) -> serde_json::Value {
-    let mut uris: BTreeSet<String> =
-        parse_relation_keys(current).into_iter().map(|u| u.0).collect();
-    for uri in add {
-        uris.insert(uri.as_str().to_owned());
-    }
-    for uri in remove {
-        uris.remove(uri.as_str());
-    }
-    let mut result: serde_json::Map<String, serde_json::Value> =
-        current.as_object().cloned().unwrap_or_default();
-    result.insert(
-        "dc:relation".to_owned(),
-        serde_json::Value::Array(
-            uris.into_iter().map(serde_json::Value::String).collect(),
-        ),
-    );
-    serde_json::Value::Object(result)
-}
-
-/// A single item linked to another via a `dc:relation` URI.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct RelatedItem {
-    pub(crate) key: ItemKey,
-    pub(crate) title: Option<String>,
-    pub(crate) item_type: ItemType,
-}
-
 impl ZoteroClient<'_> {
     /// Fetches the items linked to `item_key` via `dc:relation`.
     ///
@@ -223,6 +166,63 @@ impl ZoteroClient<'_> {
         .await?;
         Ok(())
     }
+}
+
+/// A single item linked to another via a `dc:relation` URI.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub(crate) struct RelatedItem {
+    pub(crate) key: ItemKey,
+    pub(crate) title: Option<String>,
+    pub(crate) item_type: ItemType,
+}
+
+/// Reads the `dc:relation` URI values from an item's `relations` map,
+/// accepting either a single URI string or an array of URI strings (Zotero
+/// switches forms by value count). Missing, empty, and non-string entries are
+/// ignored.
+pub(crate) fn parse_relation_keys(
+    relations: &serde_json::Value,
+) -> Vec<RelationUri> {
+    let Some(dc_relation) = relations.get("dc:relation") else {
+        return Vec::new();
+    };
+    match dc_relation {
+        serde_json::Value::String(uri) => vec![RelationUri::from(uri.as_str())],
+        serde_json::Value::Array(uris) => uris
+            .iter()
+            .filter_map(|v| v.as_str().map(RelationUri::from))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Computes the item's `relations` map after adding and removing `dc:relation`
+/// URIs, preserving all other predicates verbatim.
+///
+/// `dc:relation` is always written as an array (the canonical multi-value form
+/// per zotero/dataserver#74), even when it holds a single or zero URIs.
+pub(crate) fn apply_relations(
+    current: &serde_json::Value,
+    add: &[RelationUri],
+    remove: &[RelationUri],
+) -> serde_json::Value {
+    let mut uris: BTreeSet<String> =
+        parse_relation_keys(current).into_iter().map(|u| u.0).collect();
+    for uri in add {
+        uris.insert(uri.as_str().to_owned());
+    }
+    for uri in remove {
+        uris.remove(uri.as_str());
+    }
+    let mut result: serde_json::Map<String, serde_json::Value> =
+        current.as_object().cloned().unwrap_or_default();
+    result.insert(
+        "dc:relation".to_owned(),
+        serde_json::Value::Array(
+            uris.into_iter().map(serde_json::Value::String).collect(),
+        ),
+    );
+    serde_json::Value::Object(result)
 }
 
 #[cfg(test)]
