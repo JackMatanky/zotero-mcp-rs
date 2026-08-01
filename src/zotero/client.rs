@@ -119,8 +119,8 @@ impl<'a> ZoteroClient<'a> {
     /// Fetches every page of a paginated list endpoint, stopping when a page
     /// returns fewer than `page_size` items (Zotero respects `start`/`limit`).
     ///
-    /// The `url` is used as-is on the first request; `start`/`limit` query
-    /// parameters are appended on every request.
+    /// `start`/`limit` query parameters are appended to `url` on every request,
+    /// starting at `start=0`; any existing query string is preserved.
     ///
     /// # Errors
     ///
@@ -136,6 +136,9 @@ impl<'a> ZoteroClient<'a> {
         url: &str,
         page_size: usize,
     ) -> Result<Vec<T>, ZoteroMcpError> {
+        if page_size == 0 {
+            return Ok(Vec::new());
+        }
         let mut all = Vec::new();
         let mut start = 0_usize;
         loop {
@@ -622,6 +625,102 @@ mod tests {
                 ZoteroClient::new(&state).get_all_json(&url, 2).await.unwrap();
 
             assert_eq!(items.len(), 1);
+        }
+
+        #[tokio::test]
+        async fn stops_on_empty_final_page_when_total_is_exact_multiple() {
+            let base = mock_server(vec![
+                http_response("200 OK", r#"[{"key":"A"},{"key":"B"}]"#),
+                http_response("200 OK", r#"[]"#),
+            ]);
+            let state = test_state(base, false);
+
+            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let items: Vec<serde_json::Value> =
+                ZoteroClient::new(&state).get_all_json(&url, 2).await.unwrap();
+
+            assert_eq!(items.len(), 2);
+        }
+    }
+
+    mod get_items_with_total {
+        use pretty_assertions::assert_eq;
+
+        use super::{
+            fixtures::{
+                http_response, http_response_with_headers, mock_server,
+                test_state,
+            },
+            *,
+        };
+
+        const ITEMS: &str = r#"[{"key":"A","version":1,"data":{"key":"A","version":1,"itemType":"journalArticle","title":"A"}}]"#;
+
+        #[tokio::test]
+        async fn parses_numeric_total_results_header() {
+            let base = mock_server(vec![http_response_with_headers(
+                "200 OK",
+                &[("Total-Results", "42")],
+                ITEMS,
+            )]);
+            let state = test_state(base, false);
+
+            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let (items, total) = ZoteroClient::new(&state)
+                .get_items_with_total(&url)
+                .await
+                .unwrap();
+
+            assert_eq!(total, 42);
+            assert_eq!(items.len(), 1);
+        }
+
+        #[tokio::test]
+        async fn falls_back_to_zero_when_header_absent() {
+            let base = mock_server(vec![http_response("200 OK", ITEMS)]);
+            let state = test_state(base, false);
+
+            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let (items, total) = ZoteroClient::new(&state)
+                .get_items_with_total(&url)
+                .await
+                .unwrap();
+
+            assert_eq!(total, 0);
+            assert_eq!(items.len(), 1);
+        }
+
+        #[tokio::test]
+        async fn falls_back_to_zero_when_header_is_non_numeric() {
+            let base = mock_server(vec![http_response_with_headers(
+                "200 OK",
+                &[("Total-Results", "abc")],
+                ITEMS,
+            )]);
+            let state = test_state(base, false);
+
+            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let (items, total) = ZoteroClient::new(&state)
+                .get_items_with_total(&url)
+                .await
+                .unwrap();
+
+            assert_eq!(total, 0);
+            assert_eq!(items.len(), 1);
+        }
+    }
+
+    mod add_pagination {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn preserves_existing_query_string() {
+            assert_eq!(
+                add_pagination("http://x/items?foo=1", 0, 2),
+                "http://x/items?foo=1&start=0&limit=2"
+            );
         }
     }
 }
