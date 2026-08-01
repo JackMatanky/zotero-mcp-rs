@@ -70,6 +70,13 @@ pub(crate) struct SearchCondition {
 }
 
 /// How multiple conditions are combined: `all` (AND, default) or `any` (OR).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "used by MCP search/sort tools in a later task"
+    )
+)]
 #[derive(
     Copy,
     Clone,
