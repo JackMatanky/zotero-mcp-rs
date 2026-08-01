@@ -15,6 +15,7 @@ mod client;
 mod collections;
 pub(crate) mod identifiers;
 mod items;
+mod local_db;
 mod models;
 mod relations;
 mod search;
@@ -28,6 +29,8 @@ pub(crate) use client::ZoteroClient;
 pub(crate) use collections::CollectionItemAction;
 pub(crate) use identifiers::IdentifierKind;
 pub(crate) use items::{AnnotationDraft, TrashAction};
+#[allow(unused_imports, reason = "facade re-exports for crate consumers")]
+pub(crate) use local_db::{FulltextHit, LocalZoteroDb, NoteAnnotationHit};
 #[allow(unused_imports, reason = "facade re-exports for crate consumers")]
 pub(crate) use models::{
     AnnotationType, CitationKey, CollectionKey, ItemKey, ItemType,
