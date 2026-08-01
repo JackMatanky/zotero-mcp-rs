@@ -328,6 +328,7 @@ mod tests {
                 semantic_scholar_url: String::new(),
                 open_library_url: String::new(),
                 write_enabled,
+                sqlite_access: false,
                 security: SecurityConfig::default(),
             }
         }

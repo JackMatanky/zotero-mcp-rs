@@ -40,6 +40,13 @@ pub(crate) enum ZoteroMcpError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// A local Zotero `SQLite` database could not be read.
+    ///
+    /// Occurs when the discovery step fails (no Zotero profile found), the
+    /// database cannot be opened read-only, or a query fails.
+    #[error("Local database error: {0}")]
+    LocalDb(String),
+
     /// Write operation attempted when write permission is disabled in
     /// [`AppState`].
     ///

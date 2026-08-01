@@ -51,6 +51,13 @@ pub(crate) struct AppState {
     /// Whether write/mutation operations are allowed. Defaults to read-only;
     /// enable by setting `ZOTERO_WRITE_ENABLED`.
     pub(crate) write_enabled: bool,
+    /// Whether direct read access to the local Zotero `SQLite` database is
+    /// allowed. Defaults to false; enable by setting `ZOTERO_SQLITE_ACCESS`.
+    #[expect(
+        dead_code,
+        reason = "used by local sqlite read tools in a later task"
+    )]
+    pub(crate) sqlite_access: bool,
 }
 
 impl AppState {
@@ -61,7 +68,10 @@ impl AppState {
     /// backend URLs (defaulting to standard local Zotero plugin ports or
     /// public endpoints when unset), and `ZOTERO_WRITE_ENABLED` (`"1"` or
     /// `"true"`, case-insensitive) to opt into write operations, defaulting to
-    /// read-only. Returns the constructed [`AppState`].
+    /// read-only. `ZOTERO_SQLITE_ACCESS` (`"1"` or `"true"`,
+    /// case-insensitive) likewise gates direct reads of the local Zotero
+    /// `SQLite` database, defaulting to disabled. Returns the constructed
+    /// [`AppState`].
     pub(crate) fn from_env() -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(15))
@@ -91,6 +101,9 @@ impl AppState {
         let write_enabled = env::var("ZOTERO_WRITE_ENABLED")
             .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
 
+        let sqlite_access = env::var("ZOTERO_SQLITE_ACCESS")
+            .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+
         Self {
             client,
             zotero_api_url,
@@ -101,6 +114,7 @@ impl AppState {
             open_library_url,
             security: SecurityConfig::from_env(),
             write_enabled,
+            sqlite_access,
         }
     }
 
@@ -122,6 +136,29 @@ impl AppState {
             Err(ZoteroMcpError::PermissionDenied(
                 "Write operation rejected: set ZOTERO_WRITE_ENABLED=1 to \
                  enable modifying Zotero library"
+                    .to_owned(),
+            ))
+        }
+    }
+
+    /// Checks whether local `SQLite` database read access is permitted.
+    ///
+    /// # Errors
+    ///
+    /// - [`LocalDb`] if `sqlite_access` is `false` (the default)
+    ///
+    /// [`LocalDb`]: ZoteroMcpError::LocalDb
+    #[expect(
+        dead_code,
+        reason = "used by local sqlite read tools in a later task"
+    )]
+    pub(crate) fn check_sqlite_access(&self) -> Result<(), ZoteroMcpError> {
+        if self.sqlite_access {
+            Ok(())
+        } else {
+            Err(ZoteroMcpError::LocalDb(
+                "Local sqlite access is disabled: set ZOTERO_SQLITE_ACCESS=1 \
+                 to enable reading the Zotero database directly"
                     .to_owned(),
             ))
         }
@@ -352,6 +389,7 @@ mod tests {
                 semantic_scholar_url: String::new(),
                 open_library_url: String::new(),
                 write_enabled,
+                sqlite_access: false,
                 security: SecurityConfig::default(),
             }
         }
@@ -419,6 +457,35 @@ mod tests {
 
             // Assert
             assert!(result.is_ok());
+        }
+    }
+
+    mod check_sqlite_access {
+        use super::{super::*, fixtures::test_state};
+
+        #[test]
+        fn permits_when_enabled() {
+            // Arrange: fixture defaults to disabled; flip the gate on.
+            let mut state = test_state(false);
+            state.sqlite_access = true;
+
+            // Act
+            let result = state.check_sqlite_access();
+
+            // Assert
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn rejects_when_disabled() {
+            // Arrange
+            let state = test_state(false);
+
+            // Act
+            let result = state.check_sqlite_access();
+
+            // Assert
+            assert!(matches!(result, Err(ZoteroMcpError::LocalDb(_))));
         }
     }
 
