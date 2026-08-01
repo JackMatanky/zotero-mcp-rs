@@ -302,9 +302,7 @@ impl ZoteroClient<'_> {
     ) -> Result<SearchPage<ZoteroItem>, ZoteroMcpError> {
         if join_mode == JoinMode::All {
             if let Some(url) = self.pushdown_url(&conditions) {
-                let full_url = format!(
-                    "{url}&start={offset}&limit={limit}&itemType=-note"
-                );
+                let full_url = format!("{url}&start={offset}&limit={limit}");
                 let (items, total) =
                     self.get_items_with_total(&full_url).await?;
                 let total = if total == 0 {
@@ -350,7 +348,15 @@ impl ZoteroClient<'_> {
     /// Builds a server-search URL for `conditions` when they are fully
     /// expressible as Zotero quick-search parameters, or `None` to fall back
     /// to a client-side scan.
+    ///
+    /// The emitted URL always carries a single merged `itemType` parameter
+    /// excluding notes, attachments, and annotations (mirroring
+    /// [`is_searchable_item`]), with any positive item-type condition merged
+    /// into the same parameter.
     fn pushdown_url(&self, conditions: &[SearchCondition]) -> Option<String> {
+        if conditions.is_empty() {
+            return None;
+        }
         let mut q: Option<String> = None;
         let mut qmode = "titleCreatorYear".to_owned();
         let mut item_type: Option<String> = None;
@@ -409,13 +415,16 @@ impl ZoteroClient<'_> {
             params.push(format!("qmode={qmode}"));
         }
         if let Some(ref item_type) = item_type {
-            params.push(format!("itemType={item_type}"));
+            params.push(format!(
+                "itemType={item_type},-note,-attachment,-annotation"
+            ));
+        } else {
+            // exclusion only; merged into the same param so the fast path
+            // cannot append a second itemType key
+            params.push("itemType=-note,-attachment,-annotation".to_owned());
         }
         if let Some(ref tag) = tag {
             params.push(format!("tag={}", urlencoding::encode(tag)));
-        }
-        if params.is_empty() {
-            return None;
         }
         url.push('?');
         url.push_str(&params.join("&"));
@@ -870,6 +879,34 @@ mod tests {
             format!("http://{addr}")
         }
 
+        fn mock_server_capturing(
+            responses: Vec<String>,
+        ) -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+            use std::{
+                io::{BufRead, Write},
+                net::TcpListener,
+                sync::{Arc, Mutex},
+            };
+            let requests = Arc::new(Mutex::new(Vec::new()));
+            let captured = Arc::clone(&requests);
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind listener");
+            let addr = listener.local_addr().expect("local addr");
+            std::thread::spawn(move || {
+                for response in responses {
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
+                    let mut line = String::new();
+                    let mut reader = std::io::BufReader::new(&mut stream);
+                    let _ = reader.read_line(&mut line);
+                    drop(reader);
+                    captured.lock().expect("lock requests").push(line);
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            });
+            (format!("http://{addr}"), requests)
+        }
+
         #[tokio::test]
         async fn slow_path_filters_full_library_and_paginates() {
             let item1 = zotero_item("K1", "Rust in Action", Some("book"));
@@ -932,6 +969,97 @@ mod tests {
             assert_eq!(page.pagination.total, 17);
             assert_eq!(page.pagination.offset, 0);
             assert!(page.pagination.has_more);
+        }
+
+        #[tokio::test]
+        async fn fast_path_title_builds_single_merged_itemtype_param() {
+            let item1 = zotero_item("K1", "Rust in Action", None);
+            let (base, requests) =
+                mock_server_capturing(vec![http_response_with_headers(
+                    "200 OK",
+                    &[("Total-Results", "1")],
+                    &items_page(&[item1]),
+                )]);
+            let state = zotero_state(base);
+
+            ZoteroClient::new(&state)
+                .advanced_search(
+                    vec![title_contains("Rust")],
+                    JoinMode::All,
+                    None,
+                    SortDirection::Asc,
+                    0,
+                    10,
+                )
+                .await
+                .unwrap();
+
+            let request_line = requests
+                .lock()
+                .expect("lock requests")
+                .first()
+                .expect("one request captured")
+                .clone();
+            assert!(
+                request_line.contains("qmode=titleCreatorYear"),
+                "request: {request_line}"
+            );
+            assert!(
+                request_line.contains("itemType=-note,-attachment,-annotation"),
+                "request: {request_line}"
+            );
+            assert_eq!(
+                request_line.matches("itemType=").count(),
+                1,
+                "request must carry a single itemType key: {request_line}"
+            );
+        }
+
+        #[tokio::test]
+        async fn fast_path_merges_positive_itemtype_with_exclusions() {
+            let item1 = zotero_item("K1", "Rust in Action", None);
+            let (base, requests) =
+                mock_server_capturing(vec![http_response_with_headers(
+                    "200 OK",
+                    &[("Total-Results", "1")],
+                    &items_page(&[item1]),
+                )]);
+            let state = zotero_state(base);
+
+            let cond_type = SearchCondition {
+                field: SearchField::ItemType,
+                operator: SearchOperator::Is,
+                value: "journalArticle".to_owned(),
+            };
+            ZoteroClient::new(&state)
+                .advanced_search(
+                    vec![cond_type],
+                    JoinMode::All,
+                    None,
+                    SortDirection::Asc,
+                    0,
+                    10,
+                )
+                .await
+                .unwrap();
+
+            let request_line = requests
+                .lock()
+                .expect("lock requests")
+                .first()
+                .expect("one request captured")
+                .clone();
+            assert_eq!(
+                request_line.matches("itemType=").count(),
+                1,
+                "request must carry a single itemType key: {request_line}"
+            );
+            assert!(
+                request_line.contains(
+                    "itemType=journalArticle,-note,-attachment,-annotation"
+                ),
+                "request: {request_line}"
+            );
         }
     }
 }
