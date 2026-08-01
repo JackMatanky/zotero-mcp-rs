@@ -19,7 +19,7 @@ use crate::{
     errors::ZoteroMcpError,
     zotero::{
         client::ZoteroClient,
-        models::{CitationKey, CollectionKey, TagName, ZoteroItem},
+        models::{CitationKey, CollectionKey, ItemType, TagName, ZoteroItem},
     },
 };
 
@@ -69,8 +69,39 @@ pub(crate) struct SearchCondition {
     pub(crate) value: String,
 }
 
+/// Pagination metadata returned with every search result page.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub(crate) struct PaginationInfo {
+    pub(crate) limit: usize,
+    pub(crate) offset: usize,
+    pub(crate) total: usize,
+    pub(crate) has_more: bool,
+}
+
+/// A page of search results plus its pagination metadata.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub(crate) struct SearchPage<T> {
+    pub(crate) items: Vec<T>,
+    pub(crate) pagination: PaginationInfo,
+}
+
+/// Returns a `{items, pagination}` page slicing `results` at `offset`/`limit`.
+fn paginate<T>(results: Vec<T>, offset: usize, limit: usize) -> SearchPage<T> {
+    let total = results.len();
+    let skip = offset.min(total);
+    let items: Vec<T> = results.into_iter().skip(skip).take(limit).collect();
+    SearchPage {
+        items,
+        pagination: PaginationInfo {
+            limit,
+            offset: skip,
+            total,
+            has_more: skip.saturating_add(limit) < total,
+        },
+    }
+}
+
 /// How multiple conditions are combined: `all` (AND, default) or `any` (OR).
-#[expect(dead_code, reason = "used by MCP search/sort tools in a later task")]
 #[derive(
     Copy,
     Clone,
@@ -122,12 +153,14 @@ pub(crate) enum SortDirection {
 }
 
 impl ZoteroClient<'_> {
-    /// Searches library items matching a query string, excluding notes.
+    /// Searches library items matching a query string, excluding notes,
+    /// returning a paginated page.
     ///
     /// # Arguments
     ///
     /// * `query` - Free-text query matching title, creator, year, or fulltext
     /// * `collection_key` - Optional collection key to scope the search
+    /// * `offset` - 0-based offset into the full result set
     /// * `limit` - Maximum number of items to return
     /// # Errors
     ///
@@ -139,8 +172,9 @@ impl ZoteroClient<'_> {
         &self,
         query: &str,
         collection_key: Option<&CollectionKey>,
+        offset: usize,
         limit: usize,
-    ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
+    ) -> Result<SearchPage<ZoteroItem>, ZoteroMcpError> {
         let base = match collection_key {
             Some(col) => format!(
                 "{}/users/0/collections/{}/items",
@@ -149,9 +183,25 @@ impl ZoteroClient<'_> {
             None => format!("{}/users/0/items", self.state.zotero_api_url),
         };
         let encoded_q = urlencoding::encode(query);
-        let url = format!("{base}?q={encoded_q}&limit={limit}&itemType=-note");
-
-        self.get_json(&url).await
+        let url = format!(
+            "{base}?q={encoded_q}&start={offset}&limit={limit}&itemType=-note"
+        );
+        let (items, total) = self.get_items_with_total(&url).await?;
+        let total = if total == 0 {
+            offset.saturating_add(items.len())
+        } else {
+            total
+        };
+        let returned = items.len();
+        Ok(SearchPage {
+            items,
+            pagination: PaginationInfo {
+                limit,
+                offset,
+                total,
+                has_more: offset.saturating_add(returned) < total,
+            },
+        })
     }
 
     /// Searches items by `tag` name, returning at most `limit` items (excluding
@@ -192,9 +242,9 @@ impl ZoteroClient<'_> {
         &self,
         citekey: &CitationKey,
     ) -> Result<Option<ZoteroItem>, ZoteroMcpError> {
-        let items = self.search_items(citekey.as_str(), None, 20).await?;
+        let page = self.search_items(citekey.as_str(), None, 0, 20).await?;
         let citekey_lc = citekey.as_str().to_lowercase();
-        for item in items {
+        for item in page.items {
             if let Some(native) = &item.data.citation_key {
                 if native.to_lowercase() == citekey_lc {
                     return Ok(Some(item));
@@ -216,27 +266,169 @@ impl ZoteroClient<'_> {
 
     /// Executes an advanced multi-condition structured search over item fields.
     ///
+    /// Returns a paginated page. When `join_mode` is `All` and every condition
+    /// is expressible as a Zotero quick-search parameter, the search is pushed
+    /// down to the server; otherwise the whole library is scanned and filtered
+    /// client-side.
+    ///
+    /// # Arguments
+    ///
+    /// * `conditions` - List of conditions to match against item fields
+    /// * `join_mode` - `All` (AND) or `Any` (OR)
+    /// * `sort` - Optional field to sort results by
+    /// * `sort_direction` - Sort order for `sort`
+    /// * `offset` - 0-based offset into the full result set
+    /// * `limit` - Maximum number of items to return
+    ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
     /// - [`ZoteroMcpError::Network`] if the request fails at the transport
     ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "six orthogonal search parameters; a params struct adds \
+                  indirection without removing them"
+    )]
     pub(crate) async fn advanced_search(
         &self,
         conditions: Vec<SearchCondition>,
+        join_mode: JoinMode,
+        sort: Option<SortField>,
+        sort_direction: SortDirection,
+        offset: usize,
         limit: usize,
-    ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
+    ) -> Result<SearchPage<ZoteroItem>, ZoteroMcpError> {
+        if join_mode == JoinMode::All {
+            if let Some(url) = self.pushdown_url(&conditions) {
+                let full_url = format!(
+                    "{url}&start={offset}&limit={limit}&itemType=-note"
+                );
+                let (items, total) =
+                    self.get_items_with_total(&full_url).await?;
+                let total = if total == 0 {
+                    offset.saturating_add(items.len())
+                } else {
+                    total
+                };
+                let returned = items.len();
+                return Ok(SearchPage {
+                    items,
+                    pagination: PaginationInfo {
+                        limit,
+                        offset,
+                        total,
+                        has_more: offset.saturating_add(returned) < total,
+                    },
+                });
+            }
+        }
+
         let items = self.get_all_items().await?;
-        let results = items
+        let matches: Vec<ZoteroItem> = items
             .into_iter()
             .filter(|item| {
-                conditions.iter().all(|cond| match_condition(item, cond))
+                let ok = match join_mode {
+                    JoinMode::All => conditions
+                        .iter()
+                        .all(|cond| match_condition(item, cond)),
+                    JoinMode::Any => conditions
+                        .iter()
+                        .any(|cond| match_condition(item, cond)),
+                };
+                ok && is_searchable_item(item)
             })
-            .take(limit)
             .collect();
-        Ok(results)
+        let matches = match sort {
+            Some(field) => sort_items(matches, field, sort_direction),
+            None => matches,
+        };
+        Ok(paginate(matches, offset, limit))
     }
+
+    /// Builds a server-search URL for `conditions` when they are fully
+    /// expressible as Zotero quick-search parameters, or `None` to fall back
+    /// to a client-side scan.
+    fn pushdown_url(&self, conditions: &[SearchCondition]) -> Option<String> {
+        let mut q: Option<String> = None;
+        let mut qmode = "titleCreatorYear".to_owned();
+        let mut item_type: Option<String> = None;
+        let mut tag: Option<String> = None;
+
+        for cond in conditions {
+            let value = &cond.value;
+            let operator_pushable = matches!(
+                cond.operator,
+                SearchOperator::Contains
+                    | SearchOperator::Is
+                    | SearchOperator::StartsWith
+            );
+            if !operator_pushable {
+                return None;
+            }
+            match &cond.field {
+                SearchField::Title
+                | SearchField::Creator
+                | SearchField::Year
+                | SearchField::Date => {
+                    if q.is_some() {
+                        return None; // only one free-text term
+                    }
+                    q = Some(value.clone());
+                    qmode = match &cond.field {
+                        SearchField::Creator => "creator".to_owned(),
+                        SearchField::Year | SearchField::Date => {
+                            "year".to_owned()
+                        }
+                        _ => "titleCreatorYear".to_owned(),
+                    };
+                }
+                SearchField::ItemType
+                    if cond.operator == SearchOperator::Is =>
+                {
+                    if item_type.is_some() {
+                        return None;
+                    }
+                    item_type = Some(value.clone());
+                }
+                SearchField::Tag if cond.operator == SearchOperator::Is => {
+                    if tag.is_some() {
+                        return None;
+                    }
+                    tag = Some(value.clone());
+                }
+                _ => return None,
+            }
+        }
+
+        let mut url = format!("{}/users/0/items", self.state.zotero_api_url);
+        let mut params = Vec::new();
+        if let Some(ref q) = q {
+            params.push(format!("q={}", urlencoding::encode(q)));
+            params.push(format!("qmode={qmode}"));
+        }
+        if let Some(ref item_type) = item_type {
+            params.push(format!("itemType={item_type}"));
+        }
+        if let Some(ref tag) = tag {
+            params.push(format!("tag={}", urlencoding::encode(tag)));
+        }
+        if params.is_empty() {
+            return None;
+        }
+        url.push('?');
+        url.push_str(&params.join("&"));
+        Some(url)
+    }
+}
+
+/// Returns true for items that are not attachments, notes, or annotations.
+fn is_searchable_item(item: &ZoteroItem) -> bool {
+    !matches!(
+        item.data.item_type,
+        ItemType::Attachment | ItemType::Note | ItemType::Annotation
+    )
 }
 
 /// Evaluates whether `item` satisfies a single search `cond`.
@@ -305,13 +497,6 @@ fn date_key(s: &str) -> (u32, u32, u32) {
 }
 
 /// Sorts `items` in place-order by `field` in `direction` and returns them.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "used by MCP search/sort tools in a later task"
-    )
-)]
 fn sort_items(
     items: Vec<ZoteroItem>,
     field: SortField,
@@ -580,6 +765,173 @@ mod tests {
             let keys: Vec<&str> =
                 sorted.iter().map(|i| i.key.as_str()).collect();
             assert_eq!(keys, vec!["K2", "K3", "K1"]);
+        }
+    }
+
+    mod advanced_search {
+        use super::*;
+        use crate::{state::AppState, zotero::client::ZoteroClient};
+
+        fn items_page(items: &[serde_json::Value]) -> String {
+            format!(
+                "[{}]",
+                items
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        }
+
+        fn zotero_item(
+            key: &str,
+            title: &str,
+            extra: Option<&str>,
+        ) -> serde_json::Value {
+            serde_json::json!({
+                "key": key,
+                "version": 1,
+                "data": {
+                    "key": key,
+                    "version": 1,
+                    "itemType": "journalArticle",
+                    "title": title,
+                    "extra": extra,
+                    "dateAdded": "2024-01-01T00:00:00Z",
+                    "dateModified": "2024-01-01T00:00:00Z",
+                },
+            })
+        }
+
+        fn title_contains(value: &str) -> SearchCondition {
+            SearchCondition {
+                field: SearchField::Title,
+                operator: SearchOperator::Contains,
+                value: value.to_owned(),
+            }
+        }
+
+        fn zotero_state(zotero_api_url: String) -> AppState {
+            AppState {
+                zotero_api_url,
+                better_bibtex_url: String::new(),
+                better_notes_url: String::new(),
+                crossref_url: String::new(),
+                semantic_scholar_url: String::new(),
+                open_library_url: String::new(),
+                write_enabled: true,
+                ..AppState::from_env()
+            }
+        }
+
+        fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        fn http_response_with_headers(
+            status: &str,
+            headers: &[(&str, &str)],
+            body: &str,
+        ) -> String {
+            let hdrs = headers
+                .iter()
+                .map(|(k, v)| format!("{k}: {v}\r\n"))
+                .collect::<Vec<_>>()
+                .join("");
+            format!(
+                "HTTP/1.1 {status}\r\n{hdrs}Content-Length: \
+                 {}\r\nContent-Type: application/json\r\nConnection: \
+                 close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        fn mock_server(responses: Vec<String>) -> String {
+            use std::{
+                io::{Read, Write},
+                net::TcpListener,
+            };
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind listener");
+            let addr = listener.local_addr().expect("local addr");
+            std::thread::spawn(move || {
+                for response in responses {
+                    let (mut stream, _) =
+                        listener.accept().expect("accept connection");
+                    let mut buf = [0_u8; 1024];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            });
+            format!("http://{addr}")
+        }
+
+        #[tokio::test]
+        async fn slow_path_filters_full_library_and_paginates() {
+            let item1 = zotero_item("K1", "Rust in Action", Some("book"));
+            let item2 = zotero_item("K2", "Rust for Beginners", Some("book"));
+            let item3 = zotero_item("K3", "Rust Essentials", Some("talk"));
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &items_page(&[item1, item2, item3]),
+            )]);
+            let state = zotero_state(base);
+
+            let cond_extra = SearchCondition {
+                field: SearchField::Extra,
+                operator: SearchOperator::Is,
+                value: "book".to_owned(),
+            };
+            let page = ZoteroClient::new(&state)
+                .advanced_search(
+                    vec![title_contains("Rust"), cond_extra],
+                    JoinMode::All,
+                    Some(SortField::Title),
+                    SortDirection::Asc,
+                    0,
+                    1,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(page.items.len(), 1);
+            assert_eq!(page.items[0].key.as_str(), "K2");
+            assert_eq!(page.pagination.limit, 1);
+            assert_eq!(page.pagination.offset, 0);
+            assert_eq!(page.pagination.total, 2);
+            assert!(page.pagination.has_more);
+        }
+
+        #[tokio::test]
+        async fn fast_path_uses_server_side_search_and_total_header() {
+            let item1 = zotero_item("K1", "Rust in Action", None);
+            let base = mock_server(vec![http_response_with_headers(
+                "200 OK",
+                &[("Total-Results", "17")],
+                &items_page(&[item1]),
+            )]);
+            let state = zotero_state(base);
+
+            let page = ZoteroClient::new(&state)
+                .advanced_search(
+                    vec![title_contains("Rust")],
+                    JoinMode::All,
+                    None,
+                    SortDirection::Asc,
+                    0,
+                    10,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(page.items.len(), 1);
+            assert_eq!(page.pagination.total, 17);
+            assert_eq!(page.pagination.offset, 0);
+            assert!(page.pagination.has_more);
         }
     }
 }

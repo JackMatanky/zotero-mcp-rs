@@ -35,4 +35,7 @@ pub(crate) use models::{
 };
 #[allow(unused_imports, reason = "facade re-exports for crate consumers")]
 pub(crate) use relations::RelatedItem;
-pub(crate) use search::{SearchCondition, SearchField, SearchOperator};
+pub(crate) use search::{
+    JoinMode, SearchCondition, SearchField, SearchOperator, SortDirection,
+    SortField,
+};

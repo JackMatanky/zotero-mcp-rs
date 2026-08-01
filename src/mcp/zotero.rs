@@ -28,8 +28,9 @@ use crate::{
     pdf::{extract_pdf_outline, extract_pdf_pages},
     zotero::{
         AnnotationDraft, AnnotationType, CitationKey, CollectionItemAction,
-        CollectionKey, ItemKey, ItemType, SearchCondition, SearchField,
-        SearchOperator, TagName, TrashAction, ZoteroClient,
+        CollectionKey, ItemKey, ItemType, JoinMode, SearchCondition,
+        SearchField, SearchOperator, SortDirection, SortField, TagName,
+        TrashAction, ZoteroClient,
     },
 };
 
@@ -68,6 +69,8 @@ pub(crate) struct SearchItemsArgs {
     pub(crate) query: String,
     /// Optional collection key ([`CollectionKey`]) to search within.
     pub(crate) collection_key: Option<CollectionKey>,
+    /// 0-based offset into the full result set (default: 0).
+    pub(crate) start: Option<usize>,
     /// Maximum number of items to return (default: 20).
     pub(crate) limit: Option<usize>,
 }
@@ -314,6 +317,15 @@ pub(crate) struct SearchByCitationKeyArgs {
 pub(crate) struct AdvancedSearchArgs {
     /// List of search conditions ([`SearchCondition`]).
     pub(crate) conditions: Vec<SearchCondition>,
+    /// `"all"` (AND, default) or `"any"` (OR).
+    pub(crate) join_mode: Option<JoinMode>,
+    /// Sort field: `"dateAdded"`, `"dateModified"`, `"title"`, `"date"`, or
+    /// `"creator"`.
+    pub(crate) sort_by: Option<SortField>,
+    /// Sort direction: `"asc"` or `"desc"` (default: `"asc"`).
+    pub(crate) sort_direction: Option<SortDirection>,
+    /// 0-based offset into the full result set (default: 0).
+    pub(crate) start: Option<usize>,
     /// Maximum number of items to return (default: 20).
     pub(crate) limit: Option<usize>,
 }
@@ -435,11 +447,17 @@ impl ZoteroMcpServer {
         &self,
         args: SearchItemsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let offset = args.start.unwrap_or(0);
         let limit = args.limit.unwrap_or(20);
         let client = ZoteroClient::new(&self.state);
         Ok(super::json_result(
             client
-                .search_items(&args.query, args.collection_key.as_ref(), limit)
+                .search_items(
+                    &args.query,
+                    args.collection_key.as_ref(),
+                    offset,
+                    limit,
+                )
                 .await,
         ))
     }
@@ -964,10 +982,20 @@ impl ZoteroMcpServer {
         &self,
         args: AdvancedSearchArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let offset = args.start.unwrap_or(0);
         let limit = args.limit.unwrap_or(20);
         let client = ZoteroClient::new(&self.state);
         Ok(super::json_result(
-            client.advanced_search(args.conditions, limit).await,
+            client
+                .advanced_search(
+                    args.conditions,
+                    args.join_mode.unwrap_or_default(),
+                    args.sort_by,
+                    args.sort_direction.unwrap_or_default(),
+                    offset,
+                    limit,
+                )
+                .await,
         ))
     }
 
@@ -1073,9 +1101,18 @@ impl ZoteroMcpServer {
                 operator: SearchOperator::Is,
                 value: draft.title.clone(),
             };
-            let existing = client.advanced_search(vec![cond], 1).await;
-            if let Ok(matches) = existing {
-                if let Some(found) = matches.into_iter().next() {
+            let existing = client
+                .advanced_search(
+                    vec![cond],
+                    JoinMode::All,
+                    None,
+                    SortDirection::Asc,
+                    0,
+                    1,
+                )
+                .await;
+            if let Ok(page) = existing {
+                if let Some(found) = page.items.into_iter().next() {
                     return Ok(super::json_success(&found));
                 }
             }

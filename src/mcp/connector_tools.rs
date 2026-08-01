@@ -50,6 +50,7 @@ impl ZoteroMcpServer {
         self.zotero_search_items_impl(SearchItemsArgs {
             query: args.query,
             collection_key: None,
+            start: None,
             limit: Some(20),
         })
         .await
