@@ -2266,7 +2266,7 @@ mod tests {
 
         use super::*;
 
-        fn item_json(key: &str, relations: serde_json::Value) -> String {
+        fn item_json(key: &str, relations: &serde_json::Value) -> String {
             serde_json::json!({
                 "key": key,
                 "version": 1,
@@ -2274,7 +2274,7 @@ mod tests {
                     "key": key,
                     "version": 1,
                     "itemType": "journalArticle",
-                    "relations": relations,
+                    "relations": relations.clone(),
                 },
             })
             .to_string()
@@ -2302,7 +2302,7 @@ mod tests {
             // Arrange
             let source = item_json(
                 "ITEM0001",
-                serde_json::json!({
+                &serde_json::json!({
                     "dc:relation": [URI_A_TO_B],
                 }),
             );
@@ -2334,13 +2334,13 @@ mod tests {
         async fn add_item_relation_links_items_and_returns_success() {
             // Arrange
             let base = mock_server(vec![
-                http_response("200 OK", &item_json("ITEM0001", json!({}))),
-                http_response("200 OK", &item_json("ITEM0002", json!({}))),
+                http_response("200 OK", &item_json("ITEM0001", &json!({}))),
+                http_response("200 OK", &item_json("ITEM0002", &json!({}))),
                 http_response(
                     "200 OK",
                     &item_json(
                         "ITEM0001",
-                        serde_json::json!({
+                        &serde_json::json!({
                             "dc:relation": [URI_A_TO_B],
                         }),
                     ),
@@ -2349,7 +2349,7 @@ mod tests {
                     "200 OK",
                     &item_json(
                         "ITEM0002",
-                        serde_json::json!({
+                        &serde_json::json!({
                             "dc:relation": [URI_B_TO_A],
                         }),
                     ),
@@ -2404,7 +2404,7 @@ mod tests {
                     "200 OK",
                     &item_json(
                         "ITEM0001",
-                        serde_json::json!({
+                        &serde_json::json!({
                             "dc:relation": [URI_A_TO_B],
                         }),
                     ),
@@ -2413,13 +2413,13 @@ mod tests {
                     "200 OK",
                     &item_json(
                         "ITEM0002",
-                        serde_json::json!({
+                        &serde_json::json!({
                             "dc:relation": [URI_B_TO_A],
                         }),
                     ),
                 ),
-                http_response("200 OK", &item_json("ITEM0001", json!({}))),
-                http_response("200 OK", &item_json("ITEM0002", json!({}))),
+                http_response("200 OK", &item_json("ITEM0001", &json!({}))),
+                http_response("200 OK", &item_json("ITEM0002", &json!({}))),
             ]);
             let server = ZoteroMcpServer::new(zotero_state(base));
 

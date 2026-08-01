@@ -162,7 +162,9 @@ impl TryFrom<&RelationUri> for ItemKey {
         if !value.contains("/items/") {
             return Err(RelationUriError);
         }
-        let key = value.rsplit('/').next().unwrap_or_default();
+        let Some(key) = value.rsplit('/').next() else {
+            return Err(RelationUriError);
+        };
         if key.len() == 8 && key.chars().all(|c| c.is_ascii_alphanumeric()) {
             Ok(ItemKey::from(key))
         } else {
