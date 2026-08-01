@@ -169,6 +169,13 @@ impl<'a> ZoteroClient<'a> {
     /// [`LocalApi`]: ZoteroMcpError::LocalApi
     /// [`Network`]: ZoteroMcpError::Network
     /// [`Json`]: ZoteroMcpError::Json
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "used by server-side search pagination in a later task"
+        )
+    )]
     pub(super) async fn get_items_with_total(
         &self,
         url: &str,
