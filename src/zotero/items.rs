@@ -74,6 +74,26 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
+    /// Fetches every top-level library item (notes excluded), paginating
+    /// through the whole library with a stable date-modified ordering so
+    /// page boundaries are deterministic.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
+    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   level
+    /// - [`ZoteroMcpError::Json`] if a response cannot be decoded
+    pub(super) async fn get_all_items(
+        &self,
+    ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
+        let url = format!(
+            "{}/users/0/items?itemType=-note&sort=dateModified&direction=desc",
+            self.state.zotero_api_url
+        );
+        self.get_all_json(&url, 100).await
+    }
+
     /// Fetches the item identified by `item_key`.
     ///
     /// # Errors

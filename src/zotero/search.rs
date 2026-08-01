@@ -169,7 +169,7 @@ impl ZoteroClient<'_> {
         conditions: Vec<SearchCondition>,
         limit: usize,
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
-        let items = self.get_recent_items(100).await?;
+        let items = self.get_all_items().await?;
         let results = items
             .into_iter()
             .filter(|item| {

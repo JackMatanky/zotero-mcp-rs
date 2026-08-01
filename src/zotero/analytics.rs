@@ -80,11 +80,7 @@ impl ZoteroClient<'_> {
         let items = if let Some(col) = collection_key {
             self.get_collection_items(col).await?
         } else {
-            let url = format!(
-                "{}/users/0/items?limit=100",
-                self.state.zotero_api_url
-            );
-            self.get_json(&url).await?
+            self.get_all_items().await?
         };
 
         Ok(find_duplicate_groups(&items))
@@ -105,7 +101,7 @@ impl ZoteroClient<'_> {
     ) -> Result<LibraryCoverage, ZoteroMcpError> {
         let items = match collection_key {
             Some(col) => self.get_collection_items(col).await?,
-            None => self.get_recent_items(100).await?,
+            None => self.get_all_items().await?,
         };
 
         let mut flags = Vec::with_capacity(items.len());
@@ -595,6 +591,112 @@ mod tests {
             assert!(result.contains("## Child Notes"));
             assert!(result.contains("### Note 1"));
             assert!(result.contains("<p>Child note text</p>"));
+        }
+    }
+
+    mod scan_pagination {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+        use crate::zotero::client::ZoteroClient;
+
+        fn item_json(key: &str, title: &str) -> String {
+            format!(
+                r#"{{"key":"{key}","version":1,"data":{{"key":"{key}","version":1,"itemType":"journalArticle","title":"{title}"}}}}"#
+            )
+        }
+
+        fn http_response(status: &str, body: &str) -> String {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+                 application/json\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+        }
+
+        fn mock_server(responses: Vec<String>) -> String {
+            use std::{
+                io::{Read, Write},
+                net::TcpListener,
+            };
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+            let addr = listener.local_addr().expect("addr");
+            std::thread::spawn(move || {
+                for response in responses {
+                    let (mut stream, _) = listener.accept().expect("accept");
+                    let mut buf = [0_u8; 1024];
+                    let _ = stream.read(&mut buf);
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            });
+            format!("http://{addr}")
+        }
+
+        fn test_state(zotero_api_url: String) -> crate::state::AppState {
+            crate::state::AppState {
+                zotero_api_url,
+                better_bibtex_url: String::new(),
+                better_notes_url: String::new(),
+                crossref_url: String::new(),
+                semantic_scholar_url: String::new(),
+                open_library_url: String::new(),
+                write_enabled: false,
+                ..crate::state::AppState::from_env()
+            }
+        }
+
+        #[tokio::test]
+        async fn find_duplicates_scans_more_than_one_hundred_items() {
+            // 120 unique items => 2 pages (100 + 20). Two items share a title
+            // ("Shared Title") so exactly one duplicate group must be found.
+            let mut bodies = Vec::new();
+            for i in 0..100 {
+                bodies.push(item_json(
+                    &format!("K{i:04}"),
+                    &format!("Title {i}"),
+                ));
+            }
+            bodies.push(item_json("K9900", "Shared Title"));
+            bodies.push(item_json("K9901", "Shared Title"));
+            for i in 102..120 {
+                bodies.push(item_json(
+                    &format!("K{i:04}"),
+                    &format!("Title {i}"),
+                ));
+            }
+            // Use take/skip (not `bodies[a..b]` slicing) to avoid the
+            // `indexing_slicing` deny lint.
+            let page1 = format!(
+                "[{}]",
+                bodies
+                    .iter()
+                    .take(100)
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            let page2 = format!(
+                "[{}]",
+                bodies
+                    .iter()
+                    .skip(100)
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+
+            let base = mock_server(vec![
+                http_response("200 OK", &page1),
+                http_response("200 OK", &page2),
+            ]);
+            let state = test_state(base);
+
+            let groups =
+                ZoteroClient::new(&state).find_duplicates(None).await.unwrap();
+
+            assert_eq!(groups.len(), 1);
+            assert_eq!(groups[0].match_type, DuplicateType::Title);
+            assert_eq!(groups[0].item_keys.len(), 2);
         }
     }
 }
