@@ -50,6 +50,12 @@ pub(crate) enum SearchOperator {
     Is,
     StartsWith,
     EndsWith,
+    IsNot,
+    DoesNotContain,
+    IsGreaterThan,
+    IsLessThan,
+    IsBefore,
+    IsAfter,
     #[serde(untagged)]
     Other(String),
 }
@@ -61,6 +67,57 @@ pub(crate) struct SearchCondition {
     #[serde(default)]
     pub(crate) operator: SearchOperator,
     pub(crate) value: String,
+}
+
+/// How multiple conditions are combined: `all` (AND, default) or `any` (OR).
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
+    Deserialize,
+    Serialize,
+    JsonSchema,
+)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum JoinMode {
+    #[default]
+    All,
+    Any,
+}
+
+/// Item field to sort results by.
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize, JsonSchema,
+)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum SortField {
+    DateAdded,
+    DateModified,
+    Title,
+    Date,
+    Creator,
+}
+
+/// Sort direction.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
+    Deserialize,
+    Serialize,
+    JsonSchema,
+)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum SortDirection {
+    #[default]
+    Asc,
+    Desc,
 }
 
 impl ZoteroClient<'_> {
@@ -186,10 +243,18 @@ fn match_condition(item: &ZoteroItem, cond: &SearchCondition) -> bool {
     let val = cond.value.to_lowercase();
     let matches_str = |s: &str| match cond.operator {
         SearchOperator::Is => s.to_lowercase() == val,
+        SearchOperator::IsNot => s.to_lowercase() != val,
         SearchOperator::StartsWith => s.to_lowercase().starts_with(&val),
         SearchOperator::EndsWith => s.to_lowercase().ends_with(&val),
+        SearchOperator::DoesNotContain => !s.to_lowercase().contains(&val),
         SearchOperator::Contains | SearchOperator::Other(_) => {
             s.to_lowercase().contains(&val)
+        }
+        SearchOperator::IsGreaterThan | SearchOperator::IsAfter => {
+            compare_dates(s, &cond.value).is_gt()
+        }
+        SearchOperator::IsLessThan | SearchOperator::IsBefore => {
+            compare_dates(s, &cond.value).is_lt()
         }
     };
 
@@ -220,6 +285,70 @@ fn match_condition(item: &ZoteroItem, cond: &SearchCondition) -> bool {
             "doi" => item.data.doi.as_deref().is_some_and(matches_str),
             _ => false,
         },
+    }
+}
+
+/// Compares two date-or-year strings (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`) by
+/// their leading numeric components. Missing components compare as zero.
+fn compare_dates(a: &str, b: &str) -> std::cmp::Ordering {
+    date_key(a).cmp(&date_key(b))
+}
+
+/// Splits `s` into `(year, month, day)` numeric components.
+fn date_key(s: &str) -> (u32, u32, u32) {
+    let mut parts = s.split('-').filter(|p| !p.is_empty());
+    let next = |it: &mut dyn Iterator<Item = &str>| {
+        it.next().and_then(|p| p.parse::<u32>().ok()).unwrap_or(0)
+    };
+    (next(&mut parts), next(&mut parts), next(&mut parts))
+}
+
+/// Sorts `items` in place-order by `field` in `direction` and returns them.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "used by MCP search/sort tools in a later task"
+    )
+)]
+fn sort_items(
+    items: Vec<ZoteroItem>,
+    field: SortField,
+    direction: SortDirection,
+) -> Vec<ZoteroItem> {
+    let mut items = items;
+    items.sort_by(|a, b| {
+        let ord = sort_key(a, field).cmp(&sort_key(b, field));
+        match direction {
+            SortDirection::Asc => ord,
+            SortDirection::Desc => ord.reverse(),
+        }
+    });
+    items
+}
+
+/// Returns the sort key string for `item` under `field`.
+fn sort_key(item: &ZoteroItem, field: SortField) -> String {
+    match field {
+        SortField::Title => item.data.title.clone().unwrap_or_default(),
+        SortField::Date => item.data.date.clone().unwrap_or_default(),
+        SortField::DateAdded => {
+            item.data.date_added.clone().unwrap_or_default()
+        }
+        SortField::DateModified => {
+            item.data.date_modified.clone().unwrap_or_default()
+        }
+        SortField::Creator => {
+            item.data.creators.first().map_or_else(String::new, |c| {
+                c.name.clone().unwrap_or_else(|| {
+                    format!(
+                        "{} {}",
+                        c.first_name.as_deref().unwrap_or(""),
+                        c.last_name.as_deref().unwrap_or("")
+                    )
+                })
+            })
+        }
     }
 }
 
@@ -329,6 +458,116 @@ mod tests {
                 value: "Rust".to_owned(),
             };
             assert!(!match_condition(&item, &cond));
+        }
+
+        #[test]
+        fn matches_is_not_operator() {
+            let item = make_item(Some("Learning Go"), None, None);
+            let cond = SearchCondition {
+                field: SearchField::Title,
+                operator: SearchOperator::IsNot,
+                value: "rust".to_owned(),
+            };
+            assert!(match_condition(&item, &cond));
+        }
+
+        #[test]
+        fn matches_does_not_contain_operator() {
+            let item = make_item(Some("Learning Go"), None, None);
+            let cond = SearchCondition {
+                field: SearchField::Title,
+                operator: SearchOperator::DoesNotContain,
+                value: "rust".to_owned(),
+            };
+            assert!(match_condition(&item, &cond));
+        }
+
+        #[test]
+        fn matches_is_greater_than_on_year() {
+            let item = make_item(None, Some("2024"), None);
+            let cond = SearchCondition {
+                field: SearchField::Year,
+                operator: SearchOperator::IsGreaterThan,
+                value: "2020".to_owned(),
+            };
+            assert!(match_condition(&item, &cond));
+        }
+
+        #[test]
+        fn matches_is_less_than_on_date() {
+            let item = make_item(None, Some("2024-02-15"), None);
+            let cond = SearchCondition {
+                field: SearchField::Date,
+                operator: SearchOperator::IsLessThan,
+                value: "2025-01-01".to_owned(),
+            };
+            assert!(match_condition(&item, &cond));
+        }
+
+        #[test]
+        fn matches_is_after_on_date() {
+            let item = make_item(None, Some("2024-02-15"), None);
+            let cond = SearchCondition {
+                field: SearchField::Date,
+                operator: SearchOperator::IsAfter,
+                value: "2024-01-01".to_owned(),
+            };
+            assert!(match_condition(&item, &cond));
+        }
+    }
+
+    mod sort_items {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+        use crate::zotero::models::{ItemKey, ItemType, ZoteroItemData};
+
+        fn item(key: &str, title: &str, date: &str) -> ZoteroItem {
+            ZoteroItem {
+                key: ItemKey::from(key),
+                version: 1,
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from(key),
+                    version: 1,
+                    item_type: ItemType::JournalArticle,
+                    title: Some(title.to_owned()),
+                    date: Some(date.to_owned()),
+                    ..Default::default()
+                },
+            }
+        }
+
+        #[test]
+        fn sorts_by_title_ascending() {
+            let items = vec![
+                item("K3", "Zeta", "2024"),
+                item("K1", "Alpha", "2024"),
+                item("K2", "Beta", "2024"),
+            ];
+            let sorted =
+                sort_items(items, SortField::Title, SortDirection::Asc);
+            let titles: Vec<&str> = sorted
+                .iter()
+                .map(|i| i.data.title.as_deref().unwrap_or_default())
+                .collect();
+            assert_eq!(titles, vec!["Alpha", "Beta", "Zeta"]);
+        }
+
+        #[test]
+        fn sorts_by_date_descending() {
+            let items = vec![
+                item("K1", "A", "2022"),
+                item("K2", "B", "2025"),
+                item("K3", "C", "2023"),
+            ];
+            let sorted =
+                sort_items(items, SortField::Date, SortDirection::Desc);
+            let keys: Vec<&str> =
+                sorted.iter().map(|i| i.key.as_str()).collect();
+            assert_eq!(keys, vec!["K2", "K3", "K1"]);
         }
     }
 }
