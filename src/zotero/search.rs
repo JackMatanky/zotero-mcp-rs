@@ -70,13 +70,7 @@ pub(crate) struct SearchCondition {
 }
 
 /// How multiple conditions are combined: `all` (AND, default) or `any` (OR).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "used by MCP search/sort tools in a later task"
-    )
-)]
+#[expect(dead_code, reason = "used by MCP search/sort tools in a later task")]
 #[derive(
     Copy,
     Clone,
@@ -476,6 +470,17 @@ mod tests {
                 value: "rust".to_owned(),
             };
             assert!(match_condition(&item, &cond));
+        }
+
+        #[test]
+        fn is_not_returns_false_when_value_matches() {
+            let item = make_item(Some("Learning Go"), None, None);
+            let cond = SearchCondition {
+                field: SearchField::Title,
+                operator: SearchOperator::IsNot,
+                value: "learning go".to_owned(),
+            };
+            assert!(!match_condition(&item, &cond));
         }
 
         #[test]
