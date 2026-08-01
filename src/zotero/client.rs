@@ -120,7 +120,7 @@ impl<'a> ZoteroClient<'a> {
     /// returns fewer than `page_size` items (Zotero respects `start`/`limit`).
     ///
     /// The `url` is used as-is on the first request; `start`/`limit` query
-    /// parameters are appended for each subsequent page.
+    /// parameters are appended on every request.
     ///
     /// # Errors
     ///
