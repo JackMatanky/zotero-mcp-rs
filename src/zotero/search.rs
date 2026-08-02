@@ -1,16 +1,16 @@
 //! Search and query operations for the Zotero Local HTTP API.
 //!
-//! Implements methods on [`ZoteroClient`] for free-text search, tag queries,
-//! citation key matching, and structured multi-condition advanced search.
+//! Adds [`ZoteroClient`] methods for free-text search, tag search, citation key
+//! lookup, and structured multi-condition search.
 //!
-//! # Key Types & Operations
+//! # Key types and operations
 //!
-//! - [`ZoteroClient::search_items`] - Free-text search matching title, creator,
-//!   year, or fulltext
-//! - [`ZoteroClient::search_by_citation_key`] - Lookup by native or legacy
-//!   citation key
-//! - [`ZoteroClient::advanced_search`] - Multi-condition search using
-//!   [`SearchCondition`], [`SearchField`], and [`SearchOperator`]
+//! - [`ZoteroClient::search_items`]: free-text search over title, creator,
+//!   year, or fulltext.
+//! - [`ZoteroClient::search_by_citation_key`]: lookup by native Zotero citation
+//!   key or legacy Better BibTeX metadata.
+//! - [`ZoteroClient::advanced_search`]: structured search with
+//!   [`SearchCondition`], [`SearchField`], and [`SearchOperator`].
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -140,8 +140,8 @@ pub(crate) struct SearchPage<T> {
 }
 
 impl ZoteroClient<'_> {
-    /// Searches library items matching a query string, excluding notes,
-    /// returning a paginated page.
+    /// Searches library items matching `query`, excluding notes, and returns a
+    /// paginated page.
     ///
     /// # Arguments
     ///
@@ -180,6 +180,7 @@ impl ZoteroClient<'_> {
 
     /// Searches items by `tag` name, returning at most `limit` items (excluding
     /// notes).
+    ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
@@ -199,7 +200,8 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Searches items by citation key.
+    /// Searches items by native or legacy citation key.
+    ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
@@ -630,7 +632,7 @@ fn next_date_part<'a>(parts: &mut impl Iterator<Item = &'a str>) -> u32 {
     parts.next().and_then(|p| p.parse::<u32>().ok()).unwrap_or(0)
 }
 
-/// Sorts `items` in place-order by `field` in `direction` and returns them.
+/// Sorts `items` by `field` in `direction` and returns the sorted items.
 fn sort_items(
     items: Vec<ZoteroItem>,
     field: SortField,

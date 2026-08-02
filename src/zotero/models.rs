@@ -1,27 +1,26 @@
-//! Serde models mirroring the Zotero Local API's JSON item and collection
-//! shapes.
+//! Serde models for Zotero Local API JSON payloads.
 //!
-//! Defines strongly-typed representations for Zotero items, collections, tags,
-//! creators, and version counters to prevent string transposition and ensure
-//! schema safety.
+//! Defines typed item, collection, tag, creator, relation, and version models
+//! used by the Zotero client. The key newtypes prevent accidentally mixing item
+//! keys, collection keys, tag names, citation keys, and relation URIs.
 //!
-//! # Key Types
+//! # Key types
 //!
-//! - [`ItemKey`] & [`CollectionKey`] - Type-safe alphanumeric 8-character
-//!   identifiers
-//! - [`LibraryVersion`] - Strongly-typed wrapper around Zotero library version
-//!   counters
-//! - [`ZoteroItem`] & [`ZoteroItemData`] - Bibliographic items, notes,
-//!   attachments, and annotations
-//! - [`ZoteroCollection`] - Collection tree nodes and parent metadata
-//! - [`ItemType`], [`AnnotationType`], & [`CreatorType`] - Extensible domain
-//!   enums preserving raw strings
+//! - [`ItemKey`] and [`CollectionKey`]: type-safe Zotero object identifiers.
+//! - [`LibraryVersion`]: wrapper around Zotero library version counters.
+//! - [`ZoteroItem`] and [`ZoteroItemData`]: bibliographic items, notes,
+//!   attachments, and annotations.
+//! - [`ZoteroCollection`]: collection tree nodes and parent metadata.
+//! - [`ItemType`], [`AnnotationType`], and [`CreatorType`]: extensible enums
+//!   that preserve unmodeled Zotero strings.
 
 use serde::{Deserialize, Serialize};
 
-/// Generates a `String`-backed newtype identifier with the conversions and
-/// comparisons needed to use it as a domain key: `Display`, `From<String>`,
-/// `From<&str>`, `AsRef<str>`, and equality against plain strings.
+/// Generates a [`String`]-backed identifier newtype.
+///
+/// The generated type supports the conversions and comparisons needed for
+/// domain keys: [`std::fmt::Display`], [`From<String>`], [`From<&str>`],
+/// [`AsRef<str>`], and equality against plain strings.
 macro_rules! string_key {
     ($name:ident, $doc:expr) => {
         #[doc = $doc]
@@ -235,13 +234,11 @@ impl schemars::JsonSchema for LibraryVersion {
     }
 }
 
-/// Zotero item type (`itemType`), the closed-ish set of item kinds the
-/// Local API returns.
+/// Zotero item kind carried in the `itemType` field.
 ///
-/// Only variants this crate branches on are named explicitly; every other
-/// Zotero item type (`webpage`, `bookSection`, `thesis`, ...) round-trips
-/// through [`ItemType::Other`], preserving its original API string exactly
-/// so unrecognized types are never silently corrupted on write-back.
+/// Only variants this crate branches on are named explicitly. Every other
+/// Zotero item type, such as `webpage`, `bookSection`, or `thesis`, round-trips
+/// through [`ItemType::Other`] with its original API string preserved.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub(crate) enum ItemType {
@@ -304,11 +301,10 @@ impl From<ItemType> for String {
     }
 }
 
-/// PDF annotation kind (`annotationType`).
+/// PDF annotation kind carried in the `annotationType` field.
 ///
-/// Falls back to [`AnnotationType::Other`] for any annotation kind beyond
-/// the three this crate creates (`image` and `ink` annotations exist in
-/// real Zotero libraries but are never constructed by this crate).
+/// Falls back to [`AnnotationType::Other`] for annotation kinds this crate does
+/// not create, such as `image` or `ink`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub(crate) enum AnnotationType {
@@ -369,11 +365,11 @@ impl From<AnnotationType> for String {
     }
 }
 
-/// Creator role (`creatorType`), e.g. author or editor.
+/// Creator role carried in the `creatorType` field.
 ///
-/// Zotero defines dozens of item-type-specific creator roles; only the
-/// common cross-item-type ones are named explicitly, with
-/// [`CreatorType::Other`] preserving anything else for round-tripping.
+/// Zotero defines many item-type-specific creator roles. The common roles are
+/// named explicitly, while [`CreatorType::Other`] preserves anything else for
+/// round-tripping.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub(crate) enum CreatorType {
@@ -407,7 +403,7 @@ impl From<CreatorType> for String {
     }
 }
 
-/// Attachment storage mode (`linkMode`).
+/// Attachment storage mode carried in the `linkMode` field.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub(crate) enum LinkMode {
@@ -444,7 +440,7 @@ impl From<LinkMode> for String {
     }
 }
 
-/// Parent state for a Zotero collection.
+/// Parent relationship for a Zotero collection.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "serde_json::Value", into = "serde_json::Value")]
 pub(crate) enum CollectionParent {
@@ -474,8 +470,10 @@ impl From<CollectionParent> for serde_json::Value {
         }
     }
 }
-/// Tag origin (Zotero's `type` field on a tag object): `0` for a
-/// user-created tag, `1` for one Zotero assigned automatically on import.
+/// Tag source carried in Zotero's numeric `type` field.
+///
+/// Zotero uses `0` for user-created tags and `1` for tags assigned
+/// automatically on import.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize,
 )]
@@ -528,10 +526,9 @@ pub(crate) struct ZoteroItem {
     pub(crate) data: ZoteroItemData,
 }
 
-/// Bibliographic and attachment fields carried by a Zotero item.
+/// Bibliographic, attachment, note, and annotation fields for a Zotero item.
 ///
-/// Maps Zotero's `camelCase` JSON field names across all item types
-/// (`itemType`).
+/// Maps Zotero's `camelCase` JSON field names across item types.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ZoteroItemData {
@@ -555,11 +552,12 @@ pub(crate) struct ZoteroItemData {
     pub(crate) series_text: Option<String>,
     pub(crate) journal_abbreviation: Option<String>,
     pub(crate) doi: Option<String>,
-    /// Zotero's native citation key field (Zotero 9+; `itemFields.citationKey`
-    /// in Zotero's item schema). Also searchable server-side via Zotero's
-    /// quicksearch as of Zotero 9. Distinct from, and takes precedence over,
-    /// any `Citation Key: ...` line Better `BibTeX` may still write to `extra`
-    /// on libraries that predate native support.
+    /// Zotero's native citation key field.
+    ///
+    /// Zotero 9 exposes this as `itemFields.citationKey`, and quicksearch can
+    /// search it server-side. This field takes precedence over any
+    /// `Citation Key: ...` line Better BibTeX may write to
+    /// [`ZoteroItemData::extra`].
     #[serde(rename = "citationKey")]
     pub(crate) citation_key: Option<String>,
     pub(crate) isbn: Option<String>,
@@ -577,7 +575,7 @@ pub(crate) struct ZoteroItemData {
     pub(crate) tags: Vec<ZoteroTag>,
     #[serde(default)]
     pub(crate) collections: Vec<CollectionKey>,
-    /// Zotero relation URIs map.
+    /// Map of Zotero relation predicate names to URI values.
     #[serde(default)]
     pub(crate) relations: serde_json::Value,
     pub(crate) date_added: Option<String>,

@@ -1,13 +1,13 @@
 //! Async client for the Zotero Local HTTP API.
 //!
-//! Provides the core [`ZoteroClient`] wrapper around reqwest, handling
-//! authentication, request retries, error conversion, and response
-//! deserialization.
+//! Defines [`ZoteroClient`], the request wrapper shared by Zotero domain
+//! modules. The client centralizes authentication, retries, HTTP error
+//! conversion, pagination helpers, and JSON decoding.
 //!
-//! # Key Types
+//! # Key types
 //!
-//! - [`ZoteroClient`] - Main API client borrowing shared application state
-//! - [`LocalApiStatus`] - Health check status report payload
+//! - [`ZoteroClient`]: API client borrowing shared application state.
+//! - [`LocalApiStatus`]: health check payload returned by status probes.
 
 use reqwest::Response;
 use serde::{Serialize, de::DeserializeOwned};
@@ -18,7 +18,7 @@ use crate::{
     zotero::models::{LibraryVersion, LocalApiStatus, ZoteroItem},
 };
 
-/// A page of items plus the server-reported total result count, when present.
+/// One page of Zotero items and the optional `Total-Results` header count.
 pub(super) struct ItemsPage {
     pub(super) items: Vec<ZoteroItem>,
     pub(super) total: Option<usize>,

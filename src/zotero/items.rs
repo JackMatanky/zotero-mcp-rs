@@ -1,19 +1,19 @@
 //! Item, note, attachment, and annotation operations for the Zotero Local HTTP
 //! API.
 //!
-//! Implements methods on [`ZoteroClient`] for querying items, creating notes
-//! and attachments, updating bibliographic fields, handling trash state, and
-//! creating PDF annotations.
+//! Adds [`ZoteroClient`] methods for item reads, note and attachment creation,
+//! bibliographic field updates, trash state changes, and PDF annotation
+//! creation.
 //!
-//! # Key Operations
+//! # Key operations
 //!
-//! - [`ZoteroClient::get_recent_items`] & [`ZoteroClient::get_item`] - Query
-//!   items and child nodes
-//! - [`ZoteroClient::create_note`] & [`ZoteroClient::attach_file_link`] -
-//!   Attach notes and file links
-//! - [`ZoteroClient::update_item`] & [`ZoteroClient::set_item_deleted`] -
-//!   Update fields or move to trash
-//! - [`ZoteroClient::create_annotation`] - Create PDF annotations
+//! - [`ZoteroClient::get_recent_items`] and [`ZoteroClient::get_item`]: query
+//!   items and child nodes.
+//! - [`ZoteroClient::create_note`] and [`ZoteroClient::attach_file_link`]:
+//!   create notes and linked attachments.
+//! - [`ZoteroClient::update_item`] and [`ZoteroClient::set_item_deleted`]:
+//!   update fields or trash state.
+//! - [`ZoteroClient::create_annotation`]: create PDF annotations.
 
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -27,7 +27,7 @@ use crate::{
     },
 };
 
-/// Zotero annotation position payload.
+/// Serialized Zotero annotation position payload.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub(crate) struct AnnotationPosition(serde_json::Value);
@@ -44,7 +44,7 @@ impl From<serde_json::Value> for AnnotationPosition {
     }
 }
 
-/// Parameters for creating a PDF annotation.
+/// Payload for creating a PDF annotation.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct AnnotationDraft {
     pub(crate) parent_attachment_key: ItemKey,
@@ -56,7 +56,7 @@ pub(crate) struct AnnotationDraft {
     pub(crate) position: AnnotationPosition,
 }
 
-/// Action for setting an item's trash state.
+/// Requested trash state transition for an item.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub(crate) enum TrashAction {
     MoveToTrash,
@@ -268,6 +268,7 @@ impl ZoteroClient<'_> {
     /// * `file_path_or_url` - File path or URL to link
     /// * `content_type` - Optional MIME content type (defaults to
     ///   `"application/pdf"`)
+    ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled

@@ -1,13 +1,17 @@
 //! Related-item relations for the Zotero Local HTTP API.
 //!
 //! Zotero stores item links in each item's `relations` map under the
-//! `dc:relation` predicate as URI values that are either a single string or an
-//! array of strings (the API switches forms by value count). The pure helpers
-//! `parse_relation_keys` and `apply_relations` parse both forms and compute
-//! set-based, idempotent add/remove patches that always write `dc:relation` as
-//! an array. The [`ZoteroClient`] methods read and bidirectionally mutate those
-//! links: [`ZoteroClient::get_related_items`] resolves an item's relation URIs
-//! to items, while [`ZoteroClient::add_item_relation`] and
+//! `dc:relation` predicate. The value may be a single URI string or an array of
+//! URI strings, depending on count.
+//!
+//! The helpers keep that wire format manageable:
+//!
+//! - [`parse_relation_keys`]: reads both single-string and array forms.
+//! - [`apply_relations`]: computes idempotent add/remove patches while
+//!   preserving unrelated relation predicates.
+//!
+//! [`ZoteroClient::get_related_items`] resolves relation URIs to items.
+//! [`ZoteroClient::add_item_relation`] and
 //! [`ZoteroClient::remove_item_relation`] patch both endpoints of a link.
 
 use std::collections::BTreeSet;

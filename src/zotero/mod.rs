@@ -1,14 +1,13 @@
-//! Bridge to the Zotero Local HTTP API.
+//! Zotero Local API client and domain model layer.
 //!
-//! Provides the main client [`ZoteroClient`] and submodules for domain models,
-//! item mutations, collection hierarchy management, tag operations, search,
-//! library analytics, and public identifier resolution.
+//! Provides [`ZoteroClient`] plus modules for the data shapes and operations
+//! used by MCP tools.
 //!
-//! # Submodules & Key Types
+//! # Submodules and key types
 //!
-//! - [`ZoteroClient`] - Main async HTTP client scoped to tool calls
-//! - [`models`] - Strongly-typed domain models, item shapes, and key newtypes
-//! - [`identifiers`] - Metadata resolution for DOI, arXiv, and ISBN lookups
+//! - [`ZoteroClient`]: async HTTP client scoped to one tool call.
+//! - [`models`]: domain models, JSON shapes, and key newtypes.
+//! - [`identifiers`]: DOI, arXiv, and ISBN metadata resolution.
 
 mod analytics;
 mod client;

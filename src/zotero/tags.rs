@@ -1,15 +1,14 @@
 //! Tag operations for the Zotero Local HTTP API.
 //!
-//! Implements methods on [`ZoteroClient`] for querying library tags, batch
-//! updating tags across multiple items, renaming tags library-wide, and
-//! removing tags.
+//! Adds [`ZoteroClient`] methods for listing library tags, updating tags across
+//! items, renaming tags library-wide, and deleting tags.
 //!
-//! # Key Operations
+//! # Key operations
 //!
-//! - [`ZoteroClient::list_tags`] - List library-wide tag names
-//! - [`ZoteroClient::batch_update_tags`] - Add/remove tags across items
-//! - [`ZoteroClient::rename_tag`] & [`ZoteroClient::delete_tags`] - Bulk tag
-//!   mutation and cleanup
+//! - [`ZoteroClient::list_tags`]: list library-wide tag names.
+//! - [`ZoteroClient::batch_update_tags`]: add or remove tags across items.
+//! - [`ZoteroClient::rename_tag`] and [`ZoteroClient::delete_tags`]: bulk tag
+//!   mutation and cleanup.
 
 use std::collections::BTreeSet;
 
@@ -54,6 +53,7 @@ impl ZoteroClient<'_> {
     /// * `item_keys` - Target item keys to update
     /// * `add_tags` - Tag names to attach to each item
     /// * `remove_tags` - Tag names to strip from each item
+    ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
@@ -140,7 +140,7 @@ impl ZoteroClient<'_> {
     }
 }
 
-/// Computes updated tag list after adding and removing tags from existing tags.
+/// Computes the tag list after applying additions and removals.
 pub(crate) fn diff_tags(
     existing: Vec<ZoteroTag>,
     add: &[TagName],

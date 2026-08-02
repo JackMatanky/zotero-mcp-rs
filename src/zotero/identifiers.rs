@@ -1,16 +1,14 @@
-//! Metadata resolution for adding items by DOI, arXiv ID, or ISBN.
+//! Metadata resolution for DOI, arXiv ID, and ISBN imports.
 //!
-//! Resolves external academic identifiers against Crossref, Semantic Scholar,
-//! and Open Library APIs into strongly-typed [`ItemDraft`] objects ready for
-//! item creation in Zotero.
+//! Resolves public academic identifiers through Crossref, Semantic Scholar, and
+//! Open Library, producing typed [`ItemDraft`] values ready for item creation
+//! in Zotero.
 //!
-//! # Key Types & Functions
+//! # Key types and functions
 //!
-//! - [`resolve_metadata`] - Primary entry point for identifier resolution
-//! - [`IdentifierKind`] - Enum selector for identifier types
-//!   ([`IdentifierKind::Doi`], [`IdentifierKind::Arxiv`],
-//!   [`IdentifierKind::Isbn`])
-//! - [`ItemDraft`] - Strongly-typed item payload for creation
+//! - [`resolve_metadata`]: primary entry point for identifier resolution.
+//! - [`IdentifierKind`]: selector for DOI, arXiv, or ISBN lookup.
+//! - [`ItemDraft`]: typed Zotero item payload for creation.
 
 use serde::{Deserialize, Serialize};
 
@@ -20,11 +18,11 @@ use crate::{
     zotero::models::{CollectionKey, CreatorType, ItemType, ZoteroCreator},
 };
 
-/// A Zotero item ready for creation, resolved from a public identifier
-/// lookup (DOI, arXiv ID, or ISBN).
+/// Zotero item payload resolved from a DOI, arXiv ID, or ISBN lookup.
 ///
-/// Typed in place of a raw `serde_json::Value` so a typo in a field name
-/// fails to compile instead of silently producing a malformed Zotero item.
+/// Using typed fields instead of raw [`serde_json::Value`] makes misspelled
+/// payload fields fail at compile time instead of silently producing malformed
+/// Zotero items.
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ItemDraft {
@@ -51,12 +49,12 @@ pub(crate) struct ItemDraft {
     pub(crate) isbn: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub(crate) publisher: String,
-    /// Collections to file the created item into.
+    /// Collections that should contain the created item.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) collections: Vec<CollectionKey>,
 }
 
-/// Public-identifier type for [`resolve_metadata`].
+/// Public identifier type accepted by [`resolve_metadata`].
 #[derive(Copy, Clone, Debug, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum IdentifierKind {
@@ -100,7 +98,15 @@ pub(crate) async fn resolve_metadata(
     }
 }
 
-/// Issues a GET request to `url` and decodes the JSON response body.
+/// Sends a metadata GET request to `url` and decodes the JSON response body.
+///
+/// # Errors
+///
+/// - [`ZoteroMcpError::NotFound`] if the metadata API returns 404
+/// - [`ZoteroMcpError::LocalApi`] if the metadata API returns another non-2xx
+///   status
+/// - [`ZoteroMcpError::Network`] if the request fails at the transport level
+/// - [`ZoteroMcpError::Json`] if the response body cannot be decoded
 async fn fetch_json(
     state: &AppState,
     url: &str,

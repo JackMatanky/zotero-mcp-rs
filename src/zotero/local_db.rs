@@ -1,16 +1,18 @@
 //! Read-only access to Zotero's local `zotero.sqlite` database.
 //!
-//! Mirrors the discovery and SQL approach documented in
-//! `docs/54yyyu-zotero-mcp-digest.txt` (lines 6712-7779): locate the
-//! database via `ZOTERO_DB_PATH`, the `prefs.js` `dataDir` preference, or the
-//! per-user default; open it immutable/read-only so a running Zotero does not
-//! block reads; and query the `itemData`/`fulltextWords`/`itemNotes`/
-//! `itemAnnotations` tables directly.
+//! Locates the database using the same order as Zotero desktop integrations:
+//!
+//! 1. `ZOTERO_DB_PATH`
+//! 2. The `prefs.js` `dataDir` preference
+//! 3. The per-user default Zotero data directory
+//!
+//! The database is opened with SQLite `immutable=1` and read-only flags so a
+//! running Zotero instance does not block reads. Queries inspect Zotero's
+//! `itemData`, `fulltextWords`, `itemNotes`, and `itemAnnotations` tables
+//! directly.
 //!
 //! Every method is gated at the MCP tool layer by
-//! [`AppState::check_sqlite_access`].
-//!
-//! [`AppState`]: crate::state::AppState
+//! [`AppState::check_sqlite_access`](crate::state::AppState::check_sqlite_access).
 
 use std::{
     env,
@@ -24,10 +26,10 @@ use sqlx::{Row, SqlitePool, sqlite::SqliteConnectOptions};
 
 use crate::{errors::ZoteroMcpError, zotero::models::ItemKey};
 
-/// Max rows to pull from the full-text scan before filtering in Rust.
+/// Maximum rows to scan before full-text results are filtered in Rust.
 const FULLTEXT_SCAN_CAP: usize = 2000;
 
-/// Opens Zotero's local sqlite database in immutable read-only mode.
+/// Opens Zotero's local SQLite database in immutable read-only mode.
 #[derive(Clone, Debug)]
 pub(crate) struct LocalZoteroDb {
     pool: SqlitePool,
@@ -85,14 +87,11 @@ pub(crate) struct NoteAnnotationHit {
 }
 
 impl LocalZoteroDb {
-    /// Opens `path` read-only with `immutable=1` semantics (mirrors the
-    /// digest's `_get_connection`). Fails with [`ZoteroMcpError::Sqlite`] if
-    /// `path` is unreadable, or [`ZoteroMcpError::LocalDb`] if it is not a
-    /// Zotero database.
+    /// Opens `path` with SQLite `immutable=1` and read-only semantics.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::Sqlite`] if the path cannot be opened read-only
+    /// - [`ZoteroMcpError::Sqlite`] if `path` cannot be opened read-only
     /// - [`ZoteroMcpError::LocalDb`] if the database is not a Zotero database
     pub(crate) async fn open(path: &Path) -> Result<Self, ZoteroMcpError> {
         let opts = SqliteConnectOptions::from_str(&format!(
@@ -110,7 +109,12 @@ impl LocalZoteroDb {
         Ok(db)
     }
 
-    /// Verifies the `items` table exists, confirming this is a Zotero db.
+    /// Verifies that the opened database contains Zotero's `items` table.
+    ///
+    /// # Errors
+    ///
+    /// - [`ZoteroMcpError::Sqlite`] if the schema probe query fails
+    /// - [`ZoteroMcpError::LocalDb`] if the `items` table is missing
     async fn probe_schema(&self) -> Result<(), ZoteroMcpError> {
         let row = sqlx::query(
             "SELECT name FROM sqlite_master WHERE type='table' AND \
@@ -288,8 +292,10 @@ impl LocalZoteroDb {
     }
 
     /// Searches child notes and PDF annotations for `query`, returning at most
-    /// `limit` hits. Mirrors the digest's `search_notes_local` /
-    /// `search_annotations_local`.
+    /// `limit` hits.
+    ///
+    /// Mirrors the digest's `search_notes_local` and `search_annotations_local`
+    /// queries.
     ///
     /// # Errors
     ///
@@ -385,8 +391,8 @@ impl LocalZoteroDb {
     }
 }
 
-/// Locates `zotero.sqlite` via `ZOTERO_DB_PATH`, the `prefs.js` `dataDir`
-/// preference in any profile dir, or the per-user default, in that order.
+/// Locates `zotero.sqlite` using `override_path`, `ZOTERO_DB_PATH`, profile
+/// preferences, or the per-user default, in that order.
 pub(crate) fn find_zotero_db(override_path: Option<&Path>) -> Option<PathBuf> {
     if let Some(path) = override_path {
         return Some(path.to_path_buf());
@@ -406,8 +412,8 @@ pub(crate) fn find_zotero_db(override_path: Option<&Path>) -> Option<PathBuf> {
         .and_then(|home| db_in_dir(&home.join("Zotero")))
 }
 
-/// Looks up the `dataDir` pref in `prefs.js`, then falls back to the profile
-/// dir itself.
+/// Looks up the `dataDir` preference in `prefs.js`, then falls back to
+/// `profile_dir` itself.
 fn db_in_profile(profile_dir: &Path) -> Option<PathBuf> {
     let prefs = profile_dir.join("prefs.js");
     if prefs.is_file() {
@@ -428,8 +434,7 @@ fn db_in_dir(dir: &Path) -> Option<PathBuf> {
     db.is_file().then_some(db)
 }
 
-/// Candidate profile directories, per-OS (mirrors the digest's
-/// `_zotero_profiles_dirs`).
+/// Returns candidate profile directories for the current operating system.
 fn profiles_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(appdata) = env::var_os("APPDATA") {

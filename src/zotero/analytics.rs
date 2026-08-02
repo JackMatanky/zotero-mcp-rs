@@ -1,17 +1,16 @@
 //! Analytics, duplicate detection, and annotation synthesis operations.
 //!
-//! Implements methods on [`ZoteroClient`] for scanning duplicate items,
-//! computing library PDF/DOI/note coverage metrics, and synthesizing item
-//! annotations into formatted Markdown.
+//! Adds [`ZoteroClient`] methods for duplicate scans, library coverage metrics,
+//! and formatted annotation summaries.
 //!
-//! # Key Types & Operations
+//! # Key operations
 //!
-//! - [`ZoteroClient::find_duplicates`] - Group duplicate items into
-//!   [`DuplicateGroup`] by DOI or title
-//! - [`ZoteroClient::get_library_coverage`] - Compute [`LibraryCoverage`]
-//!   statistics
-//! - [`ZoteroClient::synthesize_annotations`] - Extract PDF annotations and
-//!   notes into Markdown
+//! - [`ZoteroClient::find_duplicates`]: groups potential [`DuplicateGroup`]
+//!   matches by DOI or normalized title.
+//! - [`ZoteroClient::get_library_coverage`]: computes [`LibraryCoverage`]
+//!   statistics for PDF, DOI, and note availability.
+//! - [`ZoteroClient::synthesize_annotations`]: renders item annotations and
+//!   notes as Markdown.
 
 use serde::{Deserialize, Serialize};
 
