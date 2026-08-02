@@ -1,14 +1,23 @@
 {
   "mcpServers": {
     "adrs": {
-      "command": "adrs",
       "args": [
         "mcp",
         "serve"
       ],
+      "command": "adrs",
       "cwd": "/Users/jack/Documents/41_personal/traces-pkm/",
       "env": {
         "ADR_DIRECTORY": "docs/adr/"
+      }
+    },
+    "mise": {
+      "args": [
+        "mcp"
+      ],
+      "command": "/opt/homebrew/bin/mise",
+      "env": {
+        "MISE_EXPERIMENTAL": "1"
       }
     },
     "rust-docs": {
