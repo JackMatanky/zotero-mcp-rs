@@ -72,198 +72,6 @@ pub(crate) struct SearchCondition {
     pub(crate) value: String,
 }
 
-/// Search condition prepared once for client-side scans.
-struct PreparedCondition<'a> {
-    field: &'a SearchField,
-    operator: &'a SearchOperator,
-    value: &'a str,
-    value_lc: String,
-}
-
-impl<'a> From<&'a SearchCondition> for PreparedCondition<'a> {
-    fn from(cond: &'a SearchCondition) -> Self {
-        Self {
-            field: &cond.field,
-            operator: &cond.operator,
-            value: cond.value.as_str(),
-            value_lc: cond.value.to_lowercase(),
-        }
-    }
-}
-
-impl PreparedCondition<'_> {
-    fn matches_str(&self, s: &str) -> bool {
-        match self.operator {
-            SearchOperator::Is => s.to_lowercase() == self.value_lc,
-            SearchOperator::IsNot => s.to_lowercase() != self.value_lc,
-            SearchOperator::StartsWith => {
-                s.to_lowercase().starts_with(&self.value_lc)
-            }
-            SearchOperator::EndsWith => {
-                s.to_lowercase().ends_with(&self.value_lc)
-            }
-            SearchOperator::DoesNotContain => {
-                !s.to_lowercase().contains(&self.value_lc)
-            }
-            SearchOperator::Contains | SearchOperator::Other(_) => {
-                s.to_lowercase().contains(&self.value_lc)
-            }
-            SearchOperator::IsGreaterThan | SearchOperator::IsAfter => {
-                compare_dates(s, self.value).is_gt()
-            }
-            SearchOperator::IsLessThan | SearchOperator::IsBefore => {
-                compare_dates(s, self.value).is_lt()
-            }
-        }
-    }
-
-    fn matches_item(&self, item: &ZoteroItem) -> bool {
-        match self.field {
-            SearchField::Title => {
-                item.data.title.as_deref().is_some_and(|s| self.matches_str(s))
-            }
-            SearchField::Creator => item.data.creators.iter().any(|c| {
-                c.name.as_deref().is_some_and(|s| self.matches_str(s))
-                    || c.first_name
-                        .as_deref()
-                        .is_some_and(|s| self.matches_str(s))
-                    || c.last_name
-                        .as_deref()
-                        .is_some_and(|s| self.matches_str(s))
-                    || matches_creator_full_name(c, self)
-            }),
-            SearchField::Date => {
-                item.data.date.as_deref().is_some_and(|s| self.matches_str(s))
-            }
-            SearchField::Year => item.data.date.as_deref().is_some_and(|d| {
-                self.matches_str(d.split('-').next().unwrap_or(d))
-            }),
-            SearchField::ItemType => {
-                self.matches_str(item.data.item_type.as_str())
-            }
-            SearchField::Tag => {
-                item.data.tags.iter().any(|t| self.matches_str(t.tag.as_str()))
-            }
-            SearchField::Extra => {
-                item.data.extra.as_deref().is_some_and(|s| self.matches_str(s))
-            }
-            SearchField::Doi => {
-                item.data.doi.as_deref().is_some_and(|s| self.matches_str(s))
-            }
-            SearchField::Other(field_name) => match field_name.as_str() {
-                "title" => item
-                    .data
-                    .title
-                    .as_deref()
-                    .is_some_and(|s| self.matches_str(s)),
-                "doi" => item
-                    .data
-                    .doi
-                    .as_deref()
-                    .is_some_and(|s| self.matches_str(s)),
-                _ => false,
-            },
-        }
-    }
-}
-
-/// Pagination metadata returned with every search result page.
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
-pub(crate) struct PaginationInfo {
-    pub(crate) limit: usize,
-    pub(crate) offset: usize,
-    pub(crate) total: usize,
-    pub(crate) has_more: bool,
-}
-
-/// A page of search results plus its pagination metadata.
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
-pub(crate) struct SearchPage<T> {
-    pub(crate) items: Vec<T>,
-    pub(crate) pagination: PaginationInfo,
-}
-
-/// Accumulates only the requested page while still counting all matches.
-struct PageAccumulator<T> {
-    offset: usize,
-    limit: usize,
-    total: usize,
-    items: Vec<T>,
-}
-
-impl<T> PageAccumulator<T> {
-    fn new(offset: usize, limit: usize) -> Self {
-        Self {
-            offset,
-            limit,
-            total: 0,
-            items: Vec::with_capacity(limit),
-        }
-    }
-
-    fn push_match(&mut self, item: T) {
-        if self.total >= self.offset && self.items.len() < self.limit {
-            self.items.push(item);
-        }
-        self.total = self.total.saturating_add(1);
-    }
-
-    fn into_page(self) -> SearchPage<T> {
-        let offset = self.offset.min(self.total);
-        let returned = self.items.len();
-        SearchPage {
-            items: self.items,
-            pagination: PaginationInfo {
-                limit: self.limit,
-                offset,
-                total: self.total,
-                has_more: offset.saturating_add(returned) < self.total,
-            },
-        }
-    }
-}
-
-/// Returns a `{items, pagination}` page slicing `results` at `offset`/`limit`.
-fn paginate<T>(results: Vec<T>, offset: usize, limit: usize) -> SearchPage<T> {
-    let total = results.len();
-    let skip = offset.min(total);
-    let items: Vec<T> = results.into_iter().skip(skip).take(limit).collect();
-    SearchPage {
-        items,
-        pagination: PaginationInfo {
-            limit,
-            offset: skip,
-            total,
-            has_more: skip.saturating_add(limit) < total,
-        },
-    }
-}
-
-/// Wraps a server-fetched page, falling back to `offset + items.len()` when
-/// the server reports no total.
-fn finish_page(
-    items: Vec<ZoteroItem>,
-    server_total: Option<usize>,
-    offset: usize,
-    limit: usize,
-) -> SearchPage<ZoteroItem> {
-    let returned = items.len();
-    let total = server_total.unwrap_or_else(|| offset.saturating_add(returned));
-    let has_more = server_total.map_or(returned == limit, |exact| {
-        offset.saturating_add(returned) < exact
-    });
-
-    SearchPage {
-        items,
-        pagination: PaginationInfo {
-            limit,
-            offset,
-            total,
-            has_more,
-        },
-    }
-}
-
 /// How multiple conditions are combined: `all` (AND, default) or `any` (OR).
 #[derive(
     Copy,
@@ -313,6 +121,22 @@ pub(crate) enum SortDirection {
     #[default]
     Asc,
     Desc,
+}
+
+/// Pagination metadata returned with every search result page.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub(crate) struct PaginationInfo {
+    pub(crate) limit: usize,
+    pub(crate) offset: usize,
+    pub(crate) total: usize,
+    pub(crate) has_more: bool,
+}
+
+/// A page of search results plus its pagination metadata.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub(crate) struct SearchPage<T> {
+    pub(crate) items: Vec<T>,
+    pub(crate) pagination: PaginationInfo,
 }
 
 impl ZoteroClient<'_> {
@@ -562,6 +386,182 @@ impl ZoteroClient<'_> {
         url.push('?');
         url.push_str(&params.join("&"));
         Some(url)
+    }
+}
+
+/// Search condition prepared once for client-side scans.
+struct PreparedCondition<'a> {
+    field: &'a SearchField,
+    operator: &'a SearchOperator,
+    value: &'a str,
+    value_lc: String,
+}
+
+impl<'a> From<&'a SearchCondition> for PreparedCondition<'a> {
+    fn from(cond: &'a SearchCondition) -> Self {
+        Self {
+            field: &cond.field,
+            operator: &cond.operator,
+            value: cond.value.as_str(),
+            value_lc: cond.value.to_lowercase(),
+        }
+    }
+}
+
+impl PreparedCondition<'_> {
+    fn matches_str(&self, s: &str) -> bool {
+        match self.operator {
+            SearchOperator::Is => s.to_lowercase() == self.value_lc,
+            SearchOperator::IsNot => s.to_lowercase() != self.value_lc,
+            SearchOperator::StartsWith => {
+                s.to_lowercase().starts_with(&self.value_lc)
+            }
+            SearchOperator::EndsWith => {
+                s.to_lowercase().ends_with(&self.value_lc)
+            }
+            SearchOperator::DoesNotContain => {
+                !s.to_lowercase().contains(&self.value_lc)
+            }
+            SearchOperator::Contains | SearchOperator::Other(_) => {
+                s.to_lowercase().contains(&self.value_lc)
+            }
+            SearchOperator::IsGreaterThan | SearchOperator::IsAfter => {
+                compare_dates(s, self.value).is_gt()
+            }
+            SearchOperator::IsLessThan | SearchOperator::IsBefore => {
+                compare_dates(s, self.value).is_lt()
+            }
+        }
+    }
+
+    fn matches_item(&self, item: &ZoteroItem) -> bool {
+        match self.field {
+            SearchField::Title => {
+                item.data.title.as_deref().is_some_and(|s| self.matches_str(s))
+            }
+            SearchField::Creator => item.data.creators.iter().any(|c| {
+                c.name.as_deref().is_some_and(|s| self.matches_str(s))
+                    || c.first_name
+                        .as_deref()
+                        .is_some_and(|s| self.matches_str(s))
+                    || c.last_name
+                        .as_deref()
+                        .is_some_and(|s| self.matches_str(s))
+                    || matches_creator_full_name(c, self)
+            }),
+            SearchField::Date => {
+                item.data.date.as_deref().is_some_and(|s| self.matches_str(s))
+            }
+            SearchField::Year => item.data.date.as_deref().is_some_and(|d| {
+                self.matches_str(d.split('-').next().unwrap_or(d))
+            }),
+            SearchField::ItemType => {
+                self.matches_str(item.data.item_type.as_str())
+            }
+            SearchField::Tag => {
+                item.data.tags.iter().any(|t| self.matches_str(t.tag.as_str()))
+            }
+            SearchField::Extra => {
+                item.data.extra.as_deref().is_some_and(|s| self.matches_str(s))
+            }
+            SearchField::Doi => {
+                item.data.doi.as_deref().is_some_and(|s| self.matches_str(s))
+            }
+            SearchField::Other(field_name) => match field_name.as_str() {
+                "title" => item
+                    .data
+                    .title
+                    .as_deref()
+                    .is_some_and(|s| self.matches_str(s)),
+                "doi" => item
+                    .data
+                    .doi
+                    .as_deref()
+                    .is_some_and(|s| self.matches_str(s)),
+                _ => false,
+            },
+        }
+    }
+}
+
+/// Accumulates only the requested page while still counting all matches.
+struct PageAccumulator<T> {
+    offset: usize,
+    limit: usize,
+    total: usize,
+    items: Vec<T>,
+}
+
+impl<T> PageAccumulator<T> {
+    fn new(offset: usize, limit: usize) -> Self {
+        Self {
+            offset,
+            limit,
+            total: 0,
+            items: Vec::with_capacity(limit),
+        }
+    }
+
+    fn push_match(&mut self, item: T) {
+        if self.total >= self.offset && self.items.len() < self.limit {
+            self.items.push(item);
+        }
+        self.total = self.total.saturating_add(1);
+    }
+
+    fn into_page(self) -> SearchPage<T> {
+        let offset = self.offset.min(self.total);
+        let returned = self.items.len();
+        SearchPage {
+            items: self.items,
+            pagination: PaginationInfo {
+                limit: self.limit,
+                offset,
+                total: self.total,
+                has_more: offset.saturating_add(returned) < self.total,
+            },
+        }
+    }
+}
+
+/// Returns a `{items, pagination}` page slicing `results` at `offset`/`limit`.
+fn paginate<T>(results: Vec<T>, offset: usize, limit: usize) -> SearchPage<T> {
+    let total = results.len();
+    let skip = offset.min(total);
+    let items: Vec<T> = results.into_iter().skip(skip).take(limit).collect();
+    SearchPage {
+        items,
+        pagination: PaginationInfo {
+            limit,
+            offset: skip,
+            total,
+            has_more: skip.saturating_add(limit) < total,
+        },
+    }
+}
+
+/// Wraps a server-fetched page, falling back to `offset + items.len()` when
+/// the server reports no total.
+fn finish_page(
+    items: Vec<ZoteroItem>,
+    server_total: Option<usize>,
+    offset: usize,
+    limit: usize,
+) -> SearchPage<ZoteroItem> {
+    let returned = items.len();
+    let total = server_total.unwrap_or_else(|| offset.saturating_add(returned));
+    let has_more = server_total.map_or(returned == limit, |exact| {
+        offset.saturating_add(returned) < exact
+    });
+
+    SearchPage {
+        items,
+        pagination: PaginationInfo {
+            limit,
+            offset,
+            total,
+            has_more,
+        },
     }
 }
 

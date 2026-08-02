@@ -33,6 +33,57 @@ pub(crate) struct LocalZoteroDb {
     pool: SqlitePool,
 }
 
+/// Kind of a local search hit.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Deserialize,
+    Serialize,
+    schemars::JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum HitKind {
+    /// A note child of a parent item.
+    Note,
+    /// A PDF annotation.
+    Annotation,
+}
+
+/// A single full-text search hit.
+#[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
+pub(crate) struct FulltextHit {
+    pub(crate) key: ItemKey,
+    pub(crate) item_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) doi: Option<String>,
+    pub(crate) creators: String,
+    pub(crate) snippet: String,
+}
+
+/// A single note or annotation search hit.
+#[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
+pub(crate) struct NoteAnnotationHit {
+    pub(crate) kind: HitKind,
+    pub(crate) key: ItemKey,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) comment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) parent_key: Option<ItemKey>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) parent_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) page_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) color: Option<String>,
+}
+
 impl LocalZoteroDb {
     /// Opens `path` read-only with `immutable=1` semantics (mirrors the
     /// digest's `_get_connection`). Fails with [`ZoteroMcpError::Sqlite`] if
@@ -332,57 +383,6 @@ impl LocalZoteroDb {
         hits.truncate(limit);
         Ok(hits)
     }
-}
-
-/// Kind of a local search hit.
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    Eq,
-    PartialEq,
-    Deserialize,
-    Serialize,
-    schemars::JsonSchema,
-)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum HitKind {
-    /// A note child of a parent item.
-    Note,
-    /// A PDF annotation.
-    Annotation,
-}
-
-/// A single full-text search hit.
-#[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
-pub(crate) struct FulltextHit {
-    pub(crate) key: ItemKey,
-    pub(crate) item_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) doi: Option<String>,
-    pub(crate) creators: String,
-    pub(crate) snippet: String,
-}
-
-/// A single note or annotation search hit.
-#[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
-pub(crate) struct NoteAnnotationHit {
-    pub(crate) kind: HitKind,
-    pub(crate) key: ItemKey,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) text: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) comment: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) parent_key: Option<ItemKey>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) parent_title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) page_label: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) color: Option<String>,
 }
 
 /// Locates `zotero.sqlite` via `ZOTERO_DB_PATH`, the `prefs.js` `dataDir`

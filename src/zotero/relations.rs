@@ -22,6 +22,14 @@ use crate::{
     },
 };
 
+/// A single item linked to another via a `dc:relation` URI.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub(crate) struct RelatedItem {
+    pub(crate) key: ItemKey,
+    pub(crate) title: Option<String>,
+    pub(crate) item_type: ItemType,
+}
+
 impl ZoteroClient<'_> {
     /// Fetches the items linked to `item_key` via `dc:relation`.
     ///
@@ -166,14 +174,6 @@ impl ZoteroClient<'_> {
         .await?;
         Ok(())
     }
-}
-
-/// A single item linked to another via a `dc:relation` URI.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct RelatedItem {
-    pub(crate) key: ItemKey,
-    pub(crate) title: Option<String>,
-    pub(crate) item_type: ItemType,
 }
 
 /// Reads the `dc:relation` URI values from an item's `relations` map,
