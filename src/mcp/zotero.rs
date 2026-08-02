@@ -2602,7 +2602,7 @@ mod tests {
             .unwrap();
             sqlx::query(
                 "CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, \
-                 firstName TEXT, lastName TEXT, name TEXT)",
+                 firstName TEXT, lastName TEXT, fieldMode INT)",
             )
             .execute(&pool)
             .await
@@ -2618,8 +2618,15 @@ mod tests {
                 .await
                 .unwrap();
             sqlx::query(
-                "CREATE TABLE fulltextItems (itemID INTEGER, content TEXT, \
-                 indexedChars INTEGER, totalChars INTEGER, version INTEGER)",
+                "CREATE TABLE fulltextWords (wordID INTEGER PRIMARY KEY, word \
+                 TEXT UNIQUE)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "CREATE TABLE fulltextItemWords (wordID INT, itemID INT, \
+                 PRIMARY KEY (wordID, itemID))",
             )
             .execute(&pool)
             .await
@@ -2683,8 +2690,16 @@ mod tests {
             .await
             .unwrap();
             sqlx::query(
-                "INSERT INTO fulltextItems (itemID, content) VALUES (1, 'The \
-                 borrow checker ensures memory safety.')",
+                "INSERT INTO fulltextWords (wordID, word) VALUES (1, 'the'), \
+                 (2, 'borrow'), (3, 'checker'), (4, 'ensures'), (5, \
+                 'memory'), (6, 'safety')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO fulltextItemWords (wordID, itemID) VALUES (1, \
+                 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1)",
             )
             .execute(&pool)
             .await

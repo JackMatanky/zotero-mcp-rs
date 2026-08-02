@@ -4,7 +4,7 @@
 //! `docs/54yyyu-zotero-mcp-digest.txt` (lines 6712-7779): locate the
 //! database via `ZOTERO_DB_PATH`, the `prefs.js` `dataDir` preference, or the
 //! per-user default; open it immutable/read-only so a running Zotero does not
-//! block reads; and query the `itemData`/`fulltextItems`/`itemNotes`/
+//! block reads; and query the `itemData`/`fulltextWords`/`itemNotes`/
 //! `itemAnnotations` tables directly.
 //!
 //! Every method is gated at the MCP tool layer by
@@ -13,6 +13,7 @@
 //! [`AppState`]: crate::state::AppState
 
 use std::{
+    collections::HashSet,
     env,
     path::{Path, PathBuf},
     str::FromStr,
@@ -84,18 +85,25 @@ impl LocalZoteroDb {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalDb`] if a query or row read fails
+    #[expect(
+        clippy::too_many_lines,
+        reason = "SQL spans are long; mirrors digest query shape"
+    )]
     pub(crate) async fn search_fulltext(
         &self,
         query: &str,
         limit: usize,
     ) -> Result<Vec<FulltextHit>, ZoteroMcpError> {
+        let query_lc = query.to_lowercase();
+        let query_tokens: Vec<String> =
+            query_lc.split_whitespace().map(str::to_owned).collect();
         let rows = sqlx::query(
             r"
             SELECT i.key, it.typeName AS item_type,
                    title.value AS title, doi.value AS doi,
                    extra.value AS extra,
                    creators.creators AS creators,
-                   ft.content AS fulltext
+                   words.words AS words
             FROM items i
             JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
             LEFT JOIN itemData title_data
@@ -115,17 +123,24 @@ impl LocalZoteroDb {
                 ON extra.valueID = extra_data.valueID
             LEFT JOIN (
                 SELECT ic.itemID, GROUP_CONCAT(
-                    COALESCE(
-                        c.name,
-                        c.lastName || ' ' || c.firstName
-                    ),
-                    '; '
+                    CASE
+                        WHEN c.firstName IS NOT NULL AND c.lastName IS NOT NULL
+                        THEN c.lastName || ', ' || c.firstName
+                        WHEN c.lastName IS NOT NULL
+                        THEN c.lastName
+                        ELSE NULL
+                    END, '; '
                 ) AS creators
                 FROM itemCreators ic
                 JOIN creators c ON c.creatorID = ic.creatorID
                 GROUP BY ic.itemID
             ) creators ON creators.itemID = i.itemID
-            LEFT JOIN fulltextItems ft ON ft.itemID = i.itemID
+            LEFT JOIN (
+                SELECT fiw.itemID, GROUP_CONCAT(fw.word, ' ') AS words
+                FROM fulltextItemWords fiw
+                JOIN fulltextWords fw ON fw.wordID = fiw.wordID
+                GROUP BY fiw.itemID
+            ) words ON words.itemID = i.itemID
             WHERE it.typeName NOT IN ('attachment', 'note', 'annotation')
               AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
             ",
@@ -134,7 +149,6 @@ impl LocalZoteroDb {
         .await
         .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
 
-        let query_lc = query.to_lowercase();
         let mut hits = Vec::new();
         for row in rows {
             if hits.len() >= FULLTEXT_SCAN_CAP {
@@ -152,19 +166,25 @@ impl LocalZoteroDb {
             let creators: Option<String> = row
                 .try_get("creators")
                 .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
-            let fulltext: Option<String> = row
-                .try_get("fulltext")
+            let words: Option<String> = row
+                .try_get("words")
                 .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
 
             let haystack = format!(
-                "{} {} {} {} {}",
+                "{} {} {} {}",
                 title.as_deref().unwrap_or(""),
                 creators.as_deref().unwrap_or(""),
                 doi.as_deref().unwrap_or(""),
-                extra.as_deref().unwrap_or(""),
-                fulltext.as_deref().unwrap_or("")
+                extra.as_deref().unwrap_or("")
             );
-            if !haystack.to_lowercase().contains(&query_lc) {
+            let metadata_match = haystack.to_lowercase().contains(&query_lc);
+            let word_set: HashSet<&str> = words
+                .as_deref()
+                .map(|w| w.split_whitespace().collect())
+                .unwrap_or_default();
+            let fulltext_match = !query_tokens.is_empty()
+                && query_tokens.iter().all(|t| word_set.contains(t.as_str()));
+            if !metadata_match && !fulltext_match {
                 continue;
             }
             let key: String = row
@@ -179,9 +199,9 @@ impl LocalZoteroDb {
                 title,
                 doi,
                 creators: creators.unwrap_or_default(),
-                snippet: fulltext
+                snippet: words
                     .as_deref()
-                    .map(|f| f.chars().take(400).collect())
+                    .map(|w| w.chars().take(400).collect())
                     .unwrap_or_default(),
             });
             if hits.len() >= limit {
@@ -495,7 +515,7 @@ mod tests {
         .unwrap();
         sqlx::query(
             "CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, firstName \
-             TEXT, lastName TEXT, name TEXT)",
+             TEXT, lastName TEXT, fieldMode INT)",
         )
         .execute(&pool)
         .await
@@ -511,8 +531,15 @@ mod tests {
             .await
             .unwrap();
         sqlx::query(
-            "CREATE TABLE fulltextItems (itemID INTEGER, content TEXT, \
-             indexedChars INTEGER, totalChars INTEGER, version INTEGER)",
+            "CREATE TABLE fulltextWords (wordID INTEGER PRIMARY KEY, word \
+             TEXT UNIQUE)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE fulltextItemWords (wordID INT, itemID INT, PRIMARY \
+             KEY (wordID, itemID))",
         )
         .execute(&pool)
         .await
@@ -579,15 +606,23 @@ mod tests {
         .await
         .unwrap();
         sqlx::query(
-            "INSERT INTO fulltextItems (itemID, content) VALUES (1, 'The \
-             borrow checker ensures memory safety.')",
+            "INSERT INTO fulltextWords (wordID, word) VALUES (1, 'the'), (2, \
+             'borrow'), (3, 'checker'), (4, 'ensures'), (5, 'memory'), (6, \
+             'safety')",
         )
         .execute(&pool)
         .await
         .unwrap();
         sqlx::query(
-            "INSERT INTO creators (creatorID, firstName, lastName, name) \
-             VALUES (1, 'Jon', 'Gjengset', NULL)",
+            "INSERT INTO fulltextItemWords (wordID, itemID) VALUES (1, 1), \
+             (2, 1), (3, 1), (4, 1), (5, 1), (6, 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO creators (creatorID, firstName, lastName, fieldMode) \
+             VALUES (1, 'Jon', 'Gjengset', 0)",
         )
         .execute(&pool)
         .await
