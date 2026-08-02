@@ -87,7 +87,7 @@ pub(crate) enum CapabilityDomain {
     Collections,
     Search,
     Notes,
-    Local,
+    Sqlite,
     Prompts,
 }
 
@@ -200,14 +200,14 @@ static CAPABILITIES: &[CapabilityInfo] = &[
                       create annotation zotero_write_enabled",
     },
     CapabilityInfo {
-        name: "zotero_local_search",
+        name: "zotero_sqlite_search",
         kind: CapabilityKind::Tool,
-        domain: CapabilityDomain::Local,
+        domain: CapabilityDomain::Sqlite,
         requires: &[CapabilityGate::SqliteAccess],
         summary: "Grouped local SQLite search actions: fulltext, \
                   notes_annotations",
         example: Some(r#"{"action":"fulltext","query":"borrow checker"}"#),
-        search_text: "zotero_local_search local grouped local sqlite search \
+        search_text: "zotero_sqlite_search sqlite grouped local sqlite search \
                       actions fulltext notes_annotations zotero_sqlite_access",
     },
     CapabilityInfo {
@@ -224,10 +224,10 @@ static CAPABILITIES: &[CapabilityInfo] = &[
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ToolVisibility {
-    CompactBase,
+    CompactUngated,
     CompactSqlite,
     CompactWrite,
-    LegacyRead,
+    LegacyUngated,
     LegacySqlite,
     LegacyWrite,
 }
@@ -235,18 +235,20 @@ enum ToolVisibility {
 impl ToolVisibility {
     fn is_compact_visible(self, state: &AppState) -> bool {
         match self {
-            Self::CompactBase => true,
+            Self::CompactUngated => true,
             Self::CompactSqlite => state.sqlite_access,
             Self::CompactWrite => state.write_enabled,
-            Self::LegacyRead | Self::LegacySqlite | Self::LegacyWrite => false,
+            Self::LegacyUngated | Self::LegacySqlite | Self::LegacyWrite => {
+                false
+            }
         }
     }
 
-    fn is_filtered_visible(self, state: &AppState) -> bool {
+    fn is_gated_visible(self, state: &AppState) -> bool {
         match self {
             Self::CompactSqlite | Self::LegacySqlite => state.sqlite_access,
             Self::CompactWrite | Self::LegacyWrite => state.write_enabled,
-            Self::CompactBase | Self::LegacyRead => true,
+            Self::CompactUngated | Self::LegacyUngated => true,
         }
     }
 }
@@ -257,9 +259,9 @@ fn tool_visibility(name: &str) -> ToolVisibility {
         | "zotero_pdf" | "zotero_notes" | "zotero_collections"
         | "zotero_items" | "zotero_tags" | "zotero_relations"
         | "better_bibtex" | "better_notes" | "search" | "fetch" => {
-            ToolVisibility::CompactBase
+            ToolVisibility::CompactUngated
         }
-        "zotero_local_search" => ToolVisibility::CompactSqlite,
+        "zotero_sqlite_search" => ToolVisibility::CompactSqlite,
         "zotero_notes_write"
         | "zotero_collections_write"
         | "zotero_items_write"
@@ -287,7 +289,7 @@ fn tool_visibility(name: &str) -> ToolVisibility {
         | "zotero_delete_tags"
         | "better_bibtex_regenerate_citekeys"
         | "better_bibtex_autoexport_add" => ToolVisibility::LegacyWrite,
-        _ => ToolVisibility::LegacyRead,
+        _ => ToolVisibility::LegacyUngated,
     }
 }
 
@@ -304,7 +306,7 @@ pub(crate) enum ZoteroSearchCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
-pub(crate) enum ZoteroLocalSearchCommand {
+pub(crate) enum ZoteroSqliteSearchCommand {
     Fulltext(FulltextSearchArgs),
     NotesAnnotations(SearchNotesAnnotationsArgs),
 }
@@ -446,13 +448,13 @@ impl ZoteroMcpServer {
     fn is_visible_tool(state: &AppState, name: &str) -> bool {
         match state.tool_mode {
             ToolExposureMode::All => true,
-            ToolExposureMode::Filtered => Self::is_filtered_tool(state, name),
+            ToolExposureMode::Gated => Self::is_gated_tool(state, name),
             ToolExposureMode::Compact => Self::is_compact_tool(state, name),
         }
     }
 
-    fn is_filtered_tool(state: &AppState, name: &str) -> bool {
-        tool_visibility(name).is_filtered_visible(state)
+    fn is_gated_tool(state: &AppState, name: &str) -> bool {
+        tool_visibility(name).is_gated_visible(state)
     }
 
     fn is_compact_tool(state: &AppState, name: &str) -> bool {
@@ -509,7 +511,9 @@ impl ZoteroMcpServer {
 impl ServerHandler for ZoteroMcpServer {
     fn get_info(&self) -> InitializeResult {
         InitializeResult {
-            protocol_version: ProtocolVersion::V_2024_11_05,
+            // 2025-06-18 is the first revision defining `title` on tools,
+            // resources, and prompts, and `_meta` on resource contents.
+            protocol_version: ProtocolVersion::V_2025_06_18,
             capabilities: ServerCapabilities::builder()
                 .enable_tools()
                 .enable_resources()
@@ -517,8 +521,8 @@ impl ServerHandler for ZoteroMcpServer {
                 .build(),
             server_info: Implementation {
                 name: "zotero-mcp-rs".to_owned(),
-                version: "0.1.0".to_owned(),
-                title: None,
+                version: env!("CARGO_PKG_VERSION").to_owned(),
+                title: Some("Zotero".to_owned()),
                 icons: None,
                 website_url: None,
             },
@@ -611,7 +615,12 @@ impl ZoteroMcpServer {
         name = "zotero_discover",
         description = "Discover Zotero tools, resource templates, prompts, \
                        required env flags, and examples without loading every \
-                       detailed tool schema"
+                       detailed tool schema",
+        annotations(
+            title = "Discover Zotero Capabilities",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -626,7 +635,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_search",
         description = "Grouped Zotero search router. action: items, tag, \
-                       citation_key, advanced, duplicates, coverage"
+                       citation_key, advanced, duplicates, coverage",
+        annotations(
+            title = "Search Zotero Library",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -658,22 +672,27 @@ impl ZoteroMcpServer {
     }
 
     #[tool(
-        name = "zotero_local_search",
+        name = "zotero_sqlite_search",
         description = "Grouped local SQLite search router. action: fulltext, \
-                       notes_annotations"
+                       notes_annotations",
+        annotations(
+            title = "Search Zotero SQLite Database",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
-    pub(crate) async fn zotero_local_search(
+    pub(crate) async fn zotero_sqlite_search(
         &self,
-        Parameters(args): Parameters<ZoteroLocalSearchCommand>,
+        Parameters(args): Parameters<ZoteroSqliteSearchCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         match args {
-            ZoteroLocalSearchCommand::Fulltext(args) => {
+            ZoteroSqliteSearchCommand::Fulltext(args) => {
                 self.zotero_fulltext_search_impl(args).await
             }
-            ZoteroLocalSearchCommand::NotesAnnotations(args) => {
+            ZoteroSqliteSearchCommand::NotesAnnotations(args) => {
                 self.zotero_search_notes_annotations_impl(args).await
             }
         }
@@ -682,7 +701,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_pdf",
         description = "Grouped Zotero PDF router. action: path, read_pages, \
-                       outline"
+                       outline",
+        annotations(
+            title = "Read Zotero PDFs",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -707,7 +731,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_notes",
         description = "Grouped Zotero notes read router. action: list, \
-                       synthesize"
+                       synthesize",
+        annotations(
+            title = "Read Zotero Notes",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -729,7 +758,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_notes_write",
         description = "Grouped Zotero notes write router. action: create, \
-                       annotation"
+                       annotation",
+        annotations(
+            title = "Write Zotero Notes",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -751,7 +787,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_collections",
         description = "Grouped Zotero collection read router. action: items, \
-                       search, unfiled"
+                       search, unfiled",
+        annotations(
+            title = "Read Zotero Collections",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -776,7 +817,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_collections_write",
         description = "Grouped Zotero collection write router. action: \
-                       create, manage, update, delete"
+                       create, manage, update, delete",
+        annotations(
+            title = "Write Zotero Collections",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -804,7 +852,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_items",
         description = "Grouped Zotero item read router. action: recent, get, \
-                       metadata, children, fulltext"
+                       metadata, children, fulltext",
+        annotations(
+            title = "Read Zotero Items",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -835,7 +888,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_items_write",
         description = "Grouped Zotero item write router. action: update, \
-                       delete, trash, restore, add_by_identifier, attach_file"
+                       delete, trash, restore, add_by_identifier, attach_file",
+        annotations(
+            title = "Write Zotero Items",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = true
+        )
     )]
     /// # Errors
     ///
@@ -868,7 +928,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_tags",
-        description = "Grouped Zotero tag read router. action: list, search"
+        description = "Grouped Zotero tag read router. action: list, search",
+        annotations(
+            title = "Read Zotero Tags",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -890,7 +955,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_tags_write",
         description = "Grouped Zotero tag write router. action: batch_update, \
-                       rename, delete"
+                       rename, delete",
+        annotations(
+            title = "Write Zotero Tags",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -914,7 +986,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_relations",
-        description = "Grouped Zotero relation read router. action: get"
+        description = "Grouped Zotero relation read router. action: get",
+        annotations(
+            title = "Read Zotero Item Relations",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -933,7 +1010,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_relations_write",
         description = "Grouped Zotero relation write router. action: add, \
-                       remove"
+                       remove",
+        annotations(
+            title = "Write Zotero Item Relations",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -956,7 +1040,14 @@ impl ZoteroMcpServer {
         name = "better_bibtex",
         description = "Grouped Better BibTeX router. action: citekeys, \
                        regenerate, export, bibliography, scan_aux, \
-                       pandoc_filter, autoexport_add, search"
+                       pandoc_filter, autoexport_add, search",
+        annotations(
+            title = "Better BibTeX",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -996,7 +1087,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "better_notes",
         description = "Grouped Better Notes router. action: export, \
-                       from_markdown, run_template, relations, tree"
+                       from_markdown, run_template, relations, tree",
+        annotations(
+            title = "Better Notes",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1027,7 +1125,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_status",
         description = "Check Zotero Local API availability, version, and \
-                       connectivity"
+                       connectivity",
+        annotations(
+            title = "Check Zotero Connection",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1044,7 +1147,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_recent",
-        description = "Fetch recently modified library items (notes excluded)"
+        description = "Fetch recently modified library items (notes excluded)",
+        annotations(
+            title = "Recently Modified Items",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1059,7 +1167,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_search_items",
-        description = "Search items by title, creator, year, or fulltext query"
+        description = "Search items by title, creator, year, or fulltext query",
+        annotations(
+            title = "Search Items",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1074,7 +1187,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_item",
-        description = "Fetch a single Zotero item by its key"
+        description = "Fetch a single Zotero item by its key",
+        annotations(
+            title = "Get Item",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1090,7 +1208,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_get_item_metadata",
         description = "Get metadata for an item as JSON or formatted BibTeX \
-                       string"
+                       string",
+        annotations(
+            title = "Get Item Metadata",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1105,7 +1228,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_collection_items",
-        description = "Fetch items inside a specific Zotero collection"
+        description = "Fetch items inside a specific Zotero collection",
+        annotations(
+            title = "Get Collection Items",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1121,7 +1249,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_get_item_children",
         description = "Get child items (notes, attachments) for a given item \
-                       key"
+                       key",
+        annotations(
+            title = "Get Item Children",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1136,7 +1269,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_item_fulltext",
-        description = "Get Zotero's indexed fulltext for an item"
+        description = "Get Zotero's indexed fulltext for an item",
+        annotations(
+            title = "Get Item Full Text",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1152,7 +1290,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_get_pdf_path",
         description = "Locate the local PDF file path for an item or its \
-                       attachment"
+                       attachment",
+        annotations(
+            title = "Locate Item PDF",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1167,7 +1310,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_read_pdf_pages",
-        description = "Extract raw text from specific 1-based pages of a PDF"
+        description = "Extract raw text from specific 1-based pages of a PDF",
+        annotations(
+            title = "Read PDF Pages",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1183,7 +1331,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_get_pdf_outline",
         description = "Extract the PDF outline (table of contents/bookmarks) \
-                       for an item's PDF attachment or a direct PDF path"
+                       for an item's PDF attachment or a direct PDF path",
+        annotations(
+            title = "Get PDF Outline",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1198,7 +1351,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_notes",
-        description = "Fetch all note child items for a given item key"
+        description = "Fetch all note child items for a given item key",
+        annotations(
+            title = "Get Item Notes",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1216,7 +1374,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_create_note",
         description = "Attach a new note to an item (requires write \
-                       permission)"
+                       permission)",
+        annotations(
+            title = "Create Note",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1232,7 +1397,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_create_collection",
         description = "Create a new Zotero collection (requires write \
-                       permission)"
+                       permission)",
+        annotations(
+            title = "Create Collection",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1247,7 +1419,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_search_collections",
-        description = "Search collections by collection name query"
+        description = "Search collections by collection name query",
+        annotations(
+            title = "Search Collections",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1263,7 +1440,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_manage_collections",
         description = "Add or remove items to/from a collection (requires \
-                       write permission)"
+                       write permission)",
+        annotations(
+            title = "Add or Remove Collection Items",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1279,7 +1463,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_update_item",
         description = "Update fields of an existing item using PATCH \
-                       (requires write permission)"
+                       (requires write permission)",
+        annotations(
+            title = "Update Item",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1295,7 +1486,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_attach_file",
         description = "Attach a file link to a parent item (requires write \
-                       permission)"
+                       permission)",
+        annotations(
+            title = "Attach File to Item",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1311,7 +1509,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_batch_update_tags",
         description = "Batch add/remove tags across items (requires write \
-                       permission)"
+                       permission)",
+        annotations(
+            title = "Batch Update Item Tags",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1327,7 +1532,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_get_related_items",
         description = "Get items related to an item via Zotero's dc:relation \
-                       links"
+                       links",
+        annotations(
+            title = "Get Related Items",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1343,7 +1553,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_add_item_relation",
         description = "Link two items as related (bidirectional, dc:relation) \
-                       (requires write permission)"
+                       (requires write permission)",
+        annotations(
+            title = "Add Item Relation",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1359,7 +1576,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_remove_item_relation",
         description = "Remove the relation between two items (bidirectional, \
-                       dc:relation) (requires write permission)"
+                       dc:relation) (requires write permission)",
+        annotations(
+            title = "Remove Item Relation",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1375,7 +1599,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_delete_item",
         description = "Permanently delete an item (article, note, annotation, \
-                       or attachment) (requires write permission)"
+                       or attachment) (requires write permission)",
+        annotations(
+            title = "Delete Item Permanently",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1391,7 +1622,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_trash_item",
         description = "Move an item to trash, reversible (requires write \
-                       permission)"
+                       permission)",
+        annotations(
+            title = "Move Item to Trash",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1406,7 +1644,14 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_restore_item",
-        description = "Restore an item from trash (requires write permission)"
+        description = "Restore an item from trash (requires write permission)",
+        annotations(
+            title = "Restore Item from Trash",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1422,7 +1667,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_delete_collection",
         description = "Permanently delete a collection; items inside are not \
-                       deleted (requires write permission)"
+                       deleted (requires write permission)",
+        annotations(
+            title = "Delete Collection",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1438,7 +1690,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_find_duplicates",
         description = "Finds potential duplicate items in library or \
-                       collection by matching title or DOI"
+                       collection by matching title or DOI",
+        annotations(
+            title = "Find Duplicate Items",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1453,7 +1710,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_search_by_tag",
-        description = "Search Zotero items by tag string"
+        description = "Search Zotero items by tag string",
+        annotations(
+            title = "Search Items by Tag",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1468,7 +1730,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_search_by_citation_key",
-        description = "Search Zotero items by citation key string"
+        description = "Search Zotero items by citation key string",
+        annotations(
+            title = "Search Items by Citation Key",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1484,7 +1751,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_advanced_search",
         description = "Advanced multi-condition structured search over item \
-                       fields"
+                       fields",
+        annotations(
+            title = "Advanced Item Search",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1501,7 +1773,12 @@ impl ZoteroMcpServer {
         name = "zotero_fulltext_search",
         description = "Search Zotero's local sqlite database for full-text \
                        matches across titles, creators, and indexed PDF text \
-                       (requires ZOTERO_SQLITE_ACCESS=1)"
+                       (requires ZOTERO_SQLITE_ACCESS=1)",
+        annotations(
+            title = "Full-Text Search (SQLite)",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1517,7 +1794,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_search_notes_annotations",
         description = "Search Zotero's local sqlite database for note and PDF \
-                       annotation text (requires ZOTERO_SQLITE_ACCESS=1)"
+                       annotation text (requires ZOTERO_SQLITE_ACCESS=1)",
+        annotations(
+            title = "Search Notes and Annotations",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1533,7 +1815,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_library_coverage",
         description = "Analyze library or collection statistics for PDF, DOI, \
-                       and note coverage"
+                       and note coverage",
+        annotations(
+            title = "Library Coverage Report",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1548,7 +1835,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_get_unfiled_items",
-        description = "List top-level items not in any collection"
+        description = "List top-level items not in any collection",
+        annotations(
+            title = "List Unfiled Items",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1564,7 +1856,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_synthesize_annotations",
         description = "Extract and synthesize annotations and notes into \
-                       structured Markdown"
+                       structured Markdown",
+        annotations(
+            title = "Synthesize Annotations",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1580,7 +1877,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_create_annotation",
         description = "Create a PDF highlight/underline/note annotation on an \
-                       attachment (requires write permission)"
+                       attachment (requires write permission)",
+        annotations(
+            title = "Create PDF Annotation",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1598,7 +1902,14 @@ impl ZoteroMcpServer {
         description = "Resolve a DOI, arXiv ID, or ISBN via public metadata \
                        APIs and add it to the library (returns the existing \
                        item instead of creating a duplicate if an exact title \
-                       match is already present) (requires write permission)"
+                       match is already present) (requires write permission)",
+        annotations(
+            title = "Add Item by Identifier",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
     )]
     /// # Errors
     ///
@@ -1615,7 +1926,14 @@ impl ZoteroMcpServer {
         name = "zotero_update_collection",
         description = "Rename and/or move a collection (pass an empty string \
                        for parent_key to move to the top level) (requires \
-                       write permission)"
+                       write permission)",
+        annotations(
+            title = "Rename or Move Collection",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1630,7 +1948,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_list_tags",
-        description = "List all tag names in the library"
+        description = "List all tag names in the library",
+        annotations(
+            title = "List Tags",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1646,7 +1969,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_rename_tag",
         description = "Rename a tag across every item in the library that has \
-                       it (requires write permission)"
+                       it (requires write permission)",
+        annotations(
+            title = "Rename Tag",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1662,7 +1992,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_delete_tags",
         description = "Delete up to 50 tags from the entire library (requires \
-                       write permission)"
+                       write permission)",
+        annotations(
+            title = "Delete Tags",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1679,7 +2016,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_get_citekeys",
-        description = "Fetch citation keys for Zotero items via Better BibTeX"
+        description = "Fetch citation keys for Zotero items via Better BibTeX",
+        annotations(
+            title = "Get Citation Keys",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1695,7 +2037,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "better_bibtex_regenerate_citekeys",
         description = "Regenerate Better BibTeX citation keys (requires write \
-                       permission)"
+                       permission)",
+        annotations(
+            title = "Regenerate Citation Keys",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1710,7 +2059,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_export_items",
-        description = "Export citekeys using a Better BibTeX translator"
+        description = "Export citekeys using a Better BibTeX translator",
+        annotations(
+            title = "Export Items (Better BibTeX)",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1725,7 +2079,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_format_bibliography",
-        description = "Format a bibliography for citekeys with Better BibTeX"
+        description = "Format a bibliography for citekeys with Better BibTeX",
+        annotations(
+            title = "Format Bibliography",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1741,7 +2100,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "better_bibtex_scan_aux",
         description = "Extract citekeys from a LaTeX .aux file via Better \
-                       BibTeX"
+                       BibTeX",
+        annotations(
+            title = "Scan LaTeX Aux File",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1756,7 +2122,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_pandoc_filter",
-        description = "Process citekeys through Better BibTeX's Pandoc filter"
+        description = "Process citekeys through Better BibTeX's Pandoc filter",
+        annotations(
+            title = "Pandoc Citation Filter",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1772,7 +2143,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "better_bibtex_autoexport_add",
         description = "Configure Better BibTeX auto-export for a collection \
-                       path (requires write permission)"
+                       path (requires write permission)",
+        annotations(
+            title = "Register Auto-Export",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1787,7 +2165,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_bibtex_search",
-        description = "Search items using Better BibTeX's query engine"
+        description = "Search items using Better BibTeX's query engine",
+        annotations(
+            title = "Search (Better BibTeX)",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1805,7 +2188,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "better_notes_export",
         description = "Export a Zotero note item as Markdown or HTML via \
-                       Better Notes"
+                       Better Notes",
+        annotations(
+            title = "Export Note",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1821,7 +2209,14 @@ impl ZoteroMcpServer {
     #[tool(
         name = "better_notes_from_markdown",
         description = "Convert Markdown to HTML formatted for Zotero notes \
-                       via Better Notes"
+                       via Better Notes",
+        annotations(
+            title = "Create Note from Markdown",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1836,7 +2231,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "better_notes_run_template",
-        description = "Execute a Better Notes template against an item"
+        description = "Execute a Better Notes template against an item",
+        annotations(
+            title = "Run Note Template",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1852,7 +2252,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "better_notes_get_relations",
         description = "Fetch linked items / note network for a note via \
-                       Better Notes"
+                       Better Notes",
+        annotations(
+            title = "Get Note Relations",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1868,7 +2273,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "better_notes_get_tree",
         description = "Fetch the hierarchical note outline/tree for a note \
-                       via Better Notes"
+                       via Better Notes",
+        annotations(
+            title = "Get Note Tree",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1885,7 +2295,12 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "search",
-        description = "Connector search tool - search Zotero items by query"
+        description = "Connector search tool - search Zotero items by query",
+        annotations(
+            title = "Search Zotero",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1901,7 +2316,12 @@ impl ZoteroMcpServer {
     #[tool(
         name = "fetch",
         description = "Connector fetch tool - get Zotero item metadata by \
-                       item ID/key"
+                       item ID/key",
+        annotations(
+            title = "Fetch Zotero Item",
+            read_only_hint = true,
+            open_world_hint = false
+        )
     )]
     /// # Errors
     ///
@@ -1935,10 +2355,26 @@ mod tests {
 
             // Assert
             assert_eq!(info.server_info.name, "zotero-mcp-rs");
-            assert_eq!(info.server_info.version, "0.1.0");
+            assert_eq!(info.server_info.version, env!("CARGO_PKG_VERSION"));
+            assert_eq!(info.server_info.title.as_deref(), Some("Zotero"));
             assert!(info.capabilities.tools.is_some());
             assert!(info.capabilities.resources.is_some());
             assert!(info.capabilities.prompts.is_some());
+        }
+
+        #[test]
+        fn get_info_advertises_title_capable_protocol_revision() {
+            // Arrange
+            let server = ZoteroMcpServer::new(AppState::from_env());
+
+            // Act
+            let info = server.get_info();
+
+            // Assert
+            assert_eq!(
+                info.protocol_version,
+                rmcp::model::ProtocolVersion::V_2025_06_18
+            );
         }
 
         #[test]
@@ -1959,6 +2395,72 @@ mod tests {
 
             // Assert
             assert!(!tools.is_empty());
+        }
+
+        #[test]
+        fn every_tool_declares_behaviour_annotations() {
+            // Act
+            let tools = ZoteroMcpServer::tool_router().list_all();
+
+            // Assert
+            for tool in &tools {
+                assert!(
+                    tool.annotations.is_some(),
+                    "{} is missing annotations",
+                    tool.name
+                );
+                let annotations =
+                    tool.annotations.as_ref().expect("annotations");
+                assert!(
+                    annotations.title.is_some(),
+                    "{} is missing a display title",
+                    tool.name
+                );
+                assert!(
+                    annotations.read_only_hint.is_some(),
+                    "{} is missing read_only_hint",
+                    tool.name
+                );
+                assert!(
+                    annotations.open_world_hint.is_some(),
+                    "{} is missing open_world_hint",
+                    tool.name
+                );
+            }
+        }
+
+        #[test]
+        fn mutating_tools_are_annotated_as_writes() {
+            // Arrange
+            let tools = ZoteroMcpServer::tool_router().list_all();
+
+            // Assert
+            for tool in &tools {
+                let annotations =
+                    tool.annotations.as_ref().expect("annotations");
+                let read_only =
+                    annotations.read_only_hint.expect("read_only_hint");
+                let mutates = matches!(
+                    tool_visibility(tool.name.as_ref()),
+                    ToolVisibility::CompactWrite | ToolVisibility::LegacyWrite
+                );
+                if mutates {
+                    assert!(
+                        !read_only,
+                        "{} mutates but is annotated read-only",
+                        tool.name
+                    );
+                }
+                if !read_only {
+                    assert!(
+                        annotations.destructive_hint.is_some()
+                            && annotations.idempotent_hint.is_some(),
+                        "{} is a write tool and must declare destructive and \
+                         idempotent hints",
+                        tool.name
+                    );
+                }
+            }
         }
 
         fn visible_tool_names(state: &AppState) -> Vec<String> {
@@ -1984,9 +2486,9 @@ mod tests {
         }
 
         #[test]
-        fn filtered_mode_hides_disabled_write_and_sqlite_tools() {
+        fn gated_mode_hides_disabled_write_and_sqlite_tools() {
             let mut state = AppState::from_env();
-            state.tool_mode = ToolExposureMode::Filtered;
+            state.tool_mode = ToolExposureMode::Gated;
             state.write_enabled = false;
             state.sqlite_access = false;
 
@@ -2035,7 +2537,7 @@ mod tests {
 
             let names = visible_tool_names(&state);
 
-            assert!(names.contains(&"zotero_local_search".to_owned()));
+            assert!(names.contains(&"zotero_sqlite_search".to_owned()));
             assert!(!names.contains(&"zotero_fulltext_search".to_owned()));
         }
 

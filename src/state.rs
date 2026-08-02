@@ -34,7 +34,7 @@ const RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ToolExposureMode {
     Compact,
-    Filtered,
+    Gated,
     All,
 }
 
@@ -47,7 +47,7 @@ impl ToolExposureMode {
     fn from_env_value(value: &str) -> Self {
         match value.to_lowercase().as_str() {
             "all" => Self::All,
-            "filtered" => Self::Filtered,
+            "gated" => Self::Gated,
             _ => Self::Compact,
         }
     }
@@ -505,10 +505,10 @@ mod tests {
         }
 
         #[test]
-        fn parses_filtered_mode() {
+        fn parses_gated_mode() {
             assert_eq!(
-                ToolExposureMode::from_env_value("filtered"),
-                ToolExposureMode::Filtered
+                ToolExposureMode::from_env_value("gated"),
+                ToolExposureMode::Gated
             );
         }
 
