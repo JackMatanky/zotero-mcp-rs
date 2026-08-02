@@ -1346,7 +1346,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::state::{AppState, SecurityConfig};
+    use crate::{security::SecurityConfig, state::AppState};
 
     mod fixtures {
         use std::{
@@ -1357,7 +1357,7 @@ mod tests {
         use rmcp::model::CallToolResult;
         use serde_json::json;
 
-        use crate::state::{AppState, SecurityConfig};
+        use crate::{security::SecurityConfig, state::AppState};
         pub(super) fn zotero_state(zotero_api_url: String) -> AppState {
             AppState {
                 zotero_api_url,

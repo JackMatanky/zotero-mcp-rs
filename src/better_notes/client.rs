@@ -206,7 +206,7 @@ mod tests {
 
         use reqwest::Client;
 
-        use crate::state::{AppState, SecurityConfig};
+        use crate::{security::SecurityConfig, state::AppState};
 
         /// Builds an [`AppState`] pointing `better_notes_url` at a fixture
         /// server, with `write_enabled` set for write-gate tests.

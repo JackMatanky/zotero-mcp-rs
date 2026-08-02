@@ -14,12 +14,7 @@ use std::{
 
 use reqwest::{Client, RequestBuilder, Response, StatusCode};
 
-use crate::errors::ZoteroMcpError;
-#[expect(
-    unused_imports,
-    reason = "re-exported for crate consumers and tests"
-)]
-pub(crate) use crate::security::{SecurityConfig, SecurityProfile};
+use crate::{errors::ZoteroMcpError, security::SecurityConfig};
 
 const RETRY_MAX_ATTEMPTS: u32 = 3;
 const RETRY_BASE_DELAY: Duration = Duration::from_millis(200);
