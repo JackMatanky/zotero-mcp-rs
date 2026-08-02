@@ -28,15 +28,15 @@ pub(crate) use analytics::{
 pub(crate) use client::ZoteroClient;
 pub(crate) use collections::CollectionItemAction;
 pub(crate) use identifiers::IdentifierKind;
-pub(crate) use items::{AnnotationDraft, TrashAction};
+pub(crate) use items::{AnnotationDraft, AnnotationPosition, TrashAction};
 #[allow(unused_imports, reason = "facade re-exports for crate consumers")]
 pub(crate) use local_db::{
     FulltextHit, LocalZoteroDb, NoteAnnotationHit, find_zotero_db,
 };
 #[allow(unused_imports, reason = "facade re-exports for crate consumers")]
 pub(crate) use models::{
-    AnnotationType, CitationKey, CollectionKey, ItemKey, ItemType,
-    LibraryVersion, TagName, ZoteroCollection, ZoteroItem,
+    AnnotationType, CitationKey, CollectionKey, CollectionParent, ItemKey,
+    ItemType, LibraryVersion, LinkMode, TagName, ZoteroCollection, ZoteroItem,
 };
 #[allow(unused_imports, reason = "facade re-exports for crate consumers")]
 pub(crate) use relations::RelatedItem;

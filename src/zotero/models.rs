@@ -202,8 +202,6 @@ impl std::fmt::Display for RelationUriError {
 #[serde(transparent)]
 pub(crate) struct LibraryVersion(pub(crate) u64);
 
-impl LibraryVersion {}
-
 impl std::fmt::Display for LibraryVersion {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -381,27 +379,8 @@ impl From<AnnotationType> for String {
 pub(crate) enum CreatorType {
     Author,
     Editor,
-    Contributor,
-    SeriesEditor,
     Translator,
-    /// Any creator role not modeled above; carries the API's original
-    /// value.
     Other(String),
-}
-
-impl CreatorType {
-    /// Borrows the API string this variant serializes to.
-    #[inline]
-    pub(crate) fn as_str(&self) -> &str {
-        match self {
-            Self::Author => "author",
-            Self::Editor => "editor",
-            Self::Contributor => "contributor",
-            Self::SeriesEditor => "seriesEditor",
-            Self::Translator => "translator",
-            Self::Other(value) => value,
-        }
-    }
 }
 
 impl From<String> for CreatorType {
@@ -410,8 +389,6 @@ impl From<String> for CreatorType {
         match value.as_str() {
             "author" => Self::Author,
             "editor" => Self::Editor,
-            "contributor" => Self::Contributor,
-            "seriesEditor" => Self::SeriesEditor,
             "translator" => Self::Translator,
             _ => Self::Other(value),
         }
@@ -422,12 +399,81 @@ impl From<CreatorType> for String {
     #[inline]
     fn from(value: CreatorType) -> Self {
         match value {
-            CreatorType::Other(value) => value,
-            known => known.as_str().to_owned(),
+            CreatorType::Author => "author".to_owned(),
+            CreatorType::Editor => "editor".to_owned(),
+            CreatorType::Translator => "translator".to_owned(),
+            CreatorType::Other(s) => s,
         }
     }
 }
 
+/// Attachment storage mode (`linkMode`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub(crate) enum LinkMode {
+    ImportedFile,
+    LinkedFile,
+    LinkedUrl,
+    ImportedUrl,
+    Other(String),
+}
+
+impl From<String> for LinkMode {
+    #[inline]
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "imported_file" => Self::ImportedFile,
+            "linked_file" => Self::LinkedFile,
+            "linked_url" => Self::LinkedUrl,
+            "imported_url" => Self::ImportedUrl,
+            _ => Self::Other(value),
+        }
+    }
+}
+
+impl From<LinkMode> for String {
+    #[inline]
+    fn from(value: LinkMode) -> Self {
+        match value {
+            LinkMode::ImportedFile => "imported_file".to_owned(),
+            LinkMode::LinkedFile => "linked_file".to_owned(),
+            LinkMode::LinkedUrl => "linked_url".to_owned(),
+            LinkMode::ImportedUrl => "imported_url".to_owned(),
+            LinkMode::Other(s) => s,
+        }
+    }
+}
+
+/// Parent state for a Zotero collection.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "serde_json::Value", into = "serde_json::Value")]
+pub(crate) enum CollectionParent {
+    #[default]
+    TopLevel,
+    Parent(CollectionKey),
+}
+
+impl From<serde_json::Value> for CollectionParent {
+    #[inline]
+    fn from(value: serde_json::Value) -> Self {
+        match value {
+            serde_json::Value::String(s) if !s.is_empty() && s != "false" => {
+                Self::Parent(CollectionKey::from(s))
+            }
+            _ => Self::TopLevel,
+        }
+    }
+}
+
+impl From<CollectionParent> for serde_json::Value {
+    #[inline]
+    fn from(value: CollectionParent) -> Self {
+        match value {
+            CollectionParent::TopLevel => Self::Bool(false),
+            CollectionParent::Parent(key) => Self::String(key.to_string()),
+        }
+    }
+}
 /// Tag origin (Zotero's `type` field on a tag object): `0` for a
 /// user-created tag, `1` for one Zotero assigned automatically on import.
 #[derive(
@@ -469,7 +515,7 @@ impl From<TagOrigin> for u8 {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroItem {
     pub(crate) key: ItemKey,
-    pub(crate) version: u64,
+    pub(crate) version: LibraryVersion,
     /// Owning library metadata object.
     #[serde(default)]
     pub(crate) library: serde_json::Value,
@@ -491,7 +537,7 @@ pub(crate) struct ZoteroItem {
 pub(crate) struct ZoteroItemData {
     pub(crate) key: ItemKey,
     #[serde(default)]
-    pub(crate) version: u64,
+    pub(crate) version: LibraryVersion,
     #[serde(rename = "itemType", default)]
     pub(crate) item_type: ItemType,
     pub(crate) title: Option<String>,
@@ -539,7 +585,7 @@ pub(crate) struct ZoteroItemData {
     /// Parent item key for attachment and child note items.
     pub(crate) parent_item: Option<ItemKey>,
     /// Attachment storage mode (e.g. `"imported_file"` or `"linked_url"`).
-    pub(crate) link_mode: Option<String>,
+    pub(crate) link_mode: Option<LinkMode>,
     /// Attachment MIME content type.
     #[serde(rename = "contentType")]
     pub(crate) content_type: Option<String>,
@@ -585,7 +631,7 @@ pub(crate) struct ZoteroCreator {
 /// A tag attached to an item.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroTag {
-    pub(crate) tag: String,
+    pub(crate) tag: TagName,
     /// Tag origin: user-created vs. automatically assigned on import.
     #[serde(rename = "type", default)]
     pub(crate) origin: TagOrigin,
@@ -595,7 +641,7 @@ pub(crate) struct ZoteroTag {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ZoteroCollection {
     pub(crate) key: CollectionKey,
-    pub(crate) version: u64,
+    pub(crate) version: LibraryVersion,
     pub(crate) data: ZoteroCollectionData,
 }
 
@@ -604,9 +650,9 @@ pub(crate) struct ZoteroCollection {
 pub(crate) struct ZoteroCollectionData {
     pub(crate) key: CollectionKey,
     pub(crate) name: String,
-    /// Key of parent collection, or `false` if top-level.
-    #[serde(rename = "parentCollection")]
-    pub(crate) parent_collection: Option<serde_json::Value>,
+    /// Parent collection state.
+    #[serde(rename = "parentCollection", default)]
+    pub(crate) parent_collection: CollectionParent,
 }
 
 /// Result of probing the Zotero Local API for availability.
@@ -681,6 +727,59 @@ mod tests {
             assert_eq!(user_num, 0);
             assert_eq!(auto_num, 1);
             assert_eq!(other_num, 42);
+        }
+    }
+
+    mod link_mode {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn round_trips_known_and_unknown_link_modes() {
+            let imported = LinkMode::ImportedFile;
+            let imported_str: String = imported.clone().into();
+            assert_eq!(imported_str, "imported_file");
+            assert_eq!(LinkMode::from(imported_str), imported);
+
+            let custom = LinkMode::from("custom_mode".to_owned());
+            let custom_str: String = custom.clone().into();
+            assert_eq!(custom_str, "custom_mode");
+            assert_eq!(custom, LinkMode::Other("custom_mode".to_owned()));
+        }
+    }
+
+    mod collection_parent {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn serializes_top_level_as_false_and_parent_as_key() {
+            let top_level: serde_json::Value =
+                CollectionParent::TopLevel.into();
+            assert_eq!(top_level, serde_json::json!(false));
+
+            let parent: serde_json::Value =
+                CollectionParent::Parent(CollectionKey::from("PARENT01"))
+                    .into();
+            assert_eq!(parent, serde_json::json!("PARENT01"));
+        }
+
+        #[test]
+        fn treats_false_null_and_string_false_as_top_level() {
+            assert_eq!(
+                CollectionParent::from(serde_json::json!(false)),
+                CollectionParent::TopLevel
+            );
+            assert_eq!(
+                CollectionParent::from(serde_json::Value::Null),
+                CollectionParent::TopLevel
+            );
+            assert_eq!(
+                CollectionParent::from(serde_json::json!("false")),
+                CollectionParent::TopLevel
+            );
         }
     }
 
@@ -871,8 +970,8 @@ mod tests {
             assert_eq!(col.key, "COL12345");
             assert_eq!(col.data.name, "Machine Learning");
             assert_eq!(
-                col.data.parent_collection.as_ref().and_then(|v| v.as_str()),
-                Some("PARENT01")
+                col.data.parent_collection,
+                CollectionParent::Parent(CollectionKey::from("PARENT01"))
             );
         }
     }

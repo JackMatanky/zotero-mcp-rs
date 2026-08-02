@@ -146,15 +146,16 @@ pub(crate) fn diff_tags(
     add: &[TagName],
     remove: &[TagName],
 ) -> Vec<serde_json::Value> {
-    let mut tags_set: BTreeSet<String> =
+    let mut tags_set: BTreeSet<TagName> =
         existing.into_iter().map(|t| t.tag).collect();
-    for a in add {
-        tags_set.insert(a.as_str().to_owned());
-    }
+    tags_set.extend(add.iter().cloned());
     for r in remove {
-        tags_set.remove(r.as_str());
+        tags_set.remove(r);
     }
-    tags_set.into_iter().map(|t| serde_json::json!({ "tag": t })).collect()
+    tags_set
+        .into_iter()
+        .map(|t| serde_json::json!({ "tag": t.as_str() }))
+        .collect()
 }
 
 #[cfg(test)]
@@ -169,7 +170,7 @@ mod tests {
         #[test]
         fn adds_new_tags_and_removes_specified_existing_tags() {
             let existing = vec![ZoteroTag {
-                tag: "old".to_owned(),
+                tag: TagName::from("old"),
                 origin: TagOrigin::default(),
             }];
             let add = vec![TagName::from("new")];
@@ -187,7 +188,7 @@ mod tests {
         #[test]
         fn handles_empty_add_and_remove_tag_lists() {
             let existing = vec![ZoteroTag {
-                tag: "keep_me".to_owned(),
+                tag: TagName::from("keep_me"),
                 origin: TagOrigin::default(),
             }];
 
@@ -203,7 +204,7 @@ mod tests {
         #[test]
         fn deduplicates_added_tags_when_already_present() {
             let existing = vec![ZoteroTag {
-                tag: "rust".to_owned(),
+                tag: TagName::from("rust"),
                 origin: TagOrigin::default(),
             }];
             let add = vec![TagName::from("rust")];

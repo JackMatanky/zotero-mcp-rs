@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     errors::ZoteroMcpError,
     zotero::{
-        client::ZoteroClient,
+        client::{ZoteroClient, add_pagination},
         models::{CollectionKey, ItemKey, ItemType, ZoteroItem},
         search::PaginationInfo,
     },
@@ -109,27 +109,30 @@ impl ZoteroClient<'_> {
         offset: usize,
         limit: usize,
     ) -> Result<LibraryCoveragePage, ZoteroMcpError> {
-        let items = match collection_key {
-            Some(col) => self.get_collection_items(col).await?,
-            None => self.get_all_items().await?,
+        let base = match collection_key {
+            Some(col) => format!(
+                "{}/users/0/collections/{}/items",
+                self.state.zotero_api_url, col
+            ),
+            None => format!(
+                "{}/users/0/items?itemType=-note&sort=dateModified&\
+                 direction=desc",
+                self.state.zotero_api_url
+            ),
         };
+        let page_url = add_pagination(&base, offset, limit);
+        let page = self.get_items_with_total(&page_url).await?;
+        let pagination =
+            coverage_pagination(offset, limit, page.items.len(), page.total);
 
-        let (selected, pagination) =
-            slice_items_for_coverage(&items, offset, limit);
-        let mut children_by_idx = Vec::with_capacity(selected.len());
-        for item in selected {
+        let mut children_by_idx = Vec::with_capacity(page.items.len());
+        for item in &page.items {
             children_by_idx.push(
                 self.get_item_children(&item.key).await.unwrap_or_default(),
             );
         }
 
-        Ok(classify_coverage_page(
-            selected,
-            &children_by_idx,
-            pagination.offset,
-            pagination.limit,
-            pagination.total,
-        ))
+        Ok(classify_coverage_page(&page.items, &children_by_idx, pagination))
     }
 
     /// Extracts and synthesizes annotations and notes for `item_key` into
@@ -240,43 +243,37 @@ fn coverage_flags(
     }
 }
 
-fn slice_items_for_coverage(
-    items: &[ZoteroItem],
+fn coverage_pagination(
     offset: usize,
     limit: usize,
-) -> (&[ZoteroItem], PaginationInfo) {
-    let total = items.len();
-    let start = offset.min(total);
-    let end = start.saturating_add(limit).min(total);
-    let page_items = items.get(start..end).unwrap_or_default();
-    (page_items, PaginationInfo {
+    returned: usize,
+    server_total: Option<usize>,
+) -> PaginationInfo {
+    let total = server_total.unwrap_or_else(|| offset.saturating_add(returned));
+    let page_offset =
+        server_total.map_or(offset, |known_total| offset.min(known_total));
+    PaginationInfo {
         limit,
-        offset: start,
+        offset: page_offset,
         total,
-        has_more: start.saturating_add(limit) < total,
-    })
+        has_more: server_total.map_or(returned == limit, |known_total| {
+            page_offset.saturating_add(returned) < known_total
+        }),
+    }
 }
 
 fn classify_coverage_page(
     selected: &[ZoteroItem],
     children_by_idx: &[Vec<ZoteroItem>],
-    offset: usize,
-    limit: usize,
-    total: usize,
+    pagination: PaginationInfo,
 ) -> LibraryCoveragePage {
     let mut flags = Vec::with_capacity(selected.len());
     for (item, children) in selected.iter().zip(children_by_idx) {
         flags.push(coverage_flags(item, children));
     }
-    let offset = offset.min(total);
     LibraryCoveragePage {
         coverage: classify_coverage(&flags),
-        pagination: PaginationInfo {
-            limit,
-            offset,
-            total,
-            has_more: offset.saturating_add(limit) < total,
-        },
+        pagination,
     }
 }
 
@@ -392,7 +389,9 @@ fn format_notes_section(item: &ZoteroItem, children: &[ZoteroItem]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::zotero::models::{AnnotationType, ZoteroItemData};
+    use crate::zotero::models::{
+        AnnotationType, LibraryVersion, ZoteroItemData,
+    };
 
     mod compute_percentage {
         use pretty_assertions::assert_eq;
@@ -424,13 +423,13 @@ mod tests {
         ) -> ZoteroItem {
             ZoteroItem {
                 key: ItemKey::from(key),
-                version: 1,
+                version: LibraryVersion(1),
                 library: serde_json::Value::Null,
                 links: serde_json::Value::Null,
                 meta: serde_json::Value::Null,
                 data: ZoteroItemData {
                     key: ItemKey::from(key),
-                    version: 1,
+                    version: LibraryVersion(1),
                     item_type: ItemType::JournalArticle,
                     title: title.map(ToOwned::to_owned),
                     doi: doi.map(ToOwned::to_owned),
@@ -495,13 +494,13 @@ mod tests {
         ) -> ZoteroItem {
             ZoteroItem {
                 key: ItemKey::from(key),
-                version: 1,
+                version: LibraryVersion(1),
                 library: serde_json::Value::Null,
                 links: serde_json::Value::Null,
                 meta: serde_json::Value::Null,
                 data: ZoteroItemData {
                     key: ItemKey::from(key),
-                    version: 1,
+                    version: LibraryVersion(1),
                     item_type,
                     doi: doi.map(ToOwned::to_owned),
                     ..Default::default()
@@ -513,13 +512,13 @@ mod tests {
         fn evaluates_item_coverage_flags_correctly() {
             let item = ZoteroItem {
                 key: ItemKey::from("ITEM0001"),
-                version: 1,
+                version: LibraryVersion(1),
                 library: serde_json::Value::Null,
                 links: serde_json::Value::Null,
                 meta: serde_json::Value::Null,
                 data: ZoteroItemData {
                     key: ItemKey::from("ITEM0001"),
-                    version: 1,
+                    version: LibraryVersion(1),
                     item_type: ItemType::JournalArticle,
                     doi: Some("10.1000/1".to_owned()),
                     note: Some("Self note".to_owned()),
@@ -528,13 +527,13 @@ mod tests {
             };
             let attachment = ZoteroItem {
                 key: ItemKey::from("ATTACH01"),
-                version: 1,
+                version: LibraryVersion(1),
                 library: serde_json::Value::Null,
                 links: serde_json::Value::Null,
                 meta: serde_json::Value::Null,
                 data: ZoteroItemData {
                     key: ItemKey::from("ATTACH01"),
-                    version: 1,
+                    version: LibraryVersion(1),
                     item_type: ItemType::Attachment,
                     content_type: Some("application/pdf".to_owned()),
                     ..Default::default()
@@ -542,13 +541,13 @@ mod tests {
             };
             let note = ZoteroItem {
                 key: ItemKey::from("NOTE0001"),
-                version: 1,
+                version: LibraryVersion(1),
                 library: serde_json::Value::Null,
                 links: serde_json::Value::Null,
                 meta: serde_json::Value::Null,
                 data: ZoteroItemData {
                     key: ItemKey::from("NOTE0001"),
-                    version: 1,
+                    version: LibraryVersion(1),
                     item_type: ItemType::Note,
                     note: Some("Child note".to_owned()),
                     ..Default::default()
@@ -586,32 +585,17 @@ mod tests {
         }
 
         #[test]
-        fn library_coverage_slice_reports_has_more_for_unsliced_items() {
-            let items = [
-                item("ITEM0001", ItemType::JournalArticle, None),
-                item("ITEM0002", ItemType::JournalArticle, None),
-                item("ITEM0003", ItemType::JournalArticle, None),
-            ];
+        fn coverage_pagination_uses_server_total_for_has_more() {
+            let pagination = coverage_pagination(0, 2, 2, Some(3));
 
-            let (selected, pagination) = slice_items_for_coverage(&items, 0, 2);
-
-            assert_eq!(selected.len(), 2);
             assert_eq!(pagination.total, 3);
             assert!(pagination.has_more);
         }
 
         #[test]
-        fn library_coverage_slice_clamps_offset_past_total() {
-            let items = [
-                item("ITEM0001", ItemType::JournalArticle, None),
-                item("ITEM0002", ItemType::JournalArticle, None),
-                item("ITEM0003", ItemType::JournalArticle, None),
-            ];
+        fn coverage_pagination_clamps_offset_when_total_is_known() {
+            let pagination = coverage_pagination(99, 10, 0, Some(3));
 
-            let (selected, pagination) =
-                slice_items_for_coverage(&items, 99, 10);
-
-            assert_eq!(selected.len(), 0);
             assert_eq!(pagination.offset, 3);
         }
 
@@ -626,8 +610,14 @@ mod tests {
                 vec![item("NOTE0001", ItemType::Note, None)],
             ];
 
+            let pagination = PaginationInfo {
+                limit: 2,
+                offset: 0,
+                total: 3,
+                has_more: true,
+            };
             let page =
-                classify_coverage_page(&selected, &children_by_idx, 0, 2, 3);
+                classify_coverage_page(&selected, &children_by_idx, pagination);
 
             assert_eq!(page.coverage.total_items, 2);
             assert_eq!(page.coverage.with_doi, 1);
@@ -643,13 +633,13 @@ mod tests {
         fn formats_annotations_section_with_highlights_and_notes() {
             let annotation = ZoteroItem {
                 key: ItemKey::from("ANN00001"),
-                version: 1,
+                version: LibraryVersion(1),
                 library: serde_json::Value::Null,
                 links: serde_json::Value::Null,
                 meta: serde_json::Value::Null,
                 data: ZoteroItemData {
                     key: ItemKey::from("ANN00001"),
-                    version: 1,
+                    version: LibraryVersion(1),
                     item_type: ItemType::Annotation,
                     annotation_type: Some(AnnotationType::Highlight),
                     annotation_text: Some("Important concept".to_owned()),
@@ -669,13 +659,13 @@ mod tests {
         fn formats_standalone_note_section() {
             let note_item = ZoteroItem {
                 key: ItemKey::from("NOTE0001"),
-                version: 1,
+                version: LibraryVersion(1),
                 library: serde_json::Value::Null,
                 links: serde_json::Value::Null,
                 meta: serde_json::Value::Null,
                 data: ZoteroItemData {
                     key: ItemKey::from("NOTE0001"),
-                    version: 1,
+                    version: LibraryVersion(1),
                     item_type: ItemType::Note,
                     note: Some("<p>Main note text</p>".to_owned()),
                     ..Default::default()
@@ -691,26 +681,26 @@ mod tests {
         fn formats_child_notes_section() {
             let main_item = ZoteroItem {
                 key: ItemKey::from("ITEM0001"),
-                version: 1,
+                version: LibraryVersion(1),
                 library: serde_json::Value::Null,
                 links: serde_json::Value::Null,
                 meta: serde_json::Value::Null,
                 data: ZoteroItemData {
                     key: ItemKey::from("ITEM0001"),
-                    version: 1,
+                    version: LibraryVersion(1),
                     item_type: ItemType::JournalArticle,
                     ..Default::default()
                 },
             };
             let child_note = ZoteroItem {
                 key: ItemKey::from("NOTE0001"),
-                version: 1,
+                version: LibraryVersion(1),
                 library: serde_json::Value::Null,
                 links: serde_json::Value::Null,
                 meta: serde_json::Value::Null,
                 data: ZoteroItemData {
                     key: ItemKey::from("NOTE0001"),
-                    version: 1,
+                    version: LibraryVersion(1),
                     item_type: ItemType::Note,
                     note: Some("<p>Child note text</p>".to_owned()),
                     ..Default::default()

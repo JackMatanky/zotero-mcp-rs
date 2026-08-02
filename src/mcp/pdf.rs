@@ -12,7 +12,7 @@ use serde::Deserialize;
 use crate::{
     ZoteroMcpServer,
     errors::ZoteroMcpError,
-    zotero::{ItemType, ZoteroItem},
+    zotero::{ItemType, LinkMode, ZoteroItem},
 };
 
 const ZOTERO_ATTACHMENTS_PREFIX: &str = "attachments:";
@@ -50,7 +50,7 @@ pub(super) fn resolve_attachment_pdf_path(
         return None;
     }
 
-    if item.data.link_mode.as_deref() == Some("imported_file") {
+    if matches!(item.data.link_mode.as_ref(), Some(LinkMode::ImportedFile)) {
         if let Some(path) = enclosure_file_path(item) {
             return Some(ResolvedPdfPath {
                 path,
@@ -59,7 +59,7 @@ pub(super) fn resolve_attachment_pdf_path(
         }
     }
 
-    if item.data.link_mode.as_deref() == Some("linked_file") {
+    if matches!(item.data.link_mode.as_ref(), Some(LinkMode::LinkedFile)) {
         if let Some(path) =
             item.data.path.as_deref().and_then(|path| {
                 resolve_linked_attachment_path(path, bridge_roots)

@@ -27,10 +27,11 @@ use crate::{
     errors::ZoteroMcpError,
     pdf::{extract_pdf_outline, extract_pdf_pages},
     zotero::{
-        AnnotationDraft, AnnotationType, CitationKey, CollectionItemAction,
-        CollectionKey, ItemKey, ItemType, JoinMode, LocalZoteroDb,
-        SearchCondition, SearchField, SearchOperator, SortDirection, SortField,
-        TagName, TrashAction, ZoteroClient, find_zotero_db,
+        AnnotationDraft, AnnotationPosition, AnnotationType, CitationKey,
+        CollectionItemAction, CollectionKey, ItemKey, ItemType, JoinMode,
+        LocalZoteroDb, SearchCondition, SearchField, SearchOperator,
+        SortDirection, SortField, TagName, TrashAction, ZoteroClient,
+        find_zotero_db,
     },
 };
 
@@ -1149,7 +1150,7 @@ impl ZoteroMcpServer {
             comment: args.comment,
             color: args.color,
             page_label: args.page_label,
-            position: args.position,
+            position: AnnotationPosition::from(args.position),
         };
         Ok(super::json_result(client.create_annotation(draft).await))
     }

@@ -19,7 +19,10 @@ use crate::{
     errors::ZoteroMcpError,
     zotero::{
         client::ZoteroClient,
-        models::{CollectionKey, ItemKey, ZoteroCollection, ZoteroItem},
+        models::{
+            CollectionKey, CollectionParent, ItemKey, ZoteroCollection,
+            ZoteroItem,
+        },
     },
 };
 
@@ -104,10 +107,9 @@ impl ZoteroClient<'_> {
     ) -> Result<ZoteroCollection, ZoteroMcpError> {
         self.state.check_write_permission()?;
         let url = format!("{}/users/0/collections", self.state.zotero_api_url);
-        let parent_val = match parent_key {
-            Some(k) => serde_json::Value::String(k.to_string()),
-            None => serde_json::Value::String("false".to_owned()),
-        };
+        let parent_val = parent_key.map_or(CollectionParent::TopLevel, |key| {
+            CollectionParent::Parent(key.clone())
+        });
         let payload = serde_json::json!([{
             "name": name,
             "parentCollection": parent_val,
@@ -188,7 +190,7 @@ impl ZoteroClient<'_> {
             )
             .await?;
         let collection: ZoteroCollection = resp.json().await?;
-        self.delete(&url, collection.version.into()).await
+        self.delete(&url, collection.version).await
     }
 
     /// Renames and/or moves a collection identified by `collection_key`.
@@ -226,13 +228,9 @@ impl ZoteroClient<'_> {
 
         let new_name = name.unwrap_or(&current.data.name);
         let new_parent = match parent_key {
-            Some(k) if k.as_str().is_empty() => serde_json::Value::Bool(false),
-            Some(k) => serde_json::Value::String(k.to_string()),
-            None => current
-                .data
-                .parent_collection
-                .clone()
-                .unwrap_or(serde_json::Value::Bool(false)),
+            Some(k) if k.as_str().is_empty() => CollectionParent::TopLevel,
+            Some(k) => CollectionParent::Parent(k.clone()),
+            None => current.data.parent_collection.clone(),
         };
         let payload = serde_json::json!({
             "key": collection_key,

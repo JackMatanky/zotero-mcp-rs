@@ -114,6 +114,28 @@ impl LocalZoteroDb {
             ) word_hits ON word_hits.itemID = i.itemID"
             )
         };
+        let words_join = if query_tokens.is_empty() {
+            String::new()
+        } else {
+            format!(
+                r"
+            LEFT JOIN (
+                SELECT ia.parentItemID AS itemID,
+                       GROUP_CONCAT(fw.word, ' ') AS words
+                FROM fulltextItemWords fiw
+                JOIN fulltextWords fw ON fw.wordID = fiw.wordID
+                JOIN itemAttachments ia ON ia.itemID = fiw.itemID
+                WHERE ia.parentItemID IS NOT NULL
+                  AND fw.word IN ({token_placeholders})
+                GROUP BY ia.parentItemID
+            ) words ON words.itemID = i.itemID"
+            )
+        };
+        let words_select = if query_tokens.is_empty() {
+            "'' AS words"
+        } else {
+            "words.words AS words"
+        };
         let fulltext_predicate = if query_tokens.is_empty() {
             "0".to_owned()
         } else {
@@ -128,7 +150,7 @@ impl LocalZoteroDb {
                    title.value AS title, doi.value AS doi,
                    extra.value AS extra,
                    creators.creators AS creators,
-                   words.words AS words
+                   {words_select}
             FROM items i
             JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
             LEFT JOIN itemData title_data
@@ -160,15 +182,7 @@ impl LocalZoteroDb {
                 JOIN creators c ON c.creatorID = ic.creatorID
                 GROUP BY ic.itemID
             ) creators ON creators.itemID = i.itemID
-            LEFT JOIN (
-                SELECT ia.parentItemID AS itemID,
-                       GROUP_CONCAT(fw.word, ' ') AS words
-                FROM fulltextItemWords fiw
-                JOIN fulltextWords fw ON fw.wordID = fiw.wordID
-                JOIN itemAttachments ia ON ia.itemID = fiw.itemID
-                WHERE ia.parentItemID IS NOT NULL
-                GROUP BY ia.parentItemID
-            ) words ON words.itemID = i.itemID
+            {words_join}
             {word_hits_join}
             WHERE it.typeName NOT IN ('attachment', 'note', 'annotation')
               AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
@@ -183,6 +197,9 @@ impl LocalZoteroDb {
             "
         );
         let mut query_builder = sqlx::query(&sql);
+        for token in &query_tokens {
+            query_builder = query_builder.bind(token);
+        }
         for token in &query_tokens {
             query_builder = query_builder.bind(token);
         }

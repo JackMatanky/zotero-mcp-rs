@@ -294,7 +294,7 @@ impl<'a> ZoteroClient<'a> {
 
 /// Appends `start`/`limit` query parameters to `url`, preserving any existing
 /// query string.
-fn add_pagination(url: &str, start: usize, limit: usize) -> String {
+pub(super) fn add_pagination(url: &str, start: usize, limit: usize) -> String {
     let sep = if url.contains('?') {
         '&'
     } else {

@@ -23,9 +23,26 @@ use crate::{
     zotero::{
         client::ZoteroClient,
         identifiers::ItemDraft,
-        models::{AnnotationType, ItemKey, ItemType, ZoteroItem},
+        models::{AnnotationType, ItemKey, ItemType, LinkMode, ZoteroItem},
     },
 };
+
+/// Zotero annotation position payload.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(transparent)]
+pub(crate) struct AnnotationPosition(serde_json::Value);
+
+impl AnnotationPosition {
+    fn as_zotero_string(&self) -> String {
+        self.0.to_string()
+    }
+}
+
+impl From<serde_json::Value> for AnnotationPosition {
+    fn from(value: serde_json::Value) -> Self {
+        Self(value)
+    }
+}
 
 /// Parameters for creating a PDF annotation.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -36,7 +53,7 @@ pub(crate) struct AnnotationDraft {
     pub(crate) comment: Option<String>,
     pub(crate) color: Option<String>,
     pub(crate) page_label: Option<String>,
-    pub(crate) position: serde_json::Value,
+    pub(crate) position: AnnotationPosition,
 }
 
 /// Action for setting an item's trash state.
@@ -271,7 +288,7 @@ impl ZoteroClient<'_> {
             "itemType": ItemType::Attachment,
             "parentItem": parent_item_key,
             "title": title,
-            "linkMode": "imported_file",
+            "linkMode": LinkMode::ImportedFile,
             "path": file_path_or_url,
             "contentType": content_type.unwrap_or("application/pdf"),
         }]);
@@ -302,7 +319,7 @@ impl ZoteroClient<'_> {
         let item = self.get_item(item_key).await?;
         let url =
             format!("{}/users/0/items/{}", self.state.zotero_api_url, item_key);
-        self.delete(&url, item.version.into()).await
+        self.delete(&url, item.version).await
     }
 
     /// Sets the item's trash state for `item_key`.
@@ -343,7 +360,7 @@ impl ZoteroClient<'_> {
         draft: AnnotationDraft,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let position = draft.position;
+        let position = draft.position.as_zotero_string();
         let url = format!("{}/users/0/items", self.state.zotero_api_url);
         let payload = serde_json::json!([{
             "itemType": ItemType::Annotation,
@@ -353,7 +370,7 @@ impl ZoteroClient<'_> {
             "annotationComment": draft.comment.as_deref().unwrap_or(""),
             "annotationColor": draft.color.as_deref().unwrap_or("#ffd400"),
             "annotationPageLabel": draft.page_label,
-            "annotationPosition": position.to_string(),
+            "annotationPosition": position,
         }]);
         self.post_json_first(
             &url,

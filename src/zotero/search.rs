@@ -19,7 +19,10 @@ use crate::{
     errors::ZoteroMcpError,
     zotero::{
         client::ZoteroClient,
-        models::{CitationKey, CollectionKey, ItemType, TagName, ZoteroItem},
+        models::{
+            CitationKey, CollectionKey, ItemType, TagName, ZoteroCreator,
+            ZoteroItem,
+        },
     },
 };
 
@@ -69,6 +72,101 @@ pub(crate) struct SearchCondition {
     pub(crate) value: String,
 }
 
+/// Search condition prepared once for client-side scans.
+struct PreparedCondition<'a> {
+    field: &'a SearchField,
+    operator: &'a SearchOperator,
+    value: &'a str,
+    value_lc: String,
+}
+
+impl<'a> From<&'a SearchCondition> for PreparedCondition<'a> {
+    fn from(cond: &'a SearchCondition) -> Self {
+        Self {
+            field: &cond.field,
+            operator: &cond.operator,
+            value: cond.value.as_str(),
+            value_lc: cond.value.to_lowercase(),
+        }
+    }
+}
+
+impl PreparedCondition<'_> {
+    fn matches_str(&self, s: &str) -> bool {
+        match self.operator {
+            SearchOperator::Is => s.to_lowercase() == self.value_lc,
+            SearchOperator::IsNot => s.to_lowercase() != self.value_lc,
+            SearchOperator::StartsWith => {
+                s.to_lowercase().starts_with(&self.value_lc)
+            }
+            SearchOperator::EndsWith => {
+                s.to_lowercase().ends_with(&self.value_lc)
+            }
+            SearchOperator::DoesNotContain => {
+                !s.to_lowercase().contains(&self.value_lc)
+            }
+            SearchOperator::Contains | SearchOperator::Other(_) => {
+                s.to_lowercase().contains(&self.value_lc)
+            }
+            SearchOperator::IsGreaterThan | SearchOperator::IsAfter => {
+                compare_dates(s, self.value).is_gt()
+            }
+            SearchOperator::IsLessThan | SearchOperator::IsBefore => {
+                compare_dates(s, self.value).is_lt()
+            }
+        }
+    }
+
+    fn matches_item(&self, item: &ZoteroItem) -> bool {
+        match self.field {
+            SearchField::Title => {
+                item.data.title.as_deref().is_some_and(|s| self.matches_str(s))
+            }
+            SearchField::Creator => item.data.creators.iter().any(|c| {
+                c.name.as_deref().is_some_and(|s| self.matches_str(s))
+                    || c.first_name
+                        .as_deref()
+                        .is_some_and(|s| self.matches_str(s))
+                    || c.last_name
+                        .as_deref()
+                        .is_some_and(|s| self.matches_str(s))
+                    || matches_creator_full_name(c, self)
+            }),
+            SearchField::Date => {
+                item.data.date.as_deref().is_some_and(|s| self.matches_str(s))
+            }
+            SearchField::Year => item.data.date.as_deref().is_some_and(|d| {
+                self.matches_str(d.split('-').next().unwrap_or(d))
+            }),
+            SearchField::ItemType => {
+                self.matches_str(item.data.item_type.as_str())
+            }
+            SearchField::Tag => {
+                item.data.tags.iter().any(|t| self.matches_str(t.tag.as_str()))
+            }
+            SearchField::Extra => {
+                item.data.extra.as_deref().is_some_and(|s| self.matches_str(s))
+            }
+            SearchField::Doi => {
+                item.data.doi.as_deref().is_some_and(|s| self.matches_str(s))
+            }
+            SearchField::Other(field_name) => match field_name.as_str() {
+                "title" => item
+                    .data
+                    .title
+                    .as_deref()
+                    .is_some_and(|s| self.matches_str(s)),
+                "doi" => item
+                    .data
+                    .doi
+                    .as_deref()
+                    .is_some_and(|s| self.matches_str(s)),
+                _ => false,
+            },
+        }
+    }
+}
+
 /// Pagination metadata returned with every search result page.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub(crate) struct PaginationInfo {
@@ -83,6 +181,46 @@ pub(crate) struct PaginationInfo {
 pub(crate) struct SearchPage<T> {
     pub(crate) items: Vec<T>,
     pub(crate) pagination: PaginationInfo,
+}
+
+/// Accumulates only the requested page while still counting all matches.
+struct PageAccumulator<T> {
+    offset: usize,
+    limit: usize,
+    total: usize,
+    items: Vec<T>,
+}
+
+impl<T> PageAccumulator<T> {
+    fn new(offset: usize, limit: usize) -> Self {
+        Self {
+            offset,
+            limit,
+            total: 0,
+            items: Vec::with_capacity(limit),
+        }
+    }
+
+    fn push_match(&mut self, item: T) {
+        if self.total >= self.offset && self.items.len() < self.limit {
+            self.items.push(item);
+        }
+        self.total = self.total.saturating_add(1);
+    }
+
+    fn into_page(self) -> SearchPage<T> {
+        let offset = self.offset.min(self.total);
+        let returned = self.items.len();
+        SearchPage {
+            items: self.items,
+            pagination: PaginationInfo {
+                limit: self.limit,
+                offset,
+                total: self.total,
+                has_more: offset.saturating_add(returned) < self.total,
+            },
+        }
+    }
 }
 
 /// Returns a `{items, pagination}` page slicing `results` at `offset`/`limit`.
@@ -238,11 +376,6 @@ impl ZoteroClient<'_> {
     }
 
     /// Searches items by citation key.
-    ///
-    /// Matches Zotero's native `citationKey` item field first (Zotero 9+).
-    /// Falls back to scanning the legacy `extra` field for items with no native
-    /// citation key.
-    ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
@@ -320,25 +453,32 @@ impl ZoteroClient<'_> {
         }
 
         let items = self.get_all_items().await?;
-        let matches: Vec<ZoteroItem> = items
-            .into_iter()
-            .filter(|item| {
-                let ok = match join_mode {
-                    JoinMode::All => conditions
-                        .iter()
-                        .all(|cond| match_condition(item, cond)),
-                    JoinMode::Any => conditions
-                        .iter()
-                        .any(|cond| match_condition(item, cond)),
-                };
-                ok && is_searchable_item(item)
-            })
-            .collect();
-        let matches = match sort {
-            Some(field) => sort_items(matches, field, sort_direction),
-            None => matches,
-        };
-        Ok(paginate(matches, offset, limit))
+        let prepared: Vec<_> =
+            conditions.iter().map(PreparedCondition::from).collect();
+        if let Some(field) = sort {
+            let matches: Vec<ZoteroItem> = items
+                .into_iter()
+                .filter(|item| {
+                    is_searchable_item(item)
+                        && item_matches_conditions(item, &prepared, join_mode)
+                })
+                .collect();
+            return Ok(paginate(
+                sort_items(matches, field, sort_direction),
+                offset,
+                limit,
+            ));
+        }
+
+        let mut page = PageAccumulator::new(offset, limit);
+        for item in items {
+            if is_searchable_item(&item)
+                && item_matches_conditions(&item, &prepared, join_mode)
+            {
+                page.push_match(item);
+            }
+        }
+        Ok(page.into_page())
     }
 
     /// Builds a server-search URL for `conditions` when they are fully
@@ -433,54 +573,39 @@ fn is_searchable_item(item: &ZoteroItem) -> bool {
     )
 }
 
+fn matches_creator_full_name(
+    creator: &ZoteroCreator,
+    cond: &PreparedCondition<'_>,
+) -> bool {
+    let (Some(first), Some(last)) =
+        (creator.first_name.as_deref(), creator.last_name.as_deref())
+    else {
+        return false;
+    };
+    let mut full = String::with_capacity(
+        first.len().saturating_add(1).saturating_add(last.len()),
+    );
+    full.push_str(first);
+    full.push(' ');
+    full.push_str(last);
+    cond.matches_str(&full)
+}
+
+fn item_matches_conditions(
+    item: &ZoteroItem,
+    conditions: &[PreparedCondition<'_>],
+    join_mode: JoinMode,
+) -> bool {
+    match join_mode {
+        JoinMode::All => conditions.iter().all(|cond| cond.matches_item(item)),
+        JoinMode::Any => conditions.iter().any(|cond| cond.matches_item(item)),
+    }
+}
+
+#[cfg(test)]
 /// Evaluates whether `item` satisfies a single search `cond`.
 fn match_condition(item: &ZoteroItem, cond: &SearchCondition) -> bool {
-    let val = cond.value.to_lowercase();
-    let matches_str = |s: &str| match cond.operator {
-        SearchOperator::Is => s.to_lowercase() == val,
-        SearchOperator::IsNot => s.to_lowercase() != val,
-        SearchOperator::StartsWith => s.to_lowercase().starts_with(&val),
-        SearchOperator::EndsWith => s.to_lowercase().ends_with(&val),
-        SearchOperator::DoesNotContain => !s.to_lowercase().contains(&val),
-        SearchOperator::Contains | SearchOperator::Other(_) => {
-            s.to_lowercase().contains(&val)
-        }
-        SearchOperator::IsGreaterThan | SearchOperator::IsAfter => {
-            compare_dates(s, &cond.value).is_gt()
-        }
-        SearchOperator::IsLessThan | SearchOperator::IsBefore => {
-            compare_dates(s, &cond.value).is_lt()
-        }
-    };
-
-    match &cond.field {
-        SearchField::Title => {
-            item.data.title.as_deref().is_some_and(matches_str)
-        }
-        SearchField::Creator => item.data.creators.iter().any(|c| {
-            let full = format!(
-                "{} {}",
-                c.first_name.as_deref().unwrap_or(""),
-                c.last_name.as_deref().unwrap_or("")
-            );
-            matches_str(&full) || c.name.as_deref().is_some_and(matches_str)
-        }),
-        SearchField::Date => item.data.date.as_deref().is_some_and(matches_str),
-        SearchField::Year => item.data.date.as_deref().is_some_and(|d| {
-            matches_str(&d.chars().take(4).collect::<String>())
-        }),
-        SearchField::ItemType => matches_str(item.data.item_type.as_str()),
-        SearchField::Tag => item.data.tags.iter().any(|t| matches_str(&t.tag)),
-        SearchField::Extra => {
-            item.data.extra.as_deref().is_some_and(matches_str)
-        }
-        SearchField::Doi => item.data.doi.as_deref().is_some_and(matches_str),
-        SearchField::Other(field_name) => match field_name.as_str() {
-            "title" => item.data.title.as_deref().is_some_and(matches_str),
-            "doi" => item.data.doi.as_deref().is_some_and(matches_str),
-            _ => false,
-        },
-    }
+    PreparedCondition::from(cond).matches_item(item)
 }
 
 /// Compares two date-or-year strings (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`) by
@@ -553,7 +678,9 @@ fn sort_key(item: &ZoteroItem, field: SortField) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::zotero::models::{ItemKey, ItemType, ZoteroItemData};
+    use crate::zotero::models::{
+        ItemKey, ItemType, LibraryVersion, ZoteroItemData,
+    };
 
     mod deserialization {
         use pretty_assertions::assert_eq;
@@ -598,13 +725,13 @@ mod tests {
         ) -> ZoteroItem {
             ZoteroItem {
                 key: ItemKey::from("ITEM0001"),
-                version: 1,
+                version: LibraryVersion(1),
                 library: serde_json::Value::Null,
                 links: serde_json::Value::Null,
                 meta: serde_json::Value::Null,
                 data: ZoteroItemData {
                     key: ItemKey::from("ITEM0001"),
-                    version: 1,
+                    version: LibraryVersion(1),
                     item_type: ItemType::JournalArticle,
                     title: title.map(ToOwned::to_owned),
                     date: date.map(ToOwned::to_owned),
@@ -734,13 +861,13 @@ mod tests {
         fn item(key: &str, title: &str, date: &str) -> ZoteroItem {
             ZoteroItem {
                 key: ItemKey::from(key),
-                version: 1,
+                version: LibraryVersion(1),
                 library: serde_json::Value::Null,
                 links: serde_json::Value::Null,
                 meta: serde_json::Value::Null,
                 data: ZoteroItemData {
                     key: ItemKey::from(key),
-                    version: 1,
+                    version: LibraryVersion(1),
                     item_type: ItemType::JournalArticle,
                     title: Some(title.to_owned()),
                     date: Some(date.to_owned()),
