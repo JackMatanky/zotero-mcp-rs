@@ -330,6 +330,7 @@ mod tests {
                 write_enabled,
                 sqlite_access: false,
                 zotero_db_path: None,
+                local_zotero_db: AppState::local_zotero_db_cache(),
                 tool_mode: crate::state::ToolExposureMode::Compact,
                 security: SecurityConfig::default(),
             }

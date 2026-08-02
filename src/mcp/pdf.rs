@@ -19,18 +19,26 @@ const ZOTERO_ATTACHMENTS_PREFIX: &str = "attachments:";
 const BRIDGE_FILE_ROOTS_PATH: &str = "/file-roots";
 
 /// Resolved filesystem path for a Zotero PDF attachment item.
-pub(super) struct ResolvedPdfPath {
-    /// Resolved path to the target PDF file.
-    pub(super) path: PathBuf,
-    /// Whether security root enforcement check is required for this path.
-    pub(super) requires_root_check: bool,
+pub(super) enum ResolvedPdfPath {
+    /// Imported attachment path already trusted by Zotero's enclosure link.
+    Trusted(PathBuf),
+    /// Linked-file path that must be checked against allowed roots.
+    NeedsRootCheck(PathBuf),
+}
+
+impl ResolvedPdfPath {
+    pub(super) fn into_path(self) -> PathBuf {
+        match self {
+            Self::Trusted(path) | Self::NeedsRootCheck(path) => path,
+        }
+    }
 }
 
 /// Searches child items of a Zotero item for the first valid PDF attachment
 /// path.
 pub(super) fn find_pdf_path(
     children: &[ZoteroItem],
-    bridge_roots: &[(String, PathBuf)],
+    bridge_roots: &[BridgePdfRoot],
 ) -> Option<ResolvedPdfPath> {
     children
         .iter()
@@ -44,7 +52,7 @@ pub(super) fn find_pdf_path(
 /// attachment.
 pub(super) fn resolve_attachment_pdf_path(
     item: &ZoteroItem,
-    bridge_roots: &[(String, PathBuf)],
+    bridge_roots: &[BridgePdfRoot],
 ) -> Option<ResolvedPdfPath> {
     if item.data.item_type != ItemType::Attachment {
         return None;
@@ -52,10 +60,7 @@ pub(super) fn resolve_attachment_pdf_path(
 
     if matches!(item.data.link_mode.as_ref(), Some(LinkMode::ImportedFile)) {
         if let Some(path) = enclosure_file_path(item) {
-            return Some(ResolvedPdfPath {
-                path,
-                requires_root_check: false,
-            });
+            return Some(ResolvedPdfPath::Trusted(path));
         }
     }
 
@@ -65,10 +70,7 @@ pub(super) fn resolve_attachment_pdf_path(
                 resolve_linked_attachment_path(path, bridge_roots)
             })
         {
-            return Some(ResolvedPdfPath {
-                path,
-                requires_root_check: true,
-            });
+            return Some(ResolvedPdfPath::NeedsRootCheck(path));
         }
     }
 
@@ -78,10 +80,7 @@ pub(super) fn resolve_attachment_pdf_path(
                 resolve_linked_attachment_path(path, bridge_roots)
             })
         {
-            return Some(ResolvedPdfPath {
-                path,
-                requires_root_check: true,
-            });
+            return Some(ResolvedPdfPath::NeedsRootCheck(path));
         }
     }
 
@@ -92,7 +91,7 @@ pub(super) fn resolve_attachment_pdf_path(
 /// prefixed with `attachments:`.
 fn resolve_linked_attachment_path(
     raw_path: &str,
-    bridge_roots: &[(String, PathBuf)],
+    bridge_roots: &[BridgePdfRoot],
 ) -> Option<PathBuf> {
     let Some(relative) = raw_path.strip_prefix(ZOTERO_ATTACHMENTS_PREFIX)
     else {
@@ -121,14 +120,14 @@ fn file_url_to_path(href: &str) -> Option<PathBuf> {
 }
 
 /// Returns an iterator over bridge root paths belonging to the
-/// `"zotero-linked-base"` category.
+/// [`FileRootKind::ZoteroLinkedBase`] category.
 fn linked_base_roots(
-    bridge_roots: &[(String, PathBuf)],
+    bridge_roots: &[BridgePdfRoot],
 ) -> impl Iterator<Item = &PathBuf> {
     bridge_roots
         .iter()
-        .filter(|(kind, _)| kind == "zotero-linked-base")
-        .map(|(_, path)| path)
+        .filter(|root| root.kind == FileRootKind::ZoteroLinkedBase)
+        .map(|root| &root.path)
 }
 
 impl ZoteroMcpServer {
@@ -139,9 +138,7 @@ impl ZoteroMcpServer {
     /// directories, linked file base directories, and plugin destination roots
     /// (such as Attanger). Returns an empty [`Vec`] if the bridge is
     /// unreachable or returns invalid JSON.
-    pub(super) async fn fetch_bridge_pdf_roots(
-        &self,
-    ) -> Vec<(String, PathBuf)> {
+    pub(super) async fn fetch_bridge_pdf_roots(&self) -> Vec<BridgePdfRoot> {
         let url = format!(
             "{}{}",
             self.state.better_notes_url.trim_end_matches('/'),
@@ -180,8 +177,9 @@ impl ZoteroMcpServer {
                 !matches!(root.kind, FileRootKind::Other)
                     && !root.path.is_empty()
             })
-            .map(|root| {
-                (root.kind.as_str().to_owned(), PathBuf::from(root.path))
+            .map(|root| BridgePdfRoot {
+                kind: root.kind,
+                path: PathBuf::from(root.path),
             })
             .collect()
     }
@@ -202,14 +200,13 @@ impl ZoteroMcpServer {
     pub(super) fn validate_pdf_read_path(
         &self,
         path: &Path,
-        bridge_roots: &[(String, PathBuf)],
+        bridge_roots: &[BridgePdfRoot],
         direct_input: bool,
     ) -> Result<PathBuf, ZoteroMcpError> {
-        let roots = merge_pdf_roots(
-            &self.state.security.allowed_read_dirs,
-            bridge_roots,
-        );
-        match self.state.check_existing_read_path(path, &roots, "PDF read") {
+        let bridge_paths = bridge_roots.iter().map(|root| &root.path);
+        let roots =
+            self.state.security.allowed_read_dirs.iter().chain(bridge_paths);
+        match self.state.check_existing_read_path(path, roots, "PDF read") {
             Ok(checked) => {
                 self.state.check_pdf_file(&checked)?;
                 Ok(checked)
@@ -245,17 +242,12 @@ pub(super) fn canonicalize_existing_path(
     Ok(std::fs::canonicalize(path)?)
 }
 
-/// Combines user-configured allowed directories with bridge-reported file roots
-/// into a single [`Vec`].
-fn merge_pdf_roots(
-    configured: &[PathBuf],
-    bridge_roots: &[(String, PathBuf)],
-) -> Vec<PathBuf> {
-    configured
-        .iter()
-        .cloned()
-        .chain(bridge_roots.iter().map(|(_, path)| path.clone()))
-        .collect()
+/// Single typed file root reported by the bridge and accepted for PDF reads.
+pub(super) struct BridgePdfRoot {
+    /// Root category reported by the bridge.
+    kind: FileRootKind,
+    /// Canonical or configured root path.
+    path: PathBuf,
 }
 
 /// Response payload returned by the bridge `/file-roots` endpoint.
@@ -279,18 +271,6 @@ enum FileRootKind {
     /// Any other root category not relevant to PDF path resolution.
     #[serde(other)]
     Other,
-}
-
-impl FileRootKind {
-    /// Borrows the string identifier corresponding to this root category.
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::ZoteroStorage => "zotero-storage",
-            Self::ZoteroLinkedBase => "zotero-linked-base",
-            Self::AttangerDest => "attanger-dest",
-            Self::Other => "other",
-        }
-    }
 }
 
 /// Single file root reported by the bridge.
@@ -344,8 +324,10 @@ mod tests {
             // Arrange
             let raw_path = "attachments:subfolder/paper.pdf";
             let base_dir = PathBuf::from("/zotero/base");
-            let bridge_roots =
-                vec![("zotero-linked-base".to_owned(), base_dir.clone())];
+            let bridge_roots = vec![BridgePdfRoot {
+                kind: FileRootKind::ZoteroLinkedBase,
+                path: base_dir.clone(),
+            }];
 
             // Act
             let resolved =
@@ -359,10 +341,10 @@ mod tests {
         fn resolve_linked_attachment_path_returns_raw_path_when_unprefixed() {
             // Arrange
             let raw_path = "subfolder/paper.pdf";
-            let bridge_roots = vec![(
-                "zotero-linked-base".to_owned(),
-                PathBuf::from("/zotero/base"),
-            )];
+            let bridge_roots = vec![BridgePdfRoot {
+                kind: FileRootKind::ZoteroLinkedBase,
+                path: PathBuf::from("/zotero/base"),
+            }];
 
             // Act
             let resolved =
@@ -464,8 +446,14 @@ mod tests {
             // Assert
             assert!(resolved.is_some());
             let res = resolved.unwrap();
-            assert_eq!(res.path, PathBuf::from("/tmp/paper.pdf"));
-            assert!(!res.requires_root_check);
+            match res {
+                ResolvedPdfPath::Trusted(path) => {
+                    assert_eq!(path, PathBuf::from("/tmp/paper.pdf"));
+                }
+                ResolvedPdfPath::NeedsRootCheck(path) => {
+                    panic!("imported attachment should be trusted: {path:?}");
+                }
+            }
         }
     }
 
@@ -491,30 +479,28 @@ mod tests {
             assert_eq!(attanger, FileRootKind::AttangerDest);
             assert_eq!(other, FileRootKind::Other);
 
-            assert_eq!(storage.as_str(), "zotero-storage");
-            assert_eq!(other.as_str(), "other");
+            assert_ne!(storage, FileRootKind::Other);
         }
 
         #[test]
-        fn merge_pdf_roots_combines_configured_and_bridge_roots() {
+        fn bridge_pdf_roots_keep_root_kind_typed() {
             // Arrange
-            let configured = vec![PathBuf::from("/configured/dir")];
-            let bridge = vec![
-                ("zotero-storage".to_owned(), PathBuf::from("/bridge/storage")),
-                (
-                    "unknown-category".to_owned(),
-                    PathBuf::from("/bridge/ignored"),
-                ),
+            let roots = vec![
+                BridgePdfRoot {
+                    kind: FileRootKind::ZoteroStorage,
+                    path: PathBuf::from("/bridge/storage"),
+                },
+                BridgePdfRoot {
+                    kind: FileRootKind::Other,
+                    path: PathBuf::from("/bridge/ignored"),
+                },
             ];
 
             // Act
-            let merged = merge_pdf_roots(&configured, &bridge);
+            let linked_roots = linked_base_roots(&roots).collect::<Vec<_>>();
 
             // Assert
-            assert_eq!(merged.len(), 3);
-            assert_eq!(merged[0], PathBuf::from("/configured/dir"));
-            assert_eq!(merged[1], PathBuf::from("/bridge/storage"));
-            assert_eq!(merged[2], PathBuf::from("/bridge/ignored"));
+            assert!(linked_roots.is_empty());
         }
     }
 }

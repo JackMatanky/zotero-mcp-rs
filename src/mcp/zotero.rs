@@ -19,7 +19,8 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::pdf::{
-    canonicalize_existing_path, find_pdf_path, resolve_attachment_pdf_path,
+    ResolvedPdfPath, canonicalize_existing_path, find_pdf_path,
+    resolve_attachment_pdf_path,
 };
 use crate::{
     ZoteroMcpServer,
@@ -28,10 +29,9 @@ use crate::{
     pdf::{extract_pdf_outline, extract_pdf_pages},
     zotero::{
         AnnotationDraft, AnnotationPosition, AnnotationType, CitationKey,
-        CollectionItemAction, CollectionKey, ItemKey, ItemType, JoinMode,
-        LocalZoteroDb, SearchCondition, SearchField, SearchOperator,
+        CollectionItemAction, CollectionKey, CollectionParent, ItemKey,
+        ItemType, JoinMode, SearchCondition, SearchField, SearchOperator,
         SortDirection, SortField, TagName, TrashAction, ZoteroClient,
-        find_zotero_db,
     },
 };
 
@@ -245,9 +245,9 @@ pub(crate) struct UpdateCollectionArgs {
     pub(crate) collection_key: CollectionKey,
     /// New name for the collection.
     pub(crate) name: Option<String>,
-    /// New parent collection key ([`CollectionKey`]); pass an empty string to
-    /// move the collection to the top level.
-    pub(crate) parent_key: Option<CollectionKey>,
+    /// New parent collection. Omit to keep current parent; pass `false` or an
+    /// empty string to move the collection to the top level.
+    pub(crate) parent_key: Option<CollectionParent>,
 }
 
 // --- Zotero Tag Administration ---
@@ -392,8 +392,8 @@ pub(crate) struct CreateAnnotationArgs {
     pub(crate) color: Option<String>,
     /// Optional PDF page label where the annotation appears.
     pub(crate) page_label: Option<String>,
-    /// Raw Zotero `annotationPosition` JSON object.
-    pub(crate) position: serde_json::Value,
+    /// Zotero `annotationPosition` JSON object.
+    pub(crate) position: AnnotationPosition,
 }
 
 // --- Zotero Related Items ---
@@ -606,13 +606,14 @@ impl ZoteroMcpServer {
                 .map(PathBuf::from)
                 .or_else(|| {
                     resolve_attachment_pdf_path(&item, &bridge_roots)
-                        .map(|resolved| resolved.path)
+                        .map(ResolvedPdfPath::into_path)
                 })
                 .map(|path| path.display().to_string())
         } else {
             match client.get_item_children(&args.item_key).await {
                 Ok(children) => find_pdf_path(&children, &bridge_roots)
-                    .map(|resolved| resolved.path.display().to_string()),
+                    .map(ResolvedPdfPath::into_path)
+                    .map(|path| path.display().to_string()),
                 Err(e) => return Ok(super::text_error(&e)),
             }
         };
@@ -666,12 +667,15 @@ impl ZoteroMcpServer {
             )));
         };
 
-        if resolved.requires_root_check {
-            self.validate_pdf_read_path(&resolved.path, &bridge_roots, false)
-        } else {
-            let checked = canonicalize_existing_path(&resolved.path)?;
-            self.state.check_pdf_file(&checked)?;
-            Ok(checked)
+        match resolved {
+            ResolvedPdfPath::NeedsRootCheck(path) => {
+                self.validate_pdf_read_path(&path, &bridge_roots, false)
+            }
+            ResolvedPdfPath::Trusted(path) => {
+                let checked = canonicalize_existing_path(&path)?;
+                self.state.check_pdf_file(&checked)?;
+                Ok(checked)
+            }
         }
     }
 
@@ -1036,14 +1040,7 @@ impl ZoteroMcpServer {
         let limit = args.limit.unwrap_or(20);
         let state = &self.state;
         let result = async {
-            state.check_sqlite_access()?;
-            let Some(db_path) = find_zotero_db(state.zotero_db_path.as_deref())
-            else {
-                return Err(ZoteroMcpError::LocalDb(
-                    "Zotero sqlite database not found".to_owned(),
-                ));
-            };
-            let db = LocalZoteroDb::open(&db_path).await?;
+            let db = state.local_zotero_db().await?;
             db.search_fulltext(&args.query, limit).await
         }
         .await;
@@ -1063,14 +1060,7 @@ impl ZoteroMcpServer {
         let limit = args.limit.unwrap_or(20);
         let state = &self.state;
         let result = async {
-            state.check_sqlite_access()?;
-            let Some(db_path) = find_zotero_db(state.zotero_db_path.as_deref())
-            else {
-                return Err(ZoteroMcpError::LocalDb(
-                    "Zotero sqlite database not found".to_owned(),
-                ));
-            };
-            let db = LocalZoteroDb::open(&db_path).await?;
+            let db = state.local_zotero_db().await?;
             db.search_notes_annotations(&args.query, limit).await
         }
         .await;
@@ -1150,7 +1140,7 @@ impl ZoteroMcpServer {
             comment: args.comment,
             color: args.color,
             page_label: args.page_label,
-            position: AnnotationPosition::from(args.position),
+            position: args.position,
         };
         Ok(super::json_result(client.create_annotation(draft).await))
     }
@@ -1772,7 +1762,7 @@ mod tests {
                     comment: None,
                     color: None,
                     page_label: None,
-                    position: json!({"pageIndex": 0, "rects": [[100, 200, 300, 220]]}),
+                    position: AnnotationPosition::from(json!({"pageIndex": 0, "rects": [[100, 200, 300, 220]]})),
                 })
                 .await
                 .expect("create annotation ok");

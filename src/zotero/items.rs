@@ -37,6 +37,19 @@ impl AnnotationPosition {
         self.0.to_string()
     }
 }
+impl schemars::JsonSchema for AnnotationPosition {
+    #[inline]
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "AnnotationPosition".into()
+    }
+
+    #[inline]
+    fn json_schema(
+        generator: &mut schemars::SchemaGenerator,
+    ) -> schemars::Schema {
+        serde_json::Value::json_schema(generator)
+    }
+}
 
 impl From<serde_json::Value> for AnnotationPosition {
     fn from(value: serde_json::Value) -> Self {

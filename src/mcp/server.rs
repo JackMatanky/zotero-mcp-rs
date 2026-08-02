@@ -19,7 +19,7 @@ use rmcp::{
     tool, tool_router,
 };
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     mcp::{
@@ -63,175 +63,362 @@ const SERVER_INSTRUCTIONS: &str =
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DiscoverArgs {
     pub(crate) query: Option<String>,
-    pub(crate) domain: Option<String>,
+    pub(crate) domain: Option<CapabilityDomain>,
     pub(crate) include_disabled: Option<bool>,
 }
 
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct GroupedToolArgs {
-    pub(crate) action: String,
-    #[serde(flatten)]
-    pub(crate) args: serde_json::Map<String, serde_json::Value>,
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum CapabilityKind {
+    Tool,
+    Resource,
+    Prompt,
+}
+
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CapabilityDomain {
+    Discovery,
+    Items,
+    Collections,
+    Search,
+    Notes,
+    Local,
+    Prompts,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub(crate) enum CapabilityGate {
+    #[serde(rename = "ZOTERO_WRITE_ENABLED")]
+    WriteEnabled,
+    #[serde(rename = "ZOTERO_SQLITE_ACCESS")]
+    SqliteAccess,
 }
 
 #[derive(Clone, Copy, Serialize)]
 struct CapabilityInfo {
     name: &'static str,
-    kind: &'static str,
-    domain: &'static str,
-    requires: &'static [&'static str],
+    kind: CapabilityKind,
+    domain: CapabilityDomain,
+    requires: &'static [CapabilityGate],
     summary: &'static str,
     example: Option<&'static str>,
+    #[serde(skip_serializing)]
+    search_text: &'static str,
 }
 
 static CAPABILITIES: &[CapabilityInfo] = &[
     CapabilityInfo {
         name: "zotero_discover",
-        kind: "tool",
-        domain: "discovery",
+        kind: CapabilityKind::Tool,
+        domain: CapabilityDomain::Discovery,
         requires: &[],
         summary: "Find Zotero tools, resources, prompts, env gates, and \
                   examples",
         example: Some(r#"{"query":"notes"}"#),
+        search_text: "zotero_discover discovery find zotero tools resources \
+                      prompts env gates and examples",
     },
     CapabilityInfo {
         name: "zotero://items/{item_key}",
-        kind: "resource",
-        domain: "items",
+        kind: CapabilityKind::Resource,
+        domain: CapabilityDomain::Items,
         requires: &[],
         summary: "Read one Zotero item by key",
         example: Some("zotero://items/ITEMKEY"),
+        search_text: "zotero://items/{item_key} items read one zotero item by \
+                      key",
     },
     CapabilityInfo {
         name: "zotero://collections/{collection_key}/items",
-        kind: "resource",
-        domain: "collections",
+        kind: CapabilityKind::Resource,
+        domain: CapabilityDomain::Collections,
         requires: &[],
         summary: "Read collection items",
         example: Some("zotero://collections/COLKEY/items"),
+        search_text: "zotero://collections/{collection_key}/items collections \
+                      read collection items",
     },
     CapabilityInfo {
         name: "zotero_search",
-        kind: "tool",
-        domain: "search",
+        kind: CapabilityKind::Tool,
+        domain: CapabilityDomain::Search,
         requires: &[],
         summary: "Grouped search actions: items, tag, citation_key, advanced, \
                   duplicates, coverage",
         example: Some(r#"{"action":"items","query":"rust","limit":10}"#),
+        search_text: "zotero_search search grouped search actions items tag \
+                      citation_key advanced duplicates coverage",
     },
     CapabilityInfo {
         name: "zotero_items",
-        kind: "tool",
-        domain: "items",
+        kind: CapabilityKind::Tool,
+        domain: CapabilityDomain::Items,
         requires: &[],
         summary: "Grouped item read actions: recent, get, metadata, children, \
                   fulltext",
         example: Some(r#"{"action":"get","item_key":"ITEMKEY"}"#),
+        search_text: "zotero_items items grouped item read actions recent get \
+                      metadata children fulltext",
     },
     CapabilityInfo {
         name: "zotero_notes",
-        kind: "tool",
-        domain: "notes",
+        kind: CapabilityKind::Tool,
+        domain: CapabilityDomain::Notes,
         requires: &[],
         summary: "Grouped note read actions: list, synthesize",
         example: Some(r#"{"action":"list","item_key":"ITEMKEY"}"#),
+        search_text: "zotero_notes notes grouped note read actions list \
+                      synthesize",
     },
     CapabilityInfo {
         name: "zotero_items_write",
-        kind: "tool",
-        domain: "items",
-        requires: &["ZOTERO_WRITE_ENABLED"],
+        kind: CapabilityKind::Tool,
+        domain: CapabilityDomain::Items,
+        requires: &[CapabilityGate::WriteEnabled],
         summary: "Grouped item write actions: update, delete, trash, restore, \
                   add_by_identifier, attach_file",
         example: Some(r#"{"action":"trash","item_key":"ITEMKEY"}"#),
+        search_text: "zotero_items_write items grouped item write actions \
+                      update delete trash restore add_by_identifier \
+                      attach_file zotero_write_enabled",
     },
     CapabilityInfo {
         name: "zotero_notes_write",
-        kind: "tool",
-        domain: "notes",
-        requires: &["ZOTERO_WRITE_ENABLED"],
+        kind: CapabilityKind::Tool,
+        domain: CapabilityDomain::Notes,
+        requires: &[CapabilityGate::WriteEnabled],
         summary: "Grouped note write actions: create, annotation",
         example: Some(
             r##"{"action":"create","parent_key":"ITEMKEY","markdown":"# Note"}"##,
         ),
+        search_text: "zotero_notes_write notes grouped note write actions \
+                      create annotation zotero_write_enabled",
     },
     CapabilityInfo {
         name: "zotero_local_search",
-        kind: "tool",
-        domain: "local",
-        requires: &["ZOTERO_SQLITE_ACCESS"],
+        kind: CapabilityKind::Tool,
+        domain: CapabilityDomain::Local,
+        requires: &[CapabilityGate::SqliteAccess],
         summary: "Grouped local SQLite search actions: fulltext, \
                   notes_annotations",
         example: Some(r#"{"action":"fulltext","query":"borrow checker"}"#),
+        search_text: "zotero_local_search local grouped local sqlite search \
+                      actions fulltext notes_annotations zotero_sqlite_access",
     },
     CapabilityInfo {
         name: "zotero_literature_review",
-        kind: "prompt",
-        domain: "prompts",
+        kind: CapabilityKind::Prompt,
+        domain: CapabilityDomain::Prompts,
         requires: &[],
         summary: "Generate a literature review prompt for a collection",
         example: Some(r#"{"collection_key":"COLKEY"}"#),
+        search_text: "zotero_literature_review prompts generate a literature \
+                      review prompt for a collection",
     },
 ];
 
-const COMPACT_BASE_TOOLS: &[&str] = &[
-    "zotero_discover",
-    "zotero_status",
-    "zotero_search",
-    "zotero_pdf",
-    "zotero_notes",
-    "zotero_collections",
-    "zotero_items",
-    "zotero_tags",
-    "zotero_relations",
-    "better_bibtex",
-    "better_notes",
-    "search",
-    "fetch",
-];
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ToolVisibility {
+    CompactBase,
+    CompactSqlite,
+    CompactWrite,
+    LegacyRead,
+    LegacySqlite,
+    LegacyWrite,
+}
 
-const COMPACT_SQLITE_TOOLS: &[&str] = &["zotero_local_search"];
+impl ToolVisibility {
+    fn is_compact_visible(self, state: &AppState) -> bool {
+        match self {
+            Self::CompactBase => true,
+            Self::CompactSqlite => state.sqlite_access,
+            Self::CompactWrite => state.write_enabled,
+            Self::LegacyRead | Self::LegacySqlite | Self::LegacyWrite => false,
+        }
+    }
 
-const COMPACT_WRITE_TOOLS: &[&str] = &[
-    "zotero_notes_write",
-    "zotero_collections_write",
-    "zotero_items_write",
-    "zotero_tags_write",
-    "zotero_relations_write",
-];
+    fn is_filtered_visible(self, state: &AppState) -> bool {
+        match self {
+            Self::CompactSqlite | Self::LegacySqlite => state.sqlite_access,
+            Self::CompactWrite | Self::LegacyWrite => state.write_enabled,
+            Self::CompactBase | Self::LegacyRead => true,
+        }
+    }
+}
 
-const SQLITE_TOOLS: &[&str] = &[
-    "zotero_local_search",
-    "zotero_fulltext_search",
-    "zotero_search_notes_annotations",
-];
+fn tool_visibility(name: &str) -> ToolVisibility {
+    match name {
+        "zotero_discover" | "zotero_status" | "zotero_search"
+        | "zotero_pdf" | "zotero_notes" | "zotero_collections"
+        | "zotero_items" | "zotero_tags" | "zotero_relations"
+        | "better_bibtex" | "better_notes" | "search" | "fetch" => {
+            ToolVisibility::CompactBase
+        }
+        "zotero_local_search" => ToolVisibility::CompactSqlite,
+        "zotero_notes_write"
+        | "zotero_collections_write"
+        | "zotero_items_write"
+        | "zotero_tags_write"
+        | "zotero_relations_write" => ToolVisibility::CompactWrite,
+        "zotero_fulltext_search" | "zotero_search_notes_annotations" => {
+            ToolVisibility::LegacySqlite
+        }
+        "zotero_create_note"
+        | "zotero_create_collection"
+        | "zotero_manage_collections"
+        | "zotero_update_item"
+        | "zotero_attach_file"
+        | "zotero_batch_update_tags"
+        | "zotero_add_item_relation"
+        | "zotero_remove_item_relation"
+        | "zotero_delete_item"
+        | "zotero_trash_item"
+        | "zotero_restore_item"
+        | "zotero_delete_collection"
+        | "zotero_create_annotation"
+        | "zotero_add_by_identifier"
+        | "zotero_update_collection"
+        | "zotero_rename_tag"
+        | "zotero_delete_tags"
+        | "better_bibtex_regenerate_citekeys"
+        | "better_bibtex_autoexport_add" => ToolVisibility::LegacyWrite,
+        _ => ToolVisibility::LegacyRead,
+    }
+}
 
-const WRITE_TOOLS: &[&str] = &[
-    "zotero_notes_write",
-    "zotero_collections_write",
-    "zotero_items_write",
-    "zotero_tags_write",
-    "zotero_relations_write",
-    "zotero_create_note",
-    "zotero_create_collection",
-    "zotero_manage_collections",
-    "zotero_update_item",
-    "zotero_attach_file",
-    "zotero_batch_update_tags",
-    "zotero_add_item_relation",
-    "zotero_remove_item_relation",
-    "zotero_delete_item",
-    "zotero_trash_item",
-    "zotero_restore_item",
-    "zotero_delete_collection",
-    "zotero_create_annotation",
-    "zotero_add_by_identifier",
-    "zotero_update_collection",
-    "zotero_rename_tag",
-    "zotero_delete_tags",
-    "better_bibtex_regenerate_citekeys",
-    "better_bibtex_autoexport_add",
-];
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroSearchCommand {
+    Items(SearchItemsArgs),
+    Tag(SearchByTagArgs),
+    CitationKey(SearchByCitationKeyArgs),
+    Advanced(AdvancedSearchArgs),
+    Duplicates(FindDuplicatesArgs),
+    Coverage(LibraryCoverageArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroLocalSearchCommand {
+    Fulltext(FulltextSearchArgs),
+    NotesAnnotations(SearchNotesAnnotationsArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroPdfCommand {
+    Path(GetPdfPathArgs),
+    ReadPages(ReadPdfPagesArgs),
+    Outline(GetPdfOutlineArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroNotesCommand {
+    List(GetNotesArgs),
+    Synthesize(SynthesizeAnnotationsArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroNotesWriteCommand {
+    Create(CreateNoteArgs),
+    Annotation(CreateAnnotationArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroCollectionsCommand {
+    Items(GetCollectionItemsArgs),
+    Search(SearchCollectionsArgs),
+    Unfiled(GetUnfiledItemsArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroCollectionsWriteCommand {
+    Create(CreateCollectionArgs),
+    Manage(ManageCollectionsArgs),
+    Update(UpdateCollectionArgs),
+    Delete(DeleteCollectionArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroItemsCommand {
+    Recent(GetRecentArgs),
+    Get(GetItemArgs),
+    Metadata(GetItemMetadataArgs),
+    Children(GetItemChildrenArgs),
+    Fulltext(GetItemFulltextArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroItemsWriteCommand {
+    Update(UpdateItemArgs),
+    Delete(DeleteItemArgs),
+    Trash(TrashItemArgs),
+    Restore(TrashItemArgs),
+    AddByIdentifier(AddByIdentifierArgs),
+    AttachFile(AttachFileArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroTagsCommand {
+    List(ListTagsArgs),
+    Search(SearchByTagArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroTagsWriteCommand {
+    BatchUpdate(BatchUpdateTagsArgs),
+    Rename(RenameTagArgs),
+    Delete(DeleteTagsArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroRelationsCommand {
+    Get(GetRelatedItemsArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum ZoteroRelationsWriteCommand {
+    Add(AddItemRelationArgs),
+    Remove(RemoveItemRelationArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum BetterBibtexCommand {
+    Citekeys(GetCitekeysArgs),
+    Regenerate(RegenerateKeysArgs),
+    Export(ExportItemsArgs),
+    Bibliography(BibliographyArgs),
+    ScanAux(ScanAuxArgs),
+    PandocFilter(PandocFilterArgs),
+    AutoexportAdd(AutoExportAddArgs),
+    Search(BetterBibtexSearchArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum BetterNotesCommand {
+    Export(NoteExportArgs),
+    FromMarkdown(FromMarkdownArgs),
+    RunTemplate(RunTemplateArgs),
+    Relations(NoteRelationsArgs),
+    Tree(NoteTreeArgs),
+}
 
 /// Holds shared [`AppState`] and implements [`ServerHandler`], hosting every
 /// `#[tool]` method below.
@@ -265,14 +452,11 @@ impl ZoteroMcpServer {
     }
 
     fn is_filtered_tool(state: &AppState, name: &str) -> bool {
-        (state.write_enabled || !WRITE_TOOLS.contains(&name))
-            && (state.sqlite_access || !SQLITE_TOOLS.contains(&name))
+        tool_visibility(name).is_filtered_visible(state)
     }
 
     fn is_compact_tool(state: &AppState, name: &str) -> bool {
-        COMPACT_BASE_TOOLS.contains(&name)
-            || (state.sqlite_access && COMPACT_SQLITE_TOOLS.contains(&name))
-            || (state.write_enabled && COMPACT_WRITE_TOOLS.contains(&name))
+        tool_visibility(name).is_compact_visible(state)
     }
 
     fn discover_capabilities(
@@ -280,51 +464,31 @@ impl ZoteroMcpServer {
         args: &DiscoverArgs,
     ) -> Vec<CapabilityInfo> {
         let query = args.query.as_ref().map(|value| value.to_lowercase());
-        let domain = args.domain.as_ref().map(|value| value.to_lowercase());
         CAPABILITIES
             .iter()
             .copied()
             .filter(|capability| {
                 args.include_disabled == Some(true)
-                    || self.is_capability_enabled(capability)
+                    || self.is_capability_enabled(*capability)
             })
             .filter(|capability| {
-                domain.as_deref().is_none_or(|domain| {
-                    capability.domain.eq_ignore_ascii_case(domain)
-                })
+                args.domain.is_none_or(|domain| capability.domain == domain)
             })
             .filter(|capability| {
-                query.as_deref().is_none_or(|query| {
-                    capability.name.to_lowercase().contains(query)
-                        || capability.domain.to_lowercase().contains(query)
-                        || capability.summary.to_lowercase().contains(query)
-                })
+                query
+                    .as_deref()
+                    .is_none_or(|query| capability.search_text.contains(query))
             })
             .collect()
     }
 
-    fn is_capability_enabled(&self, capability: &CapabilityInfo) -> bool {
+    fn is_capability_enabled(&self, capability: CapabilityInfo) -> bool {
         !capability.requires.iter().any(|requirement| {
-            (*requirement == "ZOTERO_WRITE_ENABLED"
+            (*requirement == CapabilityGate::WriteEnabled
                 && !self.state.write_enabled)
-                || (*requirement == "ZOTERO_SQLITE_ACCESS"
+                || (*requirement == CapabilityGate::SqliteAccess
                     && !self.state.sqlite_access)
         })
-    }
-
-    fn grouped_args<T>(args: &GroupedToolArgs) -> Result<T, rmcp::ErrorData>
-    where
-        T: DeserializeOwned,
-    {
-        serde_json::from_value(serde_json::Value::Object(args.args.clone()))
-            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))
-    }
-
-    fn invalid_group_action(tool: &str, action: &str) -> rmcp::ErrorData {
-        rmcp::ErrorData::invalid_params(
-            format!("Unknown {tool} action: {action}"),
-            None,
-        )
     }
 
     pub(crate) fn zotero_discover_impl(
@@ -469,34 +633,27 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_search(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroSearchCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "items" => {
-                self.zotero_search_items_impl(Self::grouped_args(&args)?).await
+        match args {
+            ZoteroSearchCommand::Items(args) => {
+                self.zotero_search_items_impl(args).await
             }
-            "tag" => {
-                self.zotero_search_by_tag_impl(Self::grouped_args(&args)?).await
+            ZoteroSearchCommand::Tag(args) => {
+                self.zotero_search_by_tag_impl(args).await
             }
-            "citation_key" => {
-                self.zotero_search_by_citation_key_impl(Self::grouped_args(
-                    &args,
-                )?)
-                .await
+            ZoteroSearchCommand::CitationKey(args) => {
+                self.zotero_search_by_citation_key_impl(args).await
             }
-            "advanced" => {
-                self.zotero_advanced_search_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroSearchCommand::Advanced(args) => {
+                self.zotero_advanced_search_impl(args).await
             }
-            "duplicates" => {
-                self.zotero_find_duplicates_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroSearchCommand::Duplicates(args) => {
+                self.zotero_find_duplicates_impl(args).await
             }
-            "coverage" => {
-                self.zotero_library_coverage_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroSearchCommand::Coverage(args) => {
+                self.zotero_library_coverage_impl(args).await
             }
-            action => Err(Self::invalid_group_action("zotero_search", action)),
         }
     }
 
@@ -510,21 +667,14 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_local_search(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroLocalSearchCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "fulltext" => {
-                self.zotero_fulltext_search_impl(Self::grouped_args(&args)?)
-                    .await
+        match args {
+            ZoteroLocalSearchCommand::Fulltext(args) => {
+                self.zotero_fulltext_search_impl(args).await
             }
-            "notes_annotations" => {
-                self.zotero_search_notes_annotations_impl(Self::grouped_args(
-                    &args,
-                )?)
-                .await
-            }
-            action => {
-                Err(Self::invalid_group_action("zotero_local_search", action))
+            ZoteroLocalSearchCommand::NotesAnnotations(args) => {
+                self.zotero_search_notes_annotations_impl(args).await
             }
         }
     }
@@ -539,21 +689,18 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_pdf(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroPdfCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "path" => {
-                self.zotero_get_pdf_path_impl(Self::grouped_args(&args)?).await
+        match args {
+            ZoteroPdfCommand::Path(args) => {
+                self.zotero_get_pdf_path_impl(args).await
             }
-            "read_pages" => {
-                self.zotero_read_pdf_pages_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroPdfCommand::ReadPages(args) => {
+                self.zotero_read_pdf_pages_impl(args).await
             }
-            "outline" => {
-                self.zotero_get_pdf_outline_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroPdfCommand::Outline(args) => {
+                self.zotero_get_pdf_outline_impl(args).await
             }
-            action => Err(Self::invalid_group_action("zotero_pdf", action)),
         }
     }
 
@@ -567,19 +714,15 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_notes(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroNotesCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "list" => {
-                self.zotero_get_notes_impl(Self::grouped_args(&args)?).await
+        match args {
+            ZoteroNotesCommand::List(args) => {
+                self.zotero_get_notes_impl(args).await
             }
-            "synthesize" => {
-                self.zotero_synthesize_annotations_impl(Self::grouped_args(
-                    &args,
-                )?)
-                .await
+            ZoteroNotesCommand::Synthesize(args) => {
+                self.zotero_synthesize_annotations_impl(args).await
             }
-            action => Err(Self::invalid_group_action("zotero_notes", action)),
         }
     }
 
@@ -593,18 +736,14 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_notes_write(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroNotesWriteCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "create" => {
-                self.zotero_create_note_impl(Self::grouped_args(&args)?).await
+        match args {
+            ZoteroNotesWriteCommand::Create(args) => {
+                self.zotero_create_note_impl(args).await
             }
-            "annotation" => {
-                self.zotero_create_annotation_impl(Self::grouped_args(&args)?)
-                    .await
-            }
-            action => {
-                Err(Self::invalid_group_action("zotero_notes_write", action))
+            ZoteroNotesWriteCommand::Annotation(args) => {
+                self.zotero_create_annotation_impl(args).await
             }
         }
     }
@@ -619,25 +758,17 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_collections(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroCollectionsCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "items" => {
-                self.zotero_get_collection_items_impl(Self::grouped_args(
-                    &args,
-                )?)
-                .await
+        match args {
+            ZoteroCollectionsCommand::Items(args) => {
+                self.zotero_get_collection_items_impl(args).await
             }
-            "search" => {
-                self.zotero_search_collections_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroCollectionsCommand::Search(args) => {
+                self.zotero_search_collections_impl(args).await
             }
-            "unfiled" => {
-                self.zotero_get_unfiled_items_impl(Self::grouped_args(&args)?)
-                    .await
-            }
-            action => {
-                Err(Self::invalid_group_action("zotero_collections", action))
+            ZoteroCollectionsCommand::Unfiled(args) => {
+                self.zotero_get_unfiled_items_impl(args).await
             }
         }
     }
@@ -652,29 +783,21 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_collections_write(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroCollectionsWriteCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "create" => {
-                self.zotero_create_collection_impl(Self::grouped_args(&args)?)
-                    .await
+        match args {
+            ZoteroCollectionsWriteCommand::Create(args) => {
+                self.zotero_create_collection_impl(args).await
             }
-            "manage" => {
-                self.zotero_manage_collections_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroCollectionsWriteCommand::Manage(args) => {
+                self.zotero_manage_collections_impl(args).await
             }
-            "update" => {
-                self.zotero_update_collection_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroCollectionsWriteCommand::Update(args) => {
+                self.zotero_update_collection_impl(args).await
             }
-            "delete" => {
-                self.zotero_delete_collection_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroCollectionsWriteCommand::Delete(args) => {
+                self.zotero_delete_collection_impl(args).await
             }
-            action => Err(Self::invalid_group_action(
-                "zotero_collections_write",
-                action,
-            )),
         }
     }
 
@@ -688,28 +811,24 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_items(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroItemsCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "recent" => {
-                self.zotero_get_recent_impl(Self::grouped_args(&args)?).await
+        match args {
+            ZoteroItemsCommand::Recent(args) => {
+                self.zotero_get_recent_impl(args).await
             }
-            "get" => {
-                self.zotero_get_item_impl(Self::grouped_args(&args)?).await
+            ZoteroItemsCommand::Get(args) => {
+                self.zotero_get_item_impl(args).await
             }
-            "metadata" => {
-                self.zotero_get_item_metadata_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroItemsCommand::Metadata(args) => {
+                self.zotero_get_item_metadata_impl(args).await
             }
-            "children" => {
-                self.zotero_get_item_children_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroItemsCommand::Children(args) => {
+                self.zotero_get_item_children_impl(args).await
             }
-            "fulltext" => {
-                self.zotero_get_item_fulltext_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroItemsCommand::Fulltext(args) => {
+                self.zotero_get_item_fulltext_impl(args).await
             }
-            action => Err(Self::invalid_group_action("zotero_items", action)),
         }
     }
 
@@ -723,30 +842,26 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_items_write(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroItemsWriteCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "update" => {
-                self.zotero_update_item_impl(Self::grouped_args(&args)?).await
+        match args {
+            ZoteroItemsWriteCommand::Update(args) => {
+                self.zotero_update_item_impl(args).await
             }
-            "delete" => {
-                self.zotero_delete_item_impl(Self::grouped_args(&args)?).await
+            ZoteroItemsWriteCommand::Delete(args) => {
+                self.zotero_delete_item_impl(args).await
             }
-            "trash" => {
-                self.zotero_trash_item_impl(Self::grouped_args(&args)?).await
+            ZoteroItemsWriteCommand::Trash(args) => {
+                self.zotero_trash_item_impl(args).await
             }
-            "restore" => {
-                self.zotero_restore_item_impl(Self::grouped_args(&args)?).await
+            ZoteroItemsWriteCommand::Restore(args) => {
+                self.zotero_restore_item_impl(args).await
             }
-            "add_by_identifier" => {
-                self.zotero_add_by_identifier_impl(Self::grouped_args(&args)?)
-                    .await
+            ZoteroItemsWriteCommand::AddByIdentifier(args) => {
+                self.zotero_add_by_identifier_impl(args).await
             }
-            "attach_file" => {
-                self.zotero_attach_file_impl(Self::grouped_args(&args)?).await
-            }
-            action => {
-                Err(Self::invalid_group_action("zotero_items_write", action))
+            ZoteroItemsWriteCommand::AttachFile(args) => {
+                self.zotero_attach_file_impl(args).await
             }
         }
     }
@@ -760,16 +875,15 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_tags(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroTagsCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "list" => {
-                self.zotero_list_tags_impl(Self::grouped_args(&args)?).await
+        match args {
+            ZoteroTagsCommand::List(args) => {
+                self.zotero_list_tags_impl(args).await
             }
-            "search" => {
-                self.zotero_search_by_tag_impl(Self::grouped_args(&args)?).await
+            ZoteroTagsCommand::Search(args) => {
+                self.zotero_search_by_tag_impl(args).await
             }
-            action => Err(Self::invalid_group_action("zotero_tags", action)),
         }
     }
 
@@ -783,21 +897,17 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_tags_write(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroTagsWriteCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "batch_update" => {
-                self.zotero_batch_update_tags_impl(Self::grouped_args(&args)?)
-                    .await
+        match args {
+            ZoteroTagsWriteCommand::BatchUpdate(args) => {
+                self.zotero_batch_update_tags_impl(args).await
             }
-            "rename" => {
-                self.zotero_rename_tag_impl(Self::grouped_args(&args)?).await
+            ZoteroTagsWriteCommand::Rename(args) => {
+                self.zotero_rename_tag_impl(args).await
             }
-            "delete" => {
-                self.zotero_delete_tags_impl(Self::grouped_args(&args)?).await
-            }
-            action => {
-                Err(Self::invalid_group_action("zotero_tags_write", action))
+            ZoteroTagsWriteCommand::Delete(args) => {
+                self.zotero_delete_tags_impl(args).await
             }
         }
     }
@@ -811,15 +921,11 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_relations(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroRelationsCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "get" => {
-                self.zotero_get_related_items_impl(Self::grouped_args(&args)?)
-                    .await
-            }
-            action => {
-                Err(Self::invalid_group_action("zotero_relations", action))
+        match args {
+            ZoteroRelationsCommand::Get(args) => {
+                self.zotero_get_related_items_impl(args).await
             }
         }
     }
@@ -834,23 +940,15 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn zotero_relations_write(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<ZoteroRelationsWriteCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "add" => {
-                self.zotero_add_item_relation_impl(Self::grouped_args(&args)?)
-                    .await
+        match args {
+            ZoteroRelationsWriteCommand::Add(args) => {
+                self.zotero_add_item_relation_impl(args).await
             }
-            "remove" => {
-                self.zotero_remove_item_relation_impl(Self::grouped_args(
-                    &args,
-                )?)
-                .await
+            ZoteroRelationsWriteCommand::Remove(args) => {
+                self.zotero_remove_item_relation_impl(args).await
             }
-            action => Err(Self::invalid_group_action(
-                "zotero_relations_write",
-                action,
-            )),
         }
     }
 
@@ -865,49 +963,33 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn better_bibtex(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<BetterBibtexCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "citekeys" => {
-                self.better_bibtex_get_citekeys_impl(Self::grouped_args(&args)?)
-                    .await
+        match args {
+            BetterBibtexCommand::Citekeys(args) => {
+                self.better_bibtex_get_citekeys_impl(args).await
             }
-            "regenerate" => {
-                self.better_bibtex_regenerate_citekeys_impl(Self::grouped_args(
-                    &args,
-                )?)
-                .await
+            BetterBibtexCommand::Regenerate(args) => {
+                self.better_bibtex_regenerate_citekeys_impl(args).await
             }
-            "export" => {
-                self.better_bibtex_export_items_impl(Self::grouped_args(&args)?)
-                    .await
+            BetterBibtexCommand::Export(args) => {
+                self.better_bibtex_export_items_impl(args).await
             }
-            "bibliography" => {
-                self.better_bibtex_format_bibliography_impl(Self::grouped_args(
-                    &args,
-                )?)
-                .await
+            BetterBibtexCommand::Bibliography(args) => {
+                self.better_bibtex_format_bibliography_impl(args).await
             }
-            "scan_aux" => {
-                self.better_bibtex_scan_aux_impl(Self::grouped_args(&args)?)
-                    .await
+            BetterBibtexCommand::ScanAux(args) => {
+                self.better_bibtex_scan_aux_impl(args).await
             }
-            "pandoc_filter" => {
-                self.better_bibtex_pandoc_filter_impl(Self::grouped_args(
-                    &args,
-                )?)
-                .await
+            BetterBibtexCommand::PandocFilter(args) => {
+                self.better_bibtex_pandoc_filter_impl(args).await
             }
-            "autoexport_add" => {
-                self.better_bibtex_autoexport_add_impl(Self::grouped_args(
-                    &args,
-                )?)
-                .await
+            BetterBibtexCommand::AutoexportAdd(args) => {
+                self.better_bibtex_autoexport_add_impl(args).await
             }
-            "search" => {
-                self.better_bibtex_search_impl(Self::grouped_args(&args)?).await
+            BetterBibtexCommand::Search(args) => {
+                self.better_bibtex_search_impl(args).await
             }
-            action => Err(Self::invalid_group_action("better_bibtex", action)),
         }
     }
 
@@ -921,29 +1003,24 @@ impl ZoteroMcpServer {
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
     pub(crate) async fn better_notes(
         &self,
-        Parameters(args): Parameters<GroupedToolArgs>,
+        Parameters(args): Parameters<BetterNotesCommand>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args.action.as_str() {
-            "export" => {
-                self.better_notes_export_impl(Self::grouped_args(&args)?).await
+        match args {
+            BetterNotesCommand::Export(args) => {
+                self.better_notes_export_impl(args).await
             }
-            "from_markdown" => {
-                self.better_notes_from_markdown_impl(Self::grouped_args(&args)?)
-                    .await
+            BetterNotesCommand::FromMarkdown(args) => {
+                self.better_notes_from_markdown_impl(args).await
             }
-            "run_template" => {
-                self.better_notes_run_template_impl(Self::grouped_args(&args)?)
-                    .await
+            BetterNotesCommand::RunTemplate(args) => {
+                self.better_notes_run_template_impl(args).await
             }
-            "relations" => {
-                self.better_notes_get_relations_impl(Self::grouped_args(&args)?)
-                    .await
+            BetterNotesCommand::Relations(args) => {
+                self.better_notes_get_relations_impl(args).await
             }
-            "tree" => {
-                self.better_notes_get_tree_impl(Self::grouped_args(&args)?)
-                    .await
+            BetterNotesCommand::Tree(args) => {
+                self.better_notes_get_tree_impl(args).await
             }
-            action => Err(Self::invalid_group_action("better_notes", action)),
         }
     }
 

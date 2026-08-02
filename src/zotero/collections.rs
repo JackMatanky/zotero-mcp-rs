@@ -213,7 +213,7 @@ impl ZoteroClient<'_> {
         &self,
         collection_key: &CollectionKey,
         name: Option<&str>,
-        parent_key: Option<&CollectionKey>,
+        parent: Option<&CollectionParent>,
     ) -> Result<ZoteroCollection, ZoteroMcpError> {
         self.state.check_write_permission()?;
         let url = format!(
@@ -228,11 +228,9 @@ impl ZoteroClient<'_> {
         let current: ZoteroCollection = resp.json().await?;
 
         let new_name = name.unwrap_or(&current.data.name);
-        let new_parent = match parent_key {
-            Some(k) if k.as_str().is_empty() => CollectionParent::TopLevel,
-            Some(k) => CollectionParent::Parent(k.clone()),
-            None => current.data.parent_collection.clone(),
-        };
+        let new_parent = parent
+            .cloned()
+            .unwrap_or_else(|| current.data.parent_collection.clone());
         let payload = serde_json::json!({
             "key": collection_key,
             "version": current.version,

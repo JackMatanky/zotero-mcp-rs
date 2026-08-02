@@ -232,12 +232,15 @@ impl SecurityConfig {
         reason = "canonicalization is the security boundary for symlink-safe \
                   reads"
     )]
-    pub(crate) fn check_existing_read_path(
+    pub(crate) fn check_existing_read_path<'a, I>(
         &self,
         path: &Path,
-        roots: &[PathBuf],
+        roots: I,
         purpose: &str,
-    ) -> Result<PathBuf, ZoteroMcpError> {
+    ) -> Result<PathBuf, ZoteroMcpError>
+    where
+        I: IntoIterator<Item = &'a PathBuf>,
+    {
         let checked = std::fs::canonicalize(path)?;
         if path_is_allowed(&checked, roots) {
             Ok(checked)
@@ -398,9 +401,12 @@ fn parse_usize(value: OsString) -> Option<usize> {
     clippy::disallowed_methods,
     reason = "allowed-root comparisons must use canonical paths"
 )]
-fn path_is_allowed(path: &Path, roots: &[PathBuf]) -> bool {
+fn path_is_allowed<'a, I>(path: &Path, roots: I) -> bool
+where
+    I: IntoIterator<Item = &'a PathBuf>,
+{
     roots
-        .iter()
+        .into_iter()
         .filter_map(|root| std::fs::canonicalize(root).ok())
         .any(|root| path.starts_with(root))
 }

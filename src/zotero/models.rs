@@ -466,10 +466,27 @@ impl From<CollectionParent> for serde_json::Value {
     fn from(value: CollectionParent) -> Self {
         match value {
             CollectionParent::TopLevel => Self::Bool(false),
-            CollectionParent::Parent(key) => Self::String(key.to_string()),
+            CollectionParent::Parent(key) => {
+                Self::String(key.as_str().to_owned())
+            }
         }
     }
 }
+
+impl schemars::JsonSchema for CollectionParent {
+    #[inline]
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "CollectionParent".into()
+    }
+
+    #[inline]
+    fn json_schema(
+        generator: &mut schemars::SchemaGenerator,
+    ) -> schemars::Schema {
+        String::json_schema(generator)
+    }
+}
+
 /// Tag source carried in Zotero's numeric `type` field.
 ///
 /// Zotero uses `0` for user-created tags and `1` for tags assigned

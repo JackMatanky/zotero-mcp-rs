@@ -9,12 +9,18 @@
 use std::{
     env,
     path::{Path, PathBuf},
+    sync::Arc,
     time::Duration,
 };
 
 use reqwest::{Client, RequestBuilder, Response, StatusCode};
+use tokio::sync::OnceCell;
 
-use crate::{errors::ZoteroMcpError, security::SecurityConfig};
+use crate::{
+    errors::ZoteroMcpError,
+    security::SecurityConfig,
+    zotero::{LocalZoteroDb, find_zotero_db},
+};
 
 const RETRY_MAX_ATTEMPTS: u32 = 3;
 const RETRY_BASE_DELAY: Duration = Duration::from_millis(200);
@@ -48,6 +54,12 @@ impl ToolExposureMode {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) struct CachedLocalZoteroDb {
+    override_path: Option<PathBuf>,
+    db: LocalZoteroDb,
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct AppState {
     /// Shared [`Client`] connection pool.
     pub(crate) client: Client,
@@ -73,6 +85,8 @@ pub(crate) struct AppState {
     pub(crate) sqlite_access: bool,
     /// Optional direct path to `zotero.sqlite` for local database reads.
     pub(crate) zotero_db_path: Option<PathBuf>,
+    /// Cached read-only local database handle shared across SQLite tool calls.
+    pub(crate) local_zotero_db: Arc<OnceCell<CachedLocalZoteroDb>>,
     /// Which MCP tools are advertised to clients. Defaults to compact mode.
     pub(crate) tool_mode: ToolExposureMode,
 }
@@ -136,6 +150,7 @@ impl AppState {
             write_enabled,
             sqlite_access,
             zotero_db_path,
+            local_zotero_db: Self::local_zotero_db_cache(),
             tool_mode,
         }
     }
@@ -182,6 +197,53 @@ impl AppState {
         }
     }
 
+    pub(crate) fn local_zotero_db_cache() -> Arc<OnceCell<CachedLocalZoteroDb>>
+    {
+        Arc::new(OnceCell::new())
+    }
+
+    /// Returns the cached local Zotero database, opening it on first use.
+    ///
+    /// # Errors
+    ///
+    /// - [`PermissionDenied`] if local `SQLite` access is disabled
+    /// - [`LocalDb`] if the database cannot be located
+    /// - [`Sqlite`] if opening or probing the database fails
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`LocalDb`]: ZoteroMcpError::LocalDb
+    /// [`Sqlite`]: ZoteroMcpError::Sqlite
+    pub(crate) async fn local_zotero_db(
+        &self,
+    ) -> Result<&LocalZoteroDb, ZoteroMcpError> {
+        self.check_sqlite_access()?;
+        let override_path = self.zotero_db_path.clone();
+        let cached = self
+            .local_zotero_db
+            .get_or_try_init(|| async move {
+                let Some(db_path) = find_zotero_db(override_path.as_deref())
+                else {
+                    return Err(ZoteroMcpError::LocalDb(
+                        "Zotero sqlite database not found".to_owned(),
+                    ));
+                };
+                let db = LocalZoteroDb::open(&db_path).await?;
+                Ok(CachedLocalZoteroDb {
+                    override_path,
+                    db,
+                })
+            })
+            .await?;
+        if cached.override_path == self.zotero_db_path {
+            Ok(&cached.db)
+        } else {
+            Err(ZoteroMcpError::LocalDb(
+                "cached Zotero sqlite database path no longer matches state"
+                    .to_owned(),
+            ))
+        }
+    }
+
     /// Checks if direct file path access is enabled by security policy.
     ///
     /// # Errors
@@ -205,12 +267,15 @@ impl AppState {
     ///
     /// [`InputRejected`]: ZoteroMcpError::InputRejected
     /// [`Io`]: ZoteroMcpError::Io
-    pub(crate) fn check_existing_read_path(
+    pub(crate) fn check_existing_read_path<'a, I>(
         &self,
         path: &Path,
-        roots: &[PathBuf],
+        roots: I,
         purpose: &str,
-    ) -> Result<PathBuf, ZoteroMcpError> {
+    ) -> Result<PathBuf, ZoteroMcpError>
+    where
+        I: IntoIterator<Item = &'a PathBuf>,
+    {
         self.security.check_existing_read_path(path, roots, purpose)
     }
 
@@ -402,6 +467,7 @@ mod tests {
                 write_enabled,
                 sqlite_access: false,
                 zotero_db_path: None,
+                local_zotero_db: AppState::local_zotero_db_cache(),
                 tool_mode: ToolExposureMode::Compact,
                 security: SecurityConfig::default(),
             }
