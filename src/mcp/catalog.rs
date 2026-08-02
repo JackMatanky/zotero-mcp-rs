@@ -171,75 +171,44 @@ static PRIMITIVES: &[PrimitiveInfo] = &[
     },
 ];
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ToolVisibility {
-    CompactUngated,
-    CompactSqlite,
-    CompactWrite,
-    LegacyUngated,
-    LegacySqlite,
-    LegacyWrite,
-}
-
-impl ToolVisibility {
-    pub(crate) fn is_compact_visible(self, state: &AppState) -> bool {
-        match self {
-            Self::CompactUngated => true,
-            Self::CompactSqlite => state.sqlite_access,
-            Self::CompactWrite => state.write_enabled,
-            Self::LegacyUngated | Self::LegacySqlite | Self::LegacyWrite => {
-                false
-            }
-        }
-    }
-
-    pub(crate) fn is_gated_visible(self, state: &AppState) -> bool {
-        match self {
-            Self::CompactSqlite | Self::LegacySqlite => state.sqlite_access,
-            Self::CompactWrite | Self::LegacyWrite => state.write_enabled,
-            Self::CompactUngated | Self::LegacyUngated => true,
-        }
-    }
-}
-
-pub(crate) fn tool_visibility(name: &str) -> ToolVisibility {
-    match name {
-        "zotero_discover" | "zotero_status" | "zotero_search"
-        | "zotero_pdf" | "zotero_notes" | "zotero_collections"
-        | "zotero_items" | "zotero_tags" | "zotero_relations"
-        | "better_bibtex" | "better_notes" | "search" | "fetch" => {
-            ToolVisibility::CompactUngated
-        }
-        "zotero_sqlite_search" => ToolVisibility::CompactSqlite,
+/// Returns true if `name` is a write (mutating) tool, gated behind
+/// `ZOTERO_WRITE_ENABLED`.
+pub(crate) fn is_write_tool(name: &str) -> bool {
+    matches!(
+        name,
         "zotero_notes_write"
-        | "zotero_collections_write"
-        | "zotero_items_write"
-        | "zotero_tags_write"
-        | "zotero_relations_write" => ToolVisibility::CompactWrite,
-        "zotero_fulltext_search" | "zotero_search_notes_annotations" => {
-            ToolVisibility::LegacySqlite
-        }
-        "zotero_create_note"
-        | "zotero_create_collection"
-        | "zotero_manage_collections"
-        | "zotero_update_item"
-        | "zotero_attach_file"
-        | "zotero_batch_update_tags"
-        | "zotero_add_item_relation"
-        | "zotero_remove_item_relation"
-        | "zotero_delete_item"
-        | "zotero_trash_item"
-        | "zotero_restore_item"
-        | "zotero_delete_collection"
-        | "zotero_create_annotation"
-        | "zotero_add_by_identifier"
-        | "zotero_update_collection"
-        | "zotero_rename_tag"
-        | "zotero_delete_tags"
-        | "better_bibtex_regenerate_citekeys"
-        | "better_bibtex_autoexport_add" => ToolVisibility::LegacyWrite,
-        _ => ToolVisibility::LegacyUngated,
+            | "zotero_collections_write"
+            | "zotero_items_write"
+            | "zotero_tags_write"
+            | "zotero_relations_write"
+    )
+}
+
+/// Returns true if `name` is currently advertised to MCP clients given
+/// `state`'s write/`SQLite` gates.
+pub(crate) fn is_tool_visible(state: &AppState, name: &str) -> bool {
+    if is_write_tool(name) {
+        return state.write_enabled;
     }
+    if name == "zotero_sqlite_search" {
+        return state.sqlite_access;
+    }
+    matches!(
+        name,
+        "zotero_discover"
+            | "zotero_status"
+            | "zotero_search"
+            | "zotero_pdf"
+            | "zotero_notes"
+            | "zotero_collections"
+            | "zotero_items"
+            | "zotero_tags"
+            | "zotero_relations"
+            | "better_bibtex"
+            | "better_notes"
+            | "search"
+            | "fetch"
+    )
 }
 
 impl ZoteroMcpServer {

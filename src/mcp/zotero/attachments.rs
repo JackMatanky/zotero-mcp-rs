@@ -1,9 +1,6 @@
 //! MCP tool handlers for Zotero attachment items.
 
-use rmcp::{
-    handler::server::wrapper::Parameters, model::CallToolResult, tool,
-    tool_router,
-};
+use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -24,32 +21,6 @@ pub(crate) struct AttachFileArgs {
     path_or_url: String,
     /// Optional content type (default: `"application/pdf"`).
     content_type: Option<String>,
-}
-
-#[tool_router(router = attachments_router, vis = "pub(crate)")]
-impl ZoteroMcpServer {
-    #[tool(
-        name = "zotero_attach_file",
-        description = "Attach a file link to a parent item (requires write \
-                       permission)",
-        annotations(
-            title = "Attach File to Item",
-            read_only_hint = false,
-            destructive_hint = false,
-            idempotent_hint = false,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_attach_file(
-        &self,
-        Parameters(args): Parameters<AttachFileArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_attach_file_impl(args).await
-    }
 }
 
 impl ZoteroMcpServer {

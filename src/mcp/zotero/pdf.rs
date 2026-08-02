@@ -94,68 +94,6 @@ impl ZoteroMcpServer {
             }
         }
     }
-
-    #[tool(
-        name = "zotero_get_pdf_path",
-        description = "Locate the local PDF file path for an item or its \
-                       attachment",
-        annotations(
-            title = "Locate Item PDF",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_pdf_path(
-        &self,
-        Parameters(args): Parameters<GetPdfPathArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_get_pdf_path_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_read_pdf_pages",
-        description = "Extract raw text from specific 1-based pages of a PDF",
-        annotations(
-            title = "Read PDF Pages",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_read_pdf_pages(
-        &self,
-        Parameters(args): Parameters<ReadPdfPagesArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_read_pdf_pages_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_get_pdf_outline",
-        description = "Extract the PDF outline (table of contents/bookmarks) \
-                       for an item's PDF attachment or a direct PDF path",
-        annotations(
-            title = "Get PDF Outline",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_pdf_outline(
-        &self,
-        Parameters(args): Parameters<GetPdfOutlineArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_get_pdf_outline_impl(args).await
-    }
 }
 
 impl ZoteroMcpServer {

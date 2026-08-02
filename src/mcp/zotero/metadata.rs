@@ -1,9 +1,6 @@
 //! MCP tool handlers for Zotero item metadata and metadata lookup.
 
-use rmcp::{
-    handler::server::wrapper::Parameters, model::CallToolResult, tool,
-    tool_router,
-};
+use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -56,55 +53,6 @@ pub(crate) struct AddByIdentifierArgs {
     identifier: String,
     /// Optional collection key ([`CollectionKey`]) to file the new item into.
     collection_key: Option<CollectionKey>,
-}
-
-#[tool_router(router = metadata_router, vis = "pub(crate)")]
-impl ZoteroMcpServer {
-    #[tool(
-        name = "zotero_get_item_metadata",
-        description = "Get metadata for an item as JSON or formatted BibTeX \
-                       string",
-        annotations(
-            title = "Get Item Metadata",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_item_metadata(
-        &self,
-        Parameters(args): Parameters<GetItemMetadataArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_get_item_metadata_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_add_by_identifier",
-        description = "Resolve a DOI, arXiv ID, or ISBN via public metadata \
-                       APIs and add it to the library (returns the existing \
-                       item instead of creating a duplicate if an exact title \
-                       match is already present) (requires write permission)",
-        annotations(
-            title = "Add Item by Identifier",
-            read_only_hint = false,
-            destructive_hint = false,
-            idempotent_hint = true,
-            open_world_hint = true
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_add_by_identifier(
-        &self,
-        Parameters(args): Parameters<AddByIdentifierArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_add_by_identifier_impl(args).await
-    }
 }
 
 impl ZoteroMcpServer {

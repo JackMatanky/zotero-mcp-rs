@@ -17,18 +17,14 @@ use rmcp::{
     },
 };
 
-use crate::{
-    mcp::catalog::tool_visibility,
-    state::{AppState, ToolExposureMode},
-};
+use crate::{mcp::catalog::is_tool_visible, state::AppState};
 
 const SERVER_INSTRUCTIONS: &str =
     "Call zotero_discover first to find Zotero tools, resources, prompts, env \
      gates, and examples. Use zotero://... resources for read-only object \
      retrieval, including zotero://items/{item_key}. search and fetch are \
      connector compatibility tools. Write tools require \
-     ZOTERO_WRITE_ENABLED=1. SQLite tools require ZOTERO_SQLITE_ACCESS=1. \
-     ZOTERO_MCP_MODE=all exposes legacy individual tools.";
+     ZOTERO_WRITE_ENABLED=1. SQLite tools require ZOTERO_SQLITE_ACCESS=1.";
 
 /// Holds shared [`AppState`] and implements [`ServerHandler`].
 pub(crate) struct ZoteroMcpServer {
@@ -53,36 +49,18 @@ impl ZoteroMcpServer {
     }
 
     fn is_visible_tool(state: &AppState, name: &str) -> bool {
-        match state.tool_mode {
-            ToolExposureMode::All => true,
-            ToolExposureMode::Gated => Self::is_gated_tool(state, name),
-            ToolExposureMode::Compact => Self::is_compact_tool(state, name),
-        }
-    }
-
-    fn is_gated_tool(state: &AppState, name: &str) -> bool {
-        tool_visibility(name).is_gated_visible(state)
-    }
-
-    fn is_compact_tool(state: &AppState, name: &str) -> bool {
-        tool_visibility(name).is_compact_visible(state)
+        is_tool_visible(state, name)
     }
 
     fn tool_router() -> rmcp::handler::server::router::tool::ToolRouter<Self> {
         let mut router = Self::catalog_router();
         router.merge(Self::status_router());
         router.merge(Self::search_router());
-        router.merge(Self::duplicates_router());
-        router.merge(Self::coverage_router());
         router.merge(Self::sqlite_router());
         router.merge(Self::pdf_router());
         router.merge(Self::notes_router());
-        router.merge(Self::annotations_router());
         router.merge(Self::collections_router());
         router.merge(Self::items_router());
-        router.merge(Self::metadata_router());
-        router.merge(Self::fulltext_router());
-        router.merge(Self::attachments_router());
         router.merge(Self::tags_router());
         router.merge(Self::relations_router());
         router.merge(Self::better_bibtex_router());
@@ -190,8 +168,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        mcp::catalog::{DiscoverArgs, ToolVisibility, tool_visibility},
-        state::{AppState, ToolExposureMode},
+        mcp::catalog::{DiscoverArgs, is_write_tool},
+        state::AppState,
     };
     mod server_handler {
         use pretty_assertions::assert_eq;
@@ -293,10 +271,7 @@ mod tests {
                     tool.annotations.as_ref().expect("annotations");
                 let read_only =
                     annotations.read_only_hint.expect("read_only_hint");
-                let mutates = matches!(
-                    tool_visibility(tool.name.as_ref()),
-                    ToolVisibility::CompactWrite | ToolVisibility::LegacyWrite
-                );
+                let mutates = is_write_tool(tool.name.as_ref());
                 if mutates {
                     assert!(
                         !read_only,
@@ -327,36 +302,8 @@ mod tests {
         }
 
         #[test]
-        fn all_mode_keeps_registered_legacy_tools() {
+        fn visible_tools_lists_base_grouped_tools_only() {
             let mut state = AppState::from_env();
-            state.tool_mode = ToolExposureMode::All;
-
-            let names = visible_tool_names(&state);
-
-            assert!(names.contains(&"zotero_get_item".to_owned()));
-            assert!(names.contains(&"zotero_create_note".to_owned()));
-            assert!(names.contains(&"zotero_fulltext_search".to_owned()));
-        }
-
-        #[test]
-        fn gated_mode_hides_disabled_write_and_sqlite_tools() {
-            let mut state = AppState::from_env();
-            state.tool_mode = ToolExposureMode::Gated;
-            state.write_enabled = false;
-            state.sqlite_access = false;
-
-            let names = visible_tool_names(&state);
-
-            assert!(names.contains(&"zotero_get_item".to_owned()));
-            assert!(!names.contains(&"zotero_create_note".to_owned()));
-            assert!(!names.contains(&"zotero_fulltext_search".to_owned()));
-            assert!(!names.contains(&"zotero_notes_write".to_owned()));
-        }
-
-        #[test]
-        fn compact_mode_lists_base_grouped_tools_only() {
-            let mut state = AppState::from_env();
-            state.tool_mode = ToolExposureMode::Compact;
             state.write_enabled = false;
             state.sqlite_access = false;
 
@@ -383,9 +330,8 @@ mod tests {
         }
 
         #[test]
-        fn compact_mode_adds_sqlite_group_when_enabled() {
+        fn sqlite_group_appears_when_enabled() {
             let mut state = AppState::from_env();
-            state.tool_mode = ToolExposureMode::Compact;
             state.sqlite_access = true;
 
             let names = visible_tool_names(&state);
@@ -395,9 +341,8 @@ mod tests {
         }
 
         #[test]
-        fn compact_mode_adds_write_groups_when_enabled() {
+        fn write_groups_appear_when_enabled() {
             let mut state = AppState::from_env();
-            state.tool_mode = ToolExposureMode::Compact;
             state.write_enabled = true;
 
             let names = visible_tool_names(&state);
@@ -408,7 +353,7 @@ mod tests {
         }
 
         #[test]
-        fn grouped_routers_and_legacy_tools_are_registered() {
+        fn grouped_routers_are_registered() {
             let names: Vec<_> = ZoteroMcpServer::tool_router()
                 .list_all()
                 .into_iter()
@@ -418,7 +363,7 @@ mod tests {
             assert!(names.contains(&"zotero_search".to_owned()));
             assert!(names.contains(&"zotero_items_write".to_owned()));
             assert!(names.contains(&"better_notes".to_owned()));
-            assert!(names.contains(&"zotero_search_items".to_owned()));
+            assert!(!names.contains(&"zotero_search_items".to_owned()));
         }
 
         fn discover_json(

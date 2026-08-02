@@ -68,49 +68,6 @@ impl ZoteroMcpServer {
             }
         }
     }
-
-    #[tool(
-        name = "zotero_fulltext_search",
-        description = "Search Zotero's local SQLite database for full-text \
-                       matches across titles, creators, and indexed PDF text \
-                       (requires ZOTERO_SQLITE_ACCESS=1)",
-        annotations(
-            title = "Full-Text Search (SQLite)",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_fulltext_search(
-        &self,
-        Parameters(args): Parameters<FulltextSearchArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_fulltext_search_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_search_notes_annotations",
-        description = "Search Zotero's local SQLite database for note and PDF \
-                       annotation text (requires ZOTERO_SQLITE_ACCESS=1)",
-        annotations(
-            title = "Search Notes and Annotations",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_search_notes_annotations(
-        &self,
-        Parameters(args): Parameters<SearchNotesAnnotationsArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_search_notes_annotations_impl(args).await
-    }
 }
 
 impl ZoteroMcpServer {

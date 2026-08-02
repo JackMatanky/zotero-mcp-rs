@@ -31,27 +31,6 @@ const RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
 ///
 /// Constructed once at startup via [`AppState::from_env`] and passed by
 /// reference to every backend client for the lifetime of the server.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ToolExposureMode {
-    Compact,
-    Gated,
-    All,
-}
-
-impl ToolExposureMode {
-    fn from_env() -> Self {
-        env::var("ZOTERO_MCP_MODE")
-            .map_or(Self::Compact, |value| Self::from_env_value(&value))
-    }
-
-    fn from_env_value(value: &str) -> Self {
-        match value.to_lowercase().as_str() {
-            "all" => Self::All,
-            "gated" => Self::Gated,
-            _ => Self::Compact,
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub(crate) struct CachedLocalZoteroDb {
@@ -88,8 +67,6 @@ pub(crate) struct AppState {
     /// Cached read-only local database handle shared across `SQLite` tool
     /// calls.
     pub(crate) local_zotero_db: Arc<OnceCell<CachedLocalZoteroDb>>,
-    /// Which MCP tools are advertised to clients. Defaults to compact mode.
-    pub(crate) tool_mode: ToolExposureMode,
 }
 
 impl AppState {
@@ -137,7 +114,6 @@ impl AppState {
         let sqlite_access = env::var("ZOTERO_SQLITE_ACCESS")
             .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
         let zotero_db_path = env::var_os("ZOTERO_DB_PATH").map(PathBuf::from);
-        let tool_mode = ToolExposureMode::from_env();
 
         Self {
             client,
@@ -152,7 +128,6 @@ impl AppState {
             sqlite_access,
             zotero_db_path,
             local_zotero_db: Self::local_zotero_db_cache(),
-            tool_mode,
         }
     }
 
@@ -451,7 +426,7 @@ mod tests {
 
         use reqwest::Client;
 
-        use super::{AppState, ToolExposureMode};
+        use super::AppState;
         use crate::security::SecurityConfig;
 
         /// Builds an [`AppState`] with empty backend URLs, for tests that
@@ -469,7 +444,6 @@ mod tests {
                 sqlite_access: false,
                 zotero_db_path: None,
                 local_zotero_db: AppState::local_zotero_db_cache(),
-                tool_mode: ToolExposureMode::Compact,
                 security: SecurityConfig::default(),
             }
         }
@@ -491,34 +465,6 @@ mod tests {
                 }
             });
             format!("http://{addr}")
-        }
-    }
-
-    mod tool_exposure_mode {
-        use super::super::ToolExposureMode;
-
-        #[test]
-        fn parses_all_mode() {
-            assert_eq!(
-                ToolExposureMode::from_env_value("all"),
-                ToolExposureMode::All
-            );
-        }
-
-        #[test]
-        fn parses_gated_mode() {
-            assert_eq!(
-                ToolExposureMode::from_env_value("gated"),
-                ToolExposureMode::Gated
-            );
-        }
-
-        #[test]
-        fn defaults_unknown_mode_to_compact() {
-            assert_eq!(
-                ToolExposureMode::from_env_value("unknown"),
-                ToolExposureMode::Compact
-            );
         }
     }
 

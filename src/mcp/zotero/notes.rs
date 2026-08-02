@@ -101,49 +101,6 @@ impl ZoteroMcpServer {
             }
         }
     }
-
-    #[tool(
-        name = "zotero_get_notes",
-        description = "Fetch all note child items for a given item key",
-        annotations(
-            title = "Get Item Notes",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_notes(
-        &self,
-        Parameters(args): Parameters<GetNotesArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_get_notes_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_create_note",
-        description = "Attach a new note to an item (requires write \
-                       permission)",
-        annotations(
-            title = "Create Note",
-            read_only_hint = false,
-            destructive_hint = false,
-            idempotent_hint = false,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_create_note(
-        &self,
-        Parameters(args): Parameters<CreateNoteArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_create_note_impl(args).await
-    }
 }
 
 impl ZoteroMcpServer {

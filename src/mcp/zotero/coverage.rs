@@ -1,9 +1,6 @@
 //! MCP tool handlers for Zotero library coverage metrics.
 
-use rmcp::{
-    handler::server::wrapper::Parameters, model::CallToolResult, tool,
-    tool_router,
-};
+use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -22,30 +19,6 @@ pub(crate) struct LibraryCoverageArgs {
     start: Option<usize>,
     /// Maximum number of items to analyze (default: 100, max: 500).
     limit: Option<usize>,
-}
-
-#[tool_router(router = coverage_router, vis = "pub(crate)")]
-impl ZoteroMcpServer {
-    #[tool(
-        name = "zotero_library_coverage",
-        description = "Analyze library or collection statistics for PDF, DOI, \
-                       and note coverage",
-        annotations(
-            title = "Library Coverage Report",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_library_coverage(
-        &self,
-        Parameters(args): Parameters<LibraryCoverageArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_library_coverage_impl(args).await
-    }
 }
 
 impl ZoteroMcpServer {

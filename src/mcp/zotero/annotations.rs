@@ -1,9 +1,6 @@
 //! MCP tool handlers for Zotero PDF annotations and synthesis.
 
-use rmcp::{
-    handler::server::wrapper::Parameters, model::CallToolResult, tool,
-    tool_router,
-};
+use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -39,53 +36,6 @@ pub(crate) struct CreateAnnotationArgs {
     page_label: Option<String>,
     /// Zotero `annotationPosition` JSON object.
     position: AnnotationPosition,
-}
-
-#[tool_router(router = annotations_router, vis = "pub(crate)")]
-impl ZoteroMcpServer {
-    #[tool(
-        name = "zotero_synthesize_annotations",
-        description = "Extract and synthesize annotations and notes into \
-                       structured Markdown",
-        annotations(
-            title = "Synthesize Annotations",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_synthesize_annotations(
-        &self,
-        Parameters(args): Parameters<SynthesizeAnnotationsArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_synthesize_annotations_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_create_annotation",
-        description = "Create a PDF highlight/underline/note annotation on an \
-                       attachment (requires write permission)",
-        annotations(
-            title = "Create PDF Annotation",
-            read_only_hint = false,
-            destructive_hint = false,
-            idempotent_hint = false,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_create_annotation(
-        &self,
-        Parameters(args): Parameters<CreateAnnotationArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_create_annotation_impl(args).await
-    }
 }
 
 impl ZoteroMcpServer {
