@@ -1,4 +1,4 @@
-//! MCP capability catalog and discovery tool routing.
+//! MCP primitive catalog and discovery tool routing.
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -12,7 +12,7 @@ use crate::{ZoteroMcpServer, state::AppState};
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DiscoverArgs {
     pub(crate) query: Option<String>,
-    pub(crate) domain: Option<CapabilityDomain>,
+    pub(crate) domain: Option<PrimitiveDomain>,
     pub(crate) include_disabled: Option<bool>,
 }
 
@@ -20,7 +20,7 @@ pub(crate) struct DiscoverArgs {
     Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, JsonSchema,
 )]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum CapabilityKind {
+pub(crate) enum PrimitiveKind {
     Tool,
     Resource,
     Prompt,
@@ -30,7 +30,7 @@ pub(crate) enum CapabilityKind {
     Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum CapabilityDomain {
+pub(crate) enum PrimitiveDomain {
     Discovery,
     Items,
     Collections,
@@ -41,7 +41,7 @@ pub(crate) enum CapabilityDomain {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-pub(crate) enum CapabilityGate {
+pub(crate) enum EnvGate {
     #[serde(rename = "ZOTERO_WRITE_ENABLED")]
     WriteEnabled,
     #[serde(rename = "ZOTERO_SQLITE_ACCESS")]
@@ -49,22 +49,22 @@ pub(crate) enum CapabilityGate {
 }
 
 #[derive(Clone, Copy, Serialize)]
-struct CapabilityInfo {
+struct PrimitiveInfo {
     name: &'static str,
-    kind: CapabilityKind,
-    domain: CapabilityDomain,
-    requires: &'static [CapabilityGate],
+    kind: PrimitiveKind,
+    domain: PrimitiveDomain,
+    requires: &'static [EnvGate],
     summary: &'static str,
     example: Option<&'static str>,
     #[serde(skip_serializing)]
     search_text: &'static str,
 }
 
-static CAPABILITIES: &[CapabilityInfo] = &[
-    CapabilityInfo {
+static PRIMITIVES: &[PrimitiveInfo] = &[
+    PrimitiveInfo {
         name: "zotero_discover",
-        kind: CapabilityKind::Tool,
-        domain: CapabilityDomain::Discovery,
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Discovery,
         requires: &[],
         summary: "Find Zotero tools, resources, prompts, env gates, and \
                   examples",
@@ -72,30 +72,30 @@ static CAPABILITIES: &[CapabilityInfo] = &[
         search_text: "zotero_discover discovery find zotero tools resources \
                       prompts env gates and examples",
     },
-    CapabilityInfo {
+    PrimitiveInfo {
         name: "zotero://items/{item_key}",
-        kind: CapabilityKind::Resource,
-        domain: CapabilityDomain::Items,
+        kind: PrimitiveKind::Resource,
+        domain: PrimitiveDomain::Items,
         requires: &[],
         summary: "Read one Zotero item by key",
         example: Some("zotero://items/ITEMKEY"),
         search_text: "zotero://items/{item_key} items read one zotero item by \
                       key",
     },
-    CapabilityInfo {
+    PrimitiveInfo {
         name: "zotero://collections/{collection_key}/items",
-        kind: CapabilityKind::Resource,
-        domain: CapabilityDomain::Collections,
+        kind: PrimitiveKind::Resource,
+        domain: PrimitiveDomain::Collections,
         requires: &[],
         summary: "Read collection items",
         example: Some("zotero://collections/COLKEY/items"),
         search_text: "zotero://collections/{collection_key}/items collections \
                       read collection items",
     },
-    CapabilityInfo {
+    PrimitiveInfo {
         name: "zotero_search",
-        kind: CapabilityKind::Tool,
-        domain: CapabilityDomain::Search,
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Search,
         requires: &[],
         summary: "Grouped search actions: items, tag, citation_key, advanced, \
                   duplicates, coverage",
@@ -103,10 +103,10 @@ static CAPABILITIES: &[CapabilityInfo] = &[
         search_text: "zotero_search search grouped search actions items tag \
                       citation_key advanced duplicates coverage",
     },
-    CapabilityInfo {
+    PrimitiveInfo {
         name: "zotero_items",
-        kind: CapabilityKind::Tool,
-        domain: CapabilityDomain::Items,
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Items,
         requires: &[],
         summary: "Grouped item read actions: recent, get, metadata, children, \
                   fulltext",
@@ -114,21 +114,21 @@ static CAPABILITIES: &[CapabilityInfo] = &[
         search_text: "zotero_items items grouped item read actions recent get \
                       metadata children fulltext",
     },
-    CapabilityInfo {
+    PrimitiveInfo {
         name: "zotero_notes",
-        kind: CapabilityKind::Tool,
-        domain: CapabilityDomain::Notes,
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Notes,
         requires: &[],
         summary: "Grouped note read actions: list, synthesize",
         example: Some(r#"{"action":"list","item_key":"ITEMKEY"}"#),
         search_text: "zotero_notes notes grouped note read actions list \
                       synthesize",
     },
-    CapabilityInfo {
+    PrimitiveInfo {
         name: "zotero_items_write",
-        kind: CapabilityKind::Tool,
-        domain: CapabilityDomain::Items,
-        requires: &[CapabilityGate::WriteEnabled],
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Items,
+        requires: &[EnvGate::WriteEnabled],
         summary: "Grouped item write actions: update, delete, trash, restore, \
                   add_by_identifier, attach_file",
         example: Some(r#"{"action":"trash","item_key":"ITEMKEY"}"#),
@@ -136,11 +136,11 @@ static CAPABILITIES: &[CapabilityInfo] = &[
                       update delete trash restore add_by_identifier \
                       attach_file zotero_write_enabled",
     },
-    CapabilityInfo {
+    PrimitiveInfo {
         name: "zotero_notes_write",
-        kind: CapabilityKind::Tool,
-        domain: CapabilityDomain::Notes,
-        requires: &[CapabilityGate::WriteEnabled],
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Notes,
+        requires: &[EnvGate::WriteEnabled],
         summary: "Grouped note write actions: create, annotation",
         example: Some(
             r##"{"action":"create","parent_key":"ITEMKEY","markdown":"# Note"}"##,
@@ -148,21 +148,21 @@ static CAPABILITIES: &[CapabilityInfo] = &[
         search_text: "zotero_notes_write notes grouped note write actions \
                       create annotation zotero_write_enabled",
     },
-    CapabilityInfo {
+    PrimitiveInfo {
         name: "zotero_sqlite_search",
-        kind: CapabilityKind::Tool,
-        domain: CapabilityDomain::Sqlite,
-        requires: &[CapabilityGate::SqliteAccess],
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Sqlite,
+        requires: &[EnvGate::SqliteAccess],
         summary: "Grouped local SQLite search actions: fulltext, \
                   notes_annotations",
         example: Some(r#"{"action":"fulltext","query":"borrow checker"}"#),
         search_text: "zotero_sqlite_search sqlite grouped local sqlite search \
                       actions fulltext notes_annotations zotero_sqlite_access",
     },
-    CapabilityInfo {
+    PrimitiveInfo {
         name: "zotero_literature_review",
-        kind: CapabilityKind::Prompt,
-        domain: CapabilityDomain::Prompts,
+        kind: PrimitiveKind::Prompt,
+        domain: PrimitiveDomain::Prompts,
         requires: &[],
         summary: "Generate a literature review prompt for a collection",
         example: Some(r#"{"collection_key":"COLKEY"}"#),
@@ -243,34 +243,30 @@ pub(crate) fn tool_visibility(name: &str) -> ToolVisibility {
 }
 
 impl ZoteroMcpServer {
-    fn discover_capabilities(
-        &self,
-        args: &DiscoverArgs,
-    ) -> Vec<CapabilityInfo> {
+    fn discover_primitives(&self, args: &DiscoverArgs) -> Vec<PrimitiveInfo> {
         let query = args.query.as_ref().map(|value| value.to_lowercase());
-        CAPABILITIES
+        PRIMITIVES
             .iter()
             .copied()
-            .filter(|capability| {
+            .filter(|primitive| {
                 args.include_disabled == Some(true)
-                    || self.is_capability_enabled(*capability)
+                    || self.is_primitive_enabled(*primitive)
             })
-            .filter(|capability| {
-                args.domain.is_none_or(|domain| capability.domain == domain)
+            .filter(|primitive| {
+                args.domain.is_none_or(|domain| primitive.domain == domain)
             })
-            .filter(|capability| {
+            .filter(|primitive| {
                 query
                     .as_deref()
-                    .is_none_or(|query| capability.search_text.contains(query))
+                    .is_none_or(|query| primitive.search_text.contains(query))
             })
             .collect()
     }
 
-    fn is_capability_enabled(&self, capability: CapabilityInfo) -> bool {
-        !capability.requires.iter().any(|requirement| {
-            (*requirement == CapabilityGate::WriteEnabled
-                && !self.state.write_enabled)
-                || (*requirement == CapabilityGate::SqliteAccess
+    fn is_primitive_enabled(&self, primitive: PrimitiveInfo) -> bool {
+        !primitive.requires.iter().any(|requirement| {
+            (*requirement == EnvGate::WriteEnabled && !self.state.write_enabled)
+                || (*requirement == EnvGate::SqliteAccess
                     && !self.state.sqlite_access)
         })
     }
@@ -281,11 +277,11 @@ impl ZoteroMcpServer {
     ) -> CallToolResult {
         #[derive(Serialize)]
         struct DiscoveryResponse {
-            capabilities: Vec<CapabilityInfo>,
+            capabilities: Vec<PrimitiveInfo>,
         }
 
         crate::mcp::json_success(&DiscoveryResponse {
-            capabilities: self.discover_capabilities(args),
+            capabilities: self.discover_primitives(args),
         })
     }
 }
