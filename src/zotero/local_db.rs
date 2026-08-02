@@ -13,7 +13,6 @@
 //! [`AppState`]: crate::state::AppState
 
 use std::{
-    collections::HashSet,
     env,
     path::{Path, PathBuf},
     str::FromStr,
@@ -26,7 +25,7 @@ use sqlx::{Row, SqlitePool, sqlite::SqliteConnectOptions};
 use crate::{errors::ZoteroMcpError, zotero::models::ItemKey};
 
 /// Max rows to pull from the full-text scan before filtering in Rust.
-const FULLTEXT_SCAN_CAP: i64 = 2000;
+const FULLTEXT_SCAN_CAP: usize = 2000;
 
 /// Opens Zotero's local sqlite database in immutable read-only mode.
 #[derive(Clone, Debug)]
@@ -94,7 +93,36 @@ impl LocalZoteroDb {
         let query_lc = query.to_lowercase();
         let query_tokens: Vec<String> =
             query_lc.split_whitespace().map(str::to_owned).collect();
-        let rows = sqlx::query(
+        let result_cap =
+            limit.saturating_mul(5).max(limit).min(FULLTEXT_SCAN_CAP);
+        let mut token_placeholders = "?,".repeat(query_tokens.len());
+        token_placeholders.pop();
+        let word_hits_join = if query_tokens.is_empty() {
+            String::new()
+        } else {
+            format!(
+                r"
+            LEFT JOIN (
+                SELECT ia.parentItemID AS itemID,
+                       COUNT(DISTINCT fw.word) AS matched_words
+                FROM fulltextItemWords fiw
+                JOIN fulltextWords fw ON fw.wordID = fiw.wordID
+                JOIN itemAttachments ia ON ia.itemID = fiw.itemID
+                WHERE ia.parentItemID IS NOT NULL
+                  AND fw.word IN ({token_placeholders})
+                GROUP BY ia.parentItemID
+            ) word_hits ON word_hits.itemID = i.itemID"
+            )
+        };
+        let fulltext_predicate = if query_tokens.is_empty() {
+            "0".to_owned()
+        } else {
+            format!(
+                "COALESCE(word_hits.matched_words, 0) = {}",
+                query_tokens.len()
+            )
+        };
+        let sql = format!(
             r"
             SELECT i.key, it.typeName AS item_type,
                    title.value AS title, doi.value AS doi,
@@ -141,42 +169,40 @@ impl LocalZoteroDb {
                 WHERE ia.parentItemID IS NOT NULL
                 GROUP BY ia.parentItemID
             ) words ON words.itemID = i.itemID
+            {word_hits_join}
             WHERE it.typeName NOT IN ('attachment', 'note', 'annotation')
               AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
+              AND (
+                lower(COALESCE(title.value, '')) LIKE ?
+                OR lower(COALESCE(doi.value, '')) LIKE ?
+                OR lower(COALESCE(extra.value, '')) LIKE ?
+                OR lower(COALESCE(creators.creators, '')) LIKE ?
+                OR {fulltext_predicate}
+              )
             LIMIT ?
-            ",
-        )
-        .bind(FULLTEXT_SCAN_CAP)
-        .fetch_all(&self.pool)
-        .await?;
+            "
+        );
+        let mut query_builder = sqlx::query(&sql);
+        for token in &query_tokens {
+            query_builder = query_builder.bind(token);
+        }
+        let pattern = format!("%{query_lc}%");
+        query_builder = query_builder
+            .bind(pattern.as_str())
+            .bind(pattern.as_str())
+            .bind(pattern.as_str())
+            .bind(pattern.as_str())
+            .bind(i64::try_from(result_cap).unwrap_or(2000));
+        let rows = query_builder.fetch_all(&self.pool).await?;
 
         let mut hits = Vec::new();
         for row in rows {
-            let title: Option<String> = row.try_get("title")?;
-            let doi: Option<String> = row.try_get("doi")?;
-            let extra: Option<String> = row.try_get("extra")?;
-            let creators: Option<String> = row.try_get("creators")?;
-            let words: Option<String> = row.try_get("words")?;
-
-            let haystack = format!(
-                "{} {} {} {}",
-                title.as_deref().unwrap_or(""),
-                creators.as_deref().unwrap_or(""),
-                doi.as_deref().unwrap_or(""),
-                extra.as_deref().unwrap_or("")
-            );
-            let metadata_match = haystack.to_lowercase().contains(&query_lc);
-            let word_set: HashSet<&str> = words
-                .as_deref()
-                .map(|w| w.split_whitespace().collect())
-                .unwrap_or_default();
-            let fulltext_match = !query_tokens.is_empty()
-                && query_tokens.iter().all(|t| word_set.contains(t.as_str()));
-            if !metadata_match && !fulltext_match {
-                continue;
-            }
             let key: String = row.try_get("key")?;
             let item_type: String = row.try_get("item_type")?;
+            let title: Option<String> = row.try_get("title")?;
+            let doi: Option<String> = row.try_get("doi")?;
+            let creators: Option<String> = row.try_get("creators")?;
+            let words: Option<String> = row.try_get("words")?;
             hits.push(FulltextHit {
                 key: ItemKey::from(key),
                 item_type,
@@ -188,10 +214,8 @@ impl LocalZoteroDb {
                     .map(|w| w.chars().take(400).collect())
                     .unwrap_or_default(),
             });
-            if hits.len() >= limit {
-                break;
-            }
         }
+        hits.truncate(limit);
         Ok(hits)
     }
 
@@ -207,7 +231,9 @@ impl LocalZoteroDb {
         query: &str,
         limit: usize,
     ) -> Result<Vec<NoteAnnotationHit>, ZoteroMcpError> {
+        let query_lc = query.to_lowercase();
         let pattern = format!("%{query}%");
+        let fetch_limit = limit.saturating_mul(5).max(limit).min(500);
         let note_rows = sqlx::query(
             r"
             SELECT i.key, n.note, n.title,
@@ -224,7 +250,7 @@ impl LocalZoteroDb {
             ",
         )
         .bind(pattern.as_str())
-        .bind(i64::try_from(limit).unwrap_or(20))
+        .bind(i64::try_from(fetch_limit).unwrap_or(20))
         .fetch_all(&self.pool)
         .await?;
 
@@ -256,7 +282,7 @@ impl LocalZoteroDb {
         for row in note_rows {
             let note: Option<String> = row.try_get("note")?;
             let clean = strip_html(note.as_deref().unwrap_or(""));
-            if !clean.to_lowercase().contains(&query.to_lowercase()) {
+            if !clean.to_lowercase().contains(&query_lc) {
                 continue;
             }
             hits.push(NoteAnnotationHit {
@@ -344,7 +370,10 @@ pub(crate) struct NoteAnnotationHit {
 
 /// Locates `zotero.sqlite` via `ZOTERO_DB_PATH`, the `prefs.js` `dataDir`
 /// preference in any profile dir, or the per-user default, in that order.
-pub(crate) fn find_zotero_db() -> Option<PathBuf> {
+pub(crate) fn find_zotero_db(override_path: Option<&Path>) -> Option<PathBuf> {
+    if let Some(path) = override_path {
+        return Some(path.to_path_buf());
+    }
     if let Some(path) = env::var_os("ZOTERO_DB_PATH").map(PathBuf::from) {
         if path.is_file() {
             return Some(path);
@@ -446,6 +475,8 @@ fn strip_html(html: &str) -> String {
 mod tests {
     use std::path::Path;
 
+    use pretty_assertions::assert_eq;
+
     use super::*;
 
     #[expect(
@@ -461,7 +492,6 @@ mod tests {
         .create_if_missing(true);
         let pool = SqlitePool::connect_with(opts).await.unwrap();
 
-        // Items + itemTypes
         sqlx::query(
             "CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName \
              TEXT)",
@@ -550,7 +580,6 @@ mod tests {
         .await
         .unwrap();
 
-        // fields: title=1, extra=16, DOI
         sqlx::query(
             "INSERT INTO fields (fieldID, fieldName) VALUES (1, 'title'), \
              (16, 'extra'), (7, 'DOI')",
@@ -565,9 +594,6 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-
-        // item 1: "Rust in Action" whose PDF attachment indexes "borrow
-        // checker"
         sqlx::query(
             "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
              dateModified) VALUES (1, 'K00001', 1, '2024-01-01', '2024-02-01')",
@@ -589,7 +615,6 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        // attachment child (item 3) carries the indexed fulltext words
         sqlx::query(
             "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
              dateModified) VALUES (3, 'A00001', 3, '2024-01-02', '2024-02-02')",
@@ -633,8 +658,6 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-
-        // item 2: a note child of item 1
         sqlx::query(
             "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
              dateModified) VALUES (2, 'N00001', 2, '2024-03-01', '2024-03-01')",
@@ -659,9 +682,6 @@ mod tests {
         let db_path = dir.path().join("zotero.sqlite");
         seed_db(&db_path).await;
 
-        // open() succeeding means probe_schema passed. Prove the pool is
-        // usable with a real query rather than asserting pool.size() (which
-        // is 0 until a connection is actually used).
         let db = LocalZoteroDb::open(&db_path).await.unwrap();
         let hits = db.search_fulltext("safety", 5).await.unwrap();
         assert_eq!(hits.len(), 1);
@@ -706,6 +726,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fulltext_search_matches_metadata_or_all_fulltext_tokens() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("zotero.sqlite");
+        seed_db(&db_path).await;
+        let db = LocalZoteroDb::open(&db_path).await.unwrap();
+
+        let metadata_hits =
+            db.search_fulltext("Rust in Action", 10).await.unwrap();
+        assert_eq!(metadata_hits.len(), 1);
+        assert_eq!(metadata_hits[0].title.as_deref(), Some("Rust in Action"));
+
+        let fulltext_hits =
+            db.search_fulltext("borrow checker", 10).await.unwrap();
+        assert_eq!(fulltext_hits.len(), 1);
+        assert_eq!(fulltext_hits[0].title.as_deref(), Some("Rust in Action"));
+    }
+
+    #[tokio::test]
     async fn searches_notes_and_annotations() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("zotero.sqlite");
@@ -720,5 +758,41 @@ mod tests {
             hit.parent_key.as_ref().map(ItemKey::as_str),
             Some("K00001")
         );
+    }
+
+    #[tokio::test]
+    async fn searches_notes_past_html_false_positives_before_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("zotero.sqlite");
+        seed_db(&db_path).await;
+        let opts = SqliteConnectOptions::from_str(&format!(
+            "sqlite://{}",
+            db_path.display()
+        ))
+        .unwrap();
+        let pool = SqlitePool::connect_with(opts).await.unwrap();
+        sqlx::query(
+            "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
+             dateModified) VALUES (4, 'N00002', 2, '2024-03-02', \
+             '2024-03-02'), (5, 'N00003', 2, '2024-03-03', '2024-03-03')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO itemNotes (itemID, parentItemID, note, title) VALUES \
+             (4, 1, '<span data-query=\"visible\"></span>', 'hidden'), (5, 1, \
+             '<p>visible note</p>', 'visible')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+
+        let db = LocalZoteroDb::open(&db_path).await.unwrap();
+        let hits = db.search_notes_annotations("visible", 1).await.unwrap();
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].key.as_str(), "N00003");
     }
 }

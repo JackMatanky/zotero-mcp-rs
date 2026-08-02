@@ -30,6 +30,28 @@ const RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
 ///
 /// Constructed once at startup via [`AppState::from_env`] and passed by
 /// reference to every backend client for the lifetime of the server.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ToolExposureMode {
+    Compact,
+    Filtered,
+    All,
+}
+
+impl ToolExposureMode {
+    fn from_env() -> Self {
+        env::var("ZOTERO_MCP_MODE")
+            .map_or(Self::Compact, |value| Self::from_env_value(&value))
+    }
+
+    fn from_env_value(value: &str) -> Self {
+        match value.to_lowercase().as_str() {
+            "all" => Self::All,
+            "filtered" => Self::Filtered,
+            _ => Self::Compact,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct AppState {
     /// Shared [`Client`] connection pool.
@@ -54,6 +76,10 @@ pub(crate) struct AppState {
     /// Whether direct read access to the local Zotero `SQLite` database is
     /// allowed. Defaults to false; enable by setting `ZOTERO_SQLITE_ACCESS`.
     pub(crate) sqlite_access: bool,
+    /// Optional direct path to `zotero.sqlite` for local database reads.
+    pub(crate) zotero_db_path: Option<PathBuf>,
+    /// Which MCP tools are advertised to clients. Defaults to compact mode.
+    pub(crate) tool_mode: ToolExposureMode,
 }
 
 impl AppState {
@@ -66,8 +92,9 @@ impl AppState {
     /// `"true"`, case-insensitive) to opt into write operations, defaulting to
     /// read-only. `ZOTERO_SQLITE_ACCESS` (`"1"` or `"true"`,
     /// case-insensitive) likewise gates direct reads of the local Zotero
-    /// `SQLite` database, defaulting to disabled. Returns the constructed
-    /// [`AppState`].
+    /// `SQLite` database, defaulting to disabled. `ZOTERO_DB_PATH` optionally
+    /// points directly to `zotero.sqlite` when `SQLite` access is enabled.
+    /// Returns the constructed [`AppState`].
     pub(crate) fn from_env() -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(15))
@@ -99,6 +126,8 @@ impl AppState {
 
         let sqlite_access = env::var("ZOTERO_SQLITE_ACCESS")
             .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+        let zotero_db_path = env::var_os("ZOTERO_DB_PATH").map(PathBuf::from);
+        let tool_mode = ToolExposureMode::from_env();
 
         Self {
             client,
@@ -111,6 +140,8 @@ impl AppState {
             security: SecurityConfig::from_env(),
             write_enabled,
             sqlite_access,
+            zotero_db_path,
+            tool_mode,
         }
     }
 
@@ -244,13 +275,6 @@ impl AppState {
     /// - [`InputRejected`] if size exceeds maximum byte limits
     ///
     /// [`InputRejected`]: ZoteroMcpError::InputRejected
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "HTML cap is enforced in the Zotero bridge"
-        )
-    )]
     pub(crate) fn check_html_size(
         &self,
         html: &str,
@@ -366,7 +390,7 @@ mod tests {
 
         use reqwest::Client;
 
-        use super::AppState;
+        use super::{AppState, ToolExposureMode};
         use crate::security::SecurityConfig;
 
         /// Builds an [`AppState`] with empty backend URLs, for tests that
@@ -382,6 +406,8 @@ mod tests {
                 open_library_url: String::new(),
                 write_enabled,
                 sqlite_access: false,
+                zotero_db_path: None,
+                tool_mode: ToolExposureMode::Compact,
                 security: SecurityConfig::default(),
             }
         }
@@ -403,6 +429,34 @@ mod tests {
                 }
             });
             format!("http://{addr}")
+        }
+    }
+
+    mod tool_exposure_mode {
+        use super::super::ToolExposureMode;
+
+        #[test]
+        fn parses_all_mode() {
+            assert_eq!(
+                ToolExposureMode::from_env_value("all"),
+                ToolExposureMode::All
+            );
+        }
+
+        #[test]
+        fn parses_filtered_mode() {
+            assert_eq!(
+                ToolExposureMode::from_env_value("filtered"),
+                ToolExposureMode::Filtered
+            );
+        }
+
+        #[test]
+        fn defaults_unknown_mode_to_compact() {
+            assert_eq!(
+                ToolExposureMode::from_env_value("unknown"),
+                ToolExposureMode::Compact
+            );
         }
     }
 
@@ -478,6 +532,20 @@ mod tests {
 
             // Assert
             assert!(matches!(result, Err(ZoteroMcpError::PermissionDenied(_))));
+        }
+    }
+
+    mod check_html_size {
+        use super::{super::*, fixtures::test_state};
+
+        #[test]
+        fn check_html_size_rejects_oversized_html() {
+            let state = test_state(false);
+            let html = "x".repeat(state.security.max_html_bytes + 1);
+
+            let result = state.check_html_size(&html);
+
+            assert!(matches!(result, Err(ZoteroMcpError::InputRejected(_))));
         }
     }
 

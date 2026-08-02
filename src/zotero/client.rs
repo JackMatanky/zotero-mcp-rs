@@ -18,10 +18,10 @@ use crate::{
     zotero::models::{LibraryVersion, LocalApiStatus, ZoteroItem},
 };
 
-/// A page of items plus the server-reported total result count.
+/// A page of items plus the server-reported total result count, when present.
 pub(super) struct ItemsPage {
     pub(super) items: Vec<ZoteroItem>,
-    pub(super) total: usize,
+    pub(super) total: Option<usize>,
 }
 
 /// Client for the Zotero Local HTTP API, scoped to a single tool call.
@@ -186,8 +186,7 @@ impl<'a> ZoteroClient<'a> {
             .headers()
             .get("Total-Results")
             .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.parse::<usize>().ok())
-            .unwrap_or(0);
+            .and_then(|v| v.parse::<usize>().ok());
         let items = resp.json().await?;
         Ok(ItemsPage {
             items,
@@ -680,12 +679,12 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(page.total, 42);
+            assert_eq!(page.total, Some(42));
             assert_eq!(page.items.len(), 1);
         }
 
         #[tokio::test]
-        async fn falls_back_to_zero_when_header_absent() {
+        async fn returns_unknown_total_when_header_absent() {
             let base = mock_server(vec![http_response("200 OK", ITEMS)]);
             let state = test_state(base, false);
 
@@ -695,12 +694,12 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(page.total, 0);
+            assert_eq!(page.total, None);
             assert_eq!(page.items.len(), 1);
         }
 
         #[tokio::test]
-        async fn falls_back_to_zero_when_header_is_non_numeric() {
+        async fn returns_unknown_total_when_header_is_non_numeric() {
             let base = mock_server(vec![http_response_with_headers(
                 "200 OK",
                 &[("Total-Results", "abc")],
@@ -714,7 +713,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(page.total, 0);
+            assert_eq!(page.total, None);
             assert_eq!(page.items.len(), 1);
         }
     }

@@ -15,8 +15,30 @@ use serde::Serialize;
 
 use crate::{
     ZoteroMcpServer,
-    zotero::{ItemKey, ZoteroClient},
+    zotero::{CollectionKey, ItemKey, ItemType, ZoteroClient, ZoteroItem},
 };
+
+fn resource_template(
+    uri_template: &str,
+    name: &str,
+    description: &str,
+) -> rmcp::model::ResourceTemplate {
+    let raw = rmcp::model::RawResourceTemplate {
+        uri_template: uri_template.to_owned(),
+        name: name.to_owned(),
+        title: None,
+        description: Some(description.to_owned()),
+        mime_type: Some("application/json".to_owned()),
+    };
+    rmcp::model::Annotated::new(raw, None)
+}
+
+fn note_children(children: Vec<ZoteroItem>) -> Vec<ZoteroItem> {
+    children
+        .into_iter()
+        .filter(|child| child.data.item_type == ItemType::Note)
+        .collect()
+}
 
 impl ZoteroMcpServer {
     /// Lists MCP resources exposed by the server as a [`ListResourcesResult`].
@@ -40,6 +62,46 @@ impl ZoteroMcpServer {
         }
     }
 
+    pub(crate) fn list_resource_templates_impl()
+    -> rmcp::model::ListResourceTemplatesResult {
+        rmcp::model::ListResourceTemplatesResult {
+            resource_templates: vec![
+                resource_template(
+                    "zotero://items/{item_key}",
+                    "Zotero Item",
+                    "Read one Zotero item by key",
+                ),
+                resource_template(
+                    "zotero://items/{item_key}/children",
+                    "Zotero Item Children",
+                    "Read child notes, attachments, and annotations for an \
+                     item",
+                ),
+                resource_template(
+                    "zotero://items/{item_key}/notes",
+                    "Zotero Item Notes",
+                    "Read child notes for an item",
+                ),
+                resource_template(
+                    "zotero://items/{item_key}/relations",
+                    "Zotero Item Relations",
+                    "Read related items for an item",
+                ),
+                resource_template(
+                    "zotero://collections/{collection_key}/items",
+                    "Zotero Collection Items",
+                    "Read items in a collection",
+                ),
+                resource_template(
+                    "zotero://tags",
+                    "Zotero Tags",
+                    "Read all Zotero tags",
+                ),
+            ],
+            next_cursor: None,
+        }
+    }
+
     /// Reads a single MCP resource identified by `uri`.
     ///
     /// # Errors
@@ -53,26 +115,84 @@ impl ZoteroMcpServer {
     ) -> Result<rmcp::model::ReadResourceResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
         if uri == "zotero://collections" {
-            match client.get_collections().await {
-                Ok(collections) => Ok(json_resource(uri, &collections)),
-                Err(e) => {
-                    Err(rmcp::ErrorData::internal_error(e.to_string(), None))
-                }
+            return client
+                .get_collections()
+                .await
+                .map(|collections| json_resource(uri, &collections))
+                .map_err(|e| {
+                    rmcp::ErrorData::internal_error(e.to_string(), None)
+                });
+        }
+        if uri == "zotero://tags" {
+            return client
+                .list_tags(500)
+                .await
+                .map(|tags| json_resource(uri, &tags))
+                .map_err(|e| {
+                    rmcp::ErrorData::internal_error(e.to_string(), None)
+                });
+        }
+        if let Some(rest) = uri.strip_prefix("zotero://items/") {
+            let mut parts = rest.split('/');
+            let item_key = parts.next().unwrap_or_default();
+            let nested = parts.next();
+            if item_key.is_empty() || parts.next().is_some() {
+                return Err(rmcp::ErrorData::invalid_params(
+                    format!("Unknown resource URI: {uri}"),
+                    None,
+                ));
             }
-        } else if let Some(item_key) = uri.strip_prefix("zotero://items/") {
             let item_key = ItemKey::from(item_key);
-            match client.get_item(&item_key).await {
-                Ok(item) => Ok(json_resource(uri, &item)),
-                Err(e) => {
-                    Err(rmcp::ErrorData::internal_error(e.to_string(), None))
+            return match nested {
+                None => client
+                    .get_item(&item_key)
+                    .await
+                    .map(|item| json_resource(uri, &item)),
+                Some("children") => client
+                    .get_item_children(&item_key)
+                    .await
+                    .map(|children| json_resource(uri, &children)),
+                Some("notes") => {
+                    client.get_item_children(&item_key).await.map(|children| {
+                        json_resource(uri, &note_children(children))
+                    })
+                }
+                Some("relations") => client
+                    .get_related_items(&item_key)
+                    .await
+                    .map(|relations| json_resource(uri, &relations)),
+                Some(_) => {
+                    return Err(rmcp::ErrorData::invalid_params(
+                        format!("Unknown resource URI: {uri}"),
+                        None,
+                    ));
                 }
             }
-        } else {
-            Err(rmcp::ErrorData::invalid_params(
+            .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None));
+        }
+        if let Some(rest) = uri.strip_prefix("zotero://collections/") {
+            match rest.strip_suffix("/items") {
+                Some(collection_key) if !collection_key.contains('/') => {
+                    let collection_key = CollectionKey::from(collection_key);
+                    return client
+                        .get_collection_items(&collection_key)
+                        .await
+                        .map(|items| json_resource(uri, &items))
+                        .map_err(|e| {
+                            rmcp::ErrorData::internal_error(e.to_string(), None)
+                        });
+                }
+                _ => {}
+            }
+            return Err(rmcp::ErrorData::invalid_params(
                 format!("Unknown resource URI: {uri}"),
                 None,
-            ))
+            ));
         }
+        Err(rmcp::ErrorData::invalid_params(
+            format!("Unknown resource URI: {uri}"),
+            None,
+        ))
     }
 
     /// Lists MCP prompts exposed by the server as a [`ListPromptsResult`].
@@ -231,6 +351,23 @@ mod tests {
             );
         }
 
+        #[test]
+        fn lists_item_and_collection_resource_templates() {
+            let res = ZoteroMcpServer::list_resource_templates_impl();
+            let templates: Vec<&str> = res
+                .resource_templates
+                .iter()
+                .map(|template| template.raw.uri_template.as_str())
+                .collect();
+
+            assert!(templates.contains(&"zotero://items/{item_key}"));
+            assert!(
+                templates
+                    .contains(&"zotero://collections/{collection_key}/items")
+            );
+            assert!(templates.contains(&"zotero://tags"));
+        }
+
         #[tokio::test]
         async fn read_resource_returns_item_json_content() {
             // Arrange
@@ -256,6 +393,33 @@ mod tests {
                 content,
                 rmcp::model::ResourceContents::TextResourceContents { text, .. }
                 if text.contains("Resource Test Paper")
+            );
+            assert!(is_text);
+        }
+
+        #[tokio::test]
+        async fn reads_item_children_resource_uri() {
+            let children = json!([{
+                "key": "CHILD1",
+                "version": 1,
+                "data": { "key": "CHILD1", "itemType": "note", "title": "Child Note" }
+            }]);
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &children.to_string(),
+            )]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            let res = server
+                .read_resource_impl("zotero://items/ITEM123/children")
+                .await
+                .expect("read item children");
+
+            let content = res.contents.first().expect("resource content");
+            let is_text = matches!(
+                content,
+                rmcp::model::ResourceContents::TextResourceContents { text, .. }
+                if text.contains("Child Note")
             );
             assert!(is_text);
         }
@@ -296,6 +460,18 @@ mod tests {
                 .expect_err("should fail");
 
             // Assert
+            assert_eq!(err.code, rmcp::model::ErrorCode::INVALID_PARAMS);
+        }
+
+        #[tokio::test]
+        async fn unknown_nested_resource_uri_returns_invalid_params() {
+            let server = ZoteroMcpServer::new(zotero_state(String::new()));
+
+            let err = server
+                .read_resource_impl("zotero://items/ITEM123/unknown")
+                .await
+                .expect_err("should fail");
+
             assert_eq!(err.code, rmcp::model::ErrorCode::INVALID_PARAMS);
         }
     }

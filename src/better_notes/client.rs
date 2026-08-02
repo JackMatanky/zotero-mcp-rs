@@ -46,6 +46,9 @@ impl<'a> BetterNotesClient<'a> {
         });
         let res: NoteExportResponse =
             self.post_json("/notes/export", payload).await?;
+        if format == NoteExportFormat::Html {
+            self.state.check_html_size(&res.content)?;
+        }
         Ok(res.content)
     }
 
@@ -221,6 +224,8 @@ mod tests {
                 open_library_url: String::new(),
                 write_enabled,
                 sqlite_access: false,
+                zotero_db_path: None,
+                tool_mode: crate::state::ToolExposureMode::Compact,
                 security: SecurityConfig::default(),
             }
         }

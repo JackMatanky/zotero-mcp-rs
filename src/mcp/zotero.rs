@@ -354,6 +354,10 @@ pub(crate) struct SearchNotesAnnotationsArgs {
 pub(crate) struct LibraryCoverageArgs {
     /// Optional collection key ([`CollectionKey`]) to scope coverage analysis.
     pub(crate) collection_key: Option<CollectionKey>,
+    /// 0-based offset into the item set (default: 0).
+    pub(crate) start: Option<usize>,
+    /// Maximum number of items to analyze (default: 100, max: 500).
+    pub(crate) limit: Option<usize>,
 }
 
 /// Arguments for `zotero_get_unfiled_items`.
@@ -1032,7 +1036,8 @@ impl ZoteroMcpServer {
         let state = &self.state;
         let result = async {
             state.check_sqlite_access()?;
-            let Some(db_path) = find_zotero_db() else {
+            let Some(db_path) = find_zotero_db(state.zotero_db_path.as_deref())
+            else {
                 return Err(ZoteroMcpError::LocalDb(
                     "Zotero sqlite database not found".to_owned(),
                 ));
@@ -1058,7 +1063,8 @@ impl ZoteroMcpServer {
         let state = &self.state;
         let result = async {
             state.check_sqlite_access()?;
-            let Some(db_path) = find_zotero_db() else {
+            let Some(db_path) = find_zotero_db(state.zotero_db_path.as_deref())
+            else {
                 return Err(ZoteroMcpError::LocalDb(
                     "Zotero sqlite database not found".to_owned(),
                 ));
@@ -1080,9 +1086,17 @@ impl ZoteroMcpServer {
         &self,
         args: LibraryCoverageArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let offset = args.start.unwrap_or(0);
+        let limit = args.limit.unwrap_or(100).min(500);
         let client = ZoteroClient::new(&self.state);
         Ok(super::json_result(
-            client.get_library_coverage(args.collection_key.as_ref()).await,
+            client
+                .get_library_coverage(
+                    args.collection_key.as_ref(),
+                    offset,
+                    limit,
+                )
+                .await,
         ))
     }
 
@@ -2549,6 +2563,7 @@ mod tests {
     mod sqlite_tools {
         use std::{path::Path, str::FromStr};
 
+        use pretty_assertions::assert_eq;
         use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 
         use super::*;
@@ -2748,7 +2763,7 @@ mod tests {
 
             let mut state = zotero_state(String::new());
             state.sqlite_access = true;
-            std::env::set_var("ZOTERO_DB_PATH", &db_path);
+            state.zotero_db_path = Some(db_path);
             let server = ZoteroMcpServer::new(state);
             let res = server
                 .zotero_fulltext_search_impl(FulltextSearchArgs {
@@ -2758,6 +2773,34 @@ mod tests {
                 .await
                 .unwrap();
             let text = tool_text(&res);
+            assert!(text.contains("Rust in Action"));
+        }
+
+        #[tokio::test]
+        async fn fulltext_tool_uses_state_db_path_without_env_var() {
+            let dir = tempfile::tempdir().unwrap();
+            let db_path = dir.path().join("zotero.sqlite");
+            seed_db(&db_path).await;
+            let previous = std::env::var_os("ZOTERO_DB_PATH");
+            std::env::remove_var("ZOTERO_DB_PATH");
+
+            let mut state = zotero_state(String::new());
+            state.sqlite_access = true;
+            state.zotero_db_path = Some(db_path);
+            let server = ZoteroMcpServer::new(state);
+            let res = server
+                .zotero_fulltext_search_impl(FulltextSearchArgs {
+                    query: "borrow checker".to_owned(),
+                    limit: Some(10),
+                })
+                .await
+                .unwrap();
+
+            if let Some(value) = previous {
+                std::env::set_var("ZOTERO_DB_PATH", value);
+            }
+            let text = tool_text(&res);
+            assert_eq!(res.is_error, Some(false));
             assert!(text.contains("Rust in Action"));
         }
     }

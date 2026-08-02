@@ -14,13 +14,13 @@
 //!   notes into Markdown
 
 use serde::{Deserialize, Serialize};
-use tokio::task::JoinSet;
 
 use crate::{
     errors::ZoteroMcpError,
     zotero::{
         client::ZoteroClient,
         models::{CollectionKey, ItemKey, ItemType, ZoteroItem},
+        search::PaginationInfo,
     },
 };
 
@@ -64,6 +64,13 @@ pub(crate) struct LibraryCoverage {
     pub(crate) notes_percentage: f64,
 }
 
+/// One page of library coverage results plus pagination metadata.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(crate) struct LibraryCoveragePage {
+    pub(crate) coverage: LibraryCoverage,
+    pub(crate) pagination: PaginationInfo,
+}
+
 impl ZoteroClient<'_> {
     /// Finds potential duplicate items in the library or optional
     /// `collection_key` by matching title or DOI.
@@ -99,40 +106,30 @@ impl ZoteroClient<'_> {
     pub(crate) async fn get_library_coverage(
         &self,
         collection_key: Option<&CollectionKey>,
-    ) -> Result<LibraryCoverage, ZoteroMcpError> {
+        offset: usize,
+        limit: usize,
+    ) -> Result<LibraryCoveragePage, ZoteroMcpError> {
         let items = match collection_key {
             Some(col) => self.get_collection_items(col).await?,
             None => self.get_all_items().await?,
         };
 
-        let mut set = JoinSet::new();
-        for (idx, item) in items.iter().enumerate() {
-            let state = self.state.clone();
-            let key = item.key.clone();
-            set.spawn(async move {
-                let client = ZoteroClient::new(&state);
-                let children =
-                    client.get_item_children(&key).await.unwrap_or_default();
-                (idx, children)
-            });
+        let (selected, pagination) =
+            slice_items_for_coverage(&items, offset, limit);
+        let mut children_by_idx = Vec::with_capacity(selected.len());
+        for item in selected {
+            children_by_idx.push(
+                self.get_item_children(&item.key).await.unwrap_or_default(),
+            );
         }
-        let mut children_by_idx: Vec<Option<Vec<ZoteroItem>>> =
-            vec![None; items.len()];
-        while let Some(res) = set.join_next().await {
-            if let Ok((idx, children)) = res {
-                if let Some(slot) = children_by_idx.get_mut(idx) {
-                    *slot = Some(children);
-                }
-            }
-        }
-        let mut flags = Vec::with_capacity(items.len());
-        for (item, children) in items.iter().zip(children_by_idx) {
-            flags.push(coverage_flags(
-                item,
-                children.as_deref().unwrap_or_default(),
-            ));
-        }
-        Ok(classify_coverage(&flags))
+
+        Ok(classify_coverage_page(
+            selected,
+            &children_by_idx,
+            pagination.offset,
+            pagination.limit,
+            pagination.total,
+        ))
     }
 
     /// Extracts and synthesizes annotations and notes for `item_key` into
@@ -240,6 +237,46 @@ fn coverage_flags(
         has_pdf,
         has_doi,
         has_notes,
+    }
+}
+
+fn slice_items_for_coverage(
+    items: &[ZoteroItem],
+    offset: usize,
+    limit: usize,
+) -> (&[ZoteroItem], PaginationInfo) {
+    let total = items.len();
+    let start = offset.min(total);
+    let end = start.saturating_add(limit).min(total);
+    let page_items = items.get(start..end).unwrap_or_default();
+    (page_items, PaginationInfo {
+        limit,
+        offset: start,
+        total,
+        has_more: start.saturating_add(limit) < total,
+    })
+}
+
+fn classify_coverage_page(
+    selected: &[ZoteroItem],
+    children_by_idx: &[Vec<ZoteroItem>],
+    offset: usize,
+    limit: usize,
+    total: usize,
+) -> LibraryCoveragePage {
+    let mut flags = Vec::with_capacity(selected.len());
+    for (item, children) in selected.iter().zip(children_by_idx) {
+        flags.push(coverage_flags(item, children));
+    }
+    let offset = offset.min(total);
+    LibraryCoveragePage {
+        coverage: classify_coverage(&flags),
+        pagination: PaginationInfo {
+            limit,
+            offset,
+            total,
+            has_more: offset.saturating_add(limit) < total,
+        },
     }
 }
 
@@ -451,6 +488,27 @@ mod tests {
 
         use super::*;
 
+        fn item(
+            key: &str,
+            item_type: ItemType,
+            doi: Option<&str>,
+        ) -> ZoteroItem {
+            ZoteroItem {
+                key: ItemKey::from(key),
+                version: 1,
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from(key),
+                    version: 1,
+                    item_type,
+                    doi: doi.map(ToOwned::to_owned),
+                    ..Default::default()
+                },
+            }
+        }
+
         #[test]
         fn evaluates_item_coverage_flags_correctly() {
             let item = ZoteroItem {
@@ -497,7 +555,7 @@ mod tests {
                 },
             };
 
-            let flags = coverage_flags(&item, &vec![attachment, note]);
+            let flags = coverage_flags(&item, &[attachment, note]);
             assert!(flags.has_doi);
             assert!(flags.has_pdf);
             assert!(flags.has_notes);
@@ -525,6 +583,57 @@ mod tests {
             assert_eq!(coverage.pdf_percentage, 50.0);
             assert_eq!(coverage.doi_percentage, 100.0);
             assert_eq!(coverage.notes_percentage, 50.0);
+        }
+
+        #[test]
+        fn library_coverage_slice_reports_has_more_for_unsliced_items() {
+            let items = [
+                item("ITEM0001", ItemType::JournalArticle, None),
+                item("ITEM0002", ItemType::JournalArticle, None),
+                item("ITEM0003", ItemType::JournalArticle, None),
+            ];
+
+            let (selected, pagination) = slice_items_for_coverage(&items, 0, 2);
+
+            assert_eq!(selected.len(), 2);
+            assert_eq!(pagination.total, 3);
+            assert!(pagination.has_more);
+        }
+
+        #[test]
+        fn library_coverage_slice_clamps_offset_past_total() {
+            let items = [
+                item("ITEM0001", ItemType::JournalArticle, None),
+                item("ITEM0002", ItemType::JournalArticle, None),
+                item("ITEM0003", ItemType::JournalArticle, None),
+            ];
+
+            let (selected, pagination) =
+                slice_items_for_coverage(&items, 99, 10);
+
+            assert_eq!(selected.len(), 0);
+            assert_eq!(pagination.offset, 3);
+        }
+
+        #[test]
+        fn library_coverage_page_classifies_only_selected_items() {
+            let selected = [
+                item("ITEM0001", ItemType::JournalArticle, Some("10.1000/1")),
+                item("ITEM0002", ItemType::JournalArticle, None),
+            ];
+            let children_by_idx = vec![
+                vec![item("PDF0001", ItemType::Attachment, None)],
+                vec![item("NOTE0001", ItemType::Note, None)],
+            ];
+
+            let page =
+                classify_coverage_page(&selected, &children_by_idx, 0, 2, 3);
+
+            assert_eq!(page.coverage.total_items, 2);
+            assert_eq!(page.coverage.with_doi, 1);
+            assert_eq!(page.coverage.with_notes, 1);
+            assert_eq!(page.pagination.total, 3);
+            assert!(page.pagination.has_more);
         }
     }
 
