@@ -15,8 +15,14 @@ use serde::{Serialize, de::DeserializeOwned};
 use crate::{
     errors::ZoteroMcpError,
     state::AppState,
-    zotero::models::{LibraryVersion, LocalApiStatus},
+    zotero::models::{LibraryVersion, LocalApiStatus, ZoteroItem},
 };
+
+/// A page of items plus the server-reported total result count.
+pub(super) struct ItemsPage {
+    pub(super) items: Vec<ZoteroItem>,
+    pub(super) total: usize,
+}
 
 /// Client for the Zotero Local HTTP API, scoped to a single tool call.
 pub(crate) struct ZoteroClient<'a> {
@@ -172,8 +178,7 @@ impl<'a> ZoteroClient<'a> {
     pub(super) async fn get_items_with_total(
         &self,
         url: &str,
-    ) -> Result<(Vec<crate::zotero::models::ZoteroItem>, usize), ZoteroMcpError>
-    {
+    ) -> Result<ItemsPage, ZoteroMcpError> {
         let resp =
             self.state.send_with_retry(self.state.client.get(url)).await?;
         let resp = self.ensure_success(resp).await?;
@@ -184,7 +189,10 @@ impl<'a> ZoteroClient<'a> {
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(0);
         let items = resp.json().await?;
-        Ok((items, total))
+        Ok(ItemsPage {
+            items,
+            total,
+        })
     }
 
     /// Sends a JSON POST request to `url` and returns the first item from the
@@ -667,13 +675,13 @@ mod tests {
             let state = test_state(base, false);
 
             let url = format!("{}/users/0/items", state.zotero_api_url);
-            let (items, total) = ZoteroClient::new(&state)
+            let page = ZoteroClient::new(&state)
                 .get_items_with_total(&url)
                 .await
                 .unwrap();
 
-            assert_eq!(total, 42);
-            assert_eq!(items.len(), 1);
+            assert_eq!(page.total, 42);
+            assert_eq!(page.items.len(), 1);
         }
 
         #[tokio::test]
@@ -682,13 +690,13 @@ mod tests {
             let state = test_state(base, false);
 
             let url = format!("{}/users/0/items", state.zotero_api_url);
-            let (items, total) = ZoteroClient::new(&state)
+            let page = ZoteroClient::new(&state)
                 .get_items_with_total(&url)
                 .await
                 .unwrap();
 
-            assert_eq!(total, 0);
-            assert_eq!(items.len(), 1);
+            assert_eq!(page.total, 0);
+            assert_eq!(page.items.len(), 1);
         }
 
         #[tokio::test]
@@ -701,13 +709,13 @@ mod tests {
             let state = test_state(base, false);
 
             let url = format!("{}/users/0/items", state.zotero_api_url);
-            let (items, total) = ZoteroClient::new(&state)
+            let page = ZoteroClient::new(&state)
                 .get_items_with_total(&url)
                 .await
                 .unwrap();
 
-            assert_eq!(total, 0);
-            assert_eq!(items.len(), 1);
+            assert_eq!(page.total, 0);
+            assert_eq!(page.items.len(), 1);
         }
     }
 

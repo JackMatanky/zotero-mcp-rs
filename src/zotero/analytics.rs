@@ -14,6 +14,7 @@
 //!   notes into Markdown
 
 use serde::{Deserialize, Serialize};
+use tokio::task::JoinSet;
 
 use crate::{
     errors::ZoteroMcpError,
@@ -104,13 +105,33 @@ impl ZoteroClient<'_> {
             None => self.get_all_items().await?,
         };
 
-        let mut flags = Vec::with_capacity(items.len());
-        for item in &items {
-            let children =
-                self.get_item_children(&item.key).await.unwrap_or_default();
-            flags.push(coverage_flags(item, &children));
+        let mut set = JoinSet::new();
+        for (idx, item) in items.iter().enumerate() {
+            let state = self.state.clone();
+            let key = item.key.clone();
+            set.spawn(async move {
+                let client = ZoteroClient::new(&state);
+                let children =
+                    client.get_item_children(&key).await.unwrap_or_default();
+                (idx, children)
+            });
         }
-
+        let mut children_by_idx: Vec<Option<Vec<ZoteroItem>>> =
+            vec![None; items.len()];
+        while let Some(res) = set.join_next().await {
+            if let Ok((idx, children)) = res {
+                if let Some(slot) = children_by_idx.get_mut(idx) {
+                    *slot = Some(children);
+                }
+            }
+        }
+        let mut flags = Vec::with_capacity(items.len());
+        for (item, children) in items.iter().zip(children_by_idx) {
+            flags.push(coverage_flags(
+                item,
+                children.as_deref().unwrap_or_default(),
+            ));
+        }
         Ok(classify_coverage(&flags))
     }
 

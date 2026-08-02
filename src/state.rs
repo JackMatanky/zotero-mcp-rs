@@ -141,14 +141,14 @@ impl AppState {
     ///
     /// # Errors
     ///
-    /// - [`LocalDb`] if `sqlite_access` is `false` (the default)
+    /// - [`PermissionDenied`] if `sqlite_access` is `false` (the default)
     ///
-    /// [`LocalDb`]: ZoteroMcpError::LocalDb
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
     pub(crate) fn check_sqlite_access(&self) -> Result<(), ZoteroMcpError> {
         if self.sqlite_access {
             Ok(())
         } else {
-            Err(ZoteroMcpError::LocalDb(
+            Err(ZoteroMcpError::PermissionDenied(
                 "Local sqlite access is disabled: set ZOTERO_SQLITE_ACCESS=1 \
                  to enable reading the Zotero database directly"
                     .to_owned(),
@@ -477,7 +477,7 @@ mod tests {
             let result = state.check_sqlite_access();
 
             // Assert
-            assert!(matches!(result, Err(ZoteroMcpError::LocalDb(_))));
+            assert!(matches!(result, Err(ZoteroMcpError::PermissionDenied(_))));
         }
     }
 

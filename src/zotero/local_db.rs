@@ -26,7 +26,7 @@ use sqlx::{Row, SqlitePool, sqlite::SqliteConnectOptions};
 use crate::{errors::ZoteroMcpError, zotero::models::ItemKey};
 
 /// Max rows to pull from the full-text scan before filtering in Rust.
-const FULLTEXT_SCAN_CAP: usize = 2000;
+const FULLTEXT_SCAN_CAP: i64 = 2000;
 
 /// Opens Zotero's local sqlite database in immutable read-only mode.
 #[derive(Clone, Debug)]
@@ -36,25 +36,23 @@ pub(crate) struct LocalZoteroDb {
 
 impl LocalZoteroDb {
     /// Opens `path` read-only with `immutable=1` semantics (mirrors the
-    /// digest's `_get_connection`). Fails with [`ZoteroMcpError::LocalDb`] if
-    /// `path` is unreadable or is not a Zotero database.
+    /// digest's `_get_connection`). Fails with [`ZoteroMcpError::Sqlite`] if
+    /// `path` is unreadable, or [`ZoteroMcpError::LocalDb`] if it is not a
+    /// Zotero database.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::LocalDb`] if the path cannot be opened read-only or
-    ///   the database is not a Zotero database
+    /// - [`ZoteroMcpError::Sqlite`] if the path cannot be opened read-only
+    /// - [`ZoteroMcpError::LocalDb`] if the database is not a Zotero database
     pub(crate) async fn open(path: &Path) -> Result<Self, ZoteroMcpError> {
         let opts = SqliteConnectOptions::from_str(&format!(
             "sqlite://{}",
             path.display()
-        ))
-        .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?
+        ))?
         .read_only(true)
         .immutable(true)
         .busy_timeout(Duration::from_secs(2));
-        let pool = SqlitePool::connect_with(opts)
-            .await
-            .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
+        let pool = SqlitePool::connect_with(opts).await?;
         let db = Self {
             pool,
         };
@@ -69,8 +67,7 @@ impl LocalZoteroDb {
              name='items'",
         )
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
+        .await?;
         if row.is_none() {
             return Err(ZoteroMcpError::LocalDb(
                 "Not a Zotero database: 'items' table not found".to_owned(),
@@ -84,7 +81,7 @@ impl LocalZoteroDb {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::LocalDb`] if a query or row read fails
+    /// - [`ZoteroMcpError::Sqlite`] if a query or row read fails
     #[expect(
         clippy::too_many_lines,
         reason = "SQL spans are long; mirrors digest query shape"
@@ -146,32 +143,20 @@ impl LocalZoteroDb {
             ) words ON words.itemID = i.itemID
             WHERE it.typeName NOT IN ('attachment', 'note', 'annotation')
               AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
+            LIMIT ?
             ",
         )
+        .bind(FULLTEXT_SCAN_CAP)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
+        .await?;
 
         let mut hits = Vec::new();
         for row in rows {
-            if hits.len() >= FULLTEXT_SCAN_CAP {
-                break;
-            }
-            let title: Option<String> = row
-                .try_get("title")
-                .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
-            let doi: Option<String> = row
-                .try_get("doi")
-                .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
-            let extra: Option<String> = row
-                .try_get("extra")
-                .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
-            let creators: Option<String> = row
-                .try_get("creators")
-                .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
-            let words: Option<String> = row
-                .try_get("words")
-                .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
+            let title: Option<String> = row.try_get("title")?;
+            let doi: Option<String> = row.try_get("doi")?;
+            let extra: Option<String> = row.try_get("extra")?;
+            let creators: Option<String> = row.try_get("creators")?;
+            let words: Option<String> = row.try_get("words")?;
 
             let haystack = format!(
                 "{} {} {} {}",
@@ -190,12 +175,8 @@ impl LocalZoteroDb {
             if !metadata_match && !fulltext_match {
                 continue;
             }
-            let key: String = row
-                .try_get("key")
-                .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
-            let item_type: String = row
-                .try_get("item_type")
-                .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
+            let key: String = row.try_get("key")?;
+            let item_type: String = row.try_get("item_type")?;
             hits.push(FulltextHit {
                 key: ItemKey::from(key),
                 item_type,
@@ -220,11 +201,7 @@ impl LocalZoteroDb {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::LocalDb`] if a query or row read fails
-    #[expect(
-        clippy::too_many_lines,
-        reason = "SQL spans are long; mirrors digest query shape"
-    )]
+    /// - [`ZoteroMcpError::Sqlite`] if a query or row read fails
     pub(crate) async fn search_notes_annotations(
         &self,
         query: &str,
@@ -249,8 +226,7 @@ impl LocalZoteroDb {
         .bind(pattern.as_str())
         .bind(i64::try_from(limit).unwrap_or(20))
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
+        .await?;
 
         let ann_rows = sqlx::query(
             r"
@@ -274,63 +250,40 @@ impl LocalZoteroDb {
         .bind(pattern.as_str())
         .bind(i64::try_from(limit).unwrap_or(20))
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
+        .await?;
 
         let mut hits = Vec::new();
         for row in note_rows {
-            let note: Option<String> = row
-                .try_get("note")
-                .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?;
+            let note: Option<String> = row.try_get("note")?;
             let clean = strip_html(note.as_deref().unwrap_or(""));
             if !clean.to_lowercase().contains(&query.to_lowercase()) {
                 continue;
             }
             hits.push(NoteAnnotationHit {
-                kind: "note".to_owned(),
-                key: ItemKey::from(
-                    row.try_get::<String, _>("key")
-                        .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?,
-                ),
+                kind: HitKind::Note,
+                key: ItemKey::from(row.try_get::<String, _>("key")?),
                 text: note,
                 comment: None,
                 parent_key: row
-                    .try_get::<Option<String>, _>("parentKey")
-                    .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?
+                    .try_get::<Option<String>, _>("parentKey")?
                     .map(ItemKey::from),
-                parent_title: row
-                    .try_get("parentTitle")
-                    .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?,
+                parent_title: row.try_get("parentTitle")?,
                 page_label: None,
                 color: None,
             });
         }
         for row in ann_rows {
             hits.push(NoteAnnotationHit {
-                kind: "annotation".to_owned(),
-                key: ItemKey::from(
-                    row.try_get::<String, _>("key")
-                        .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?,
-                ),
-                text: row
-                    .try_get("text")
-                    .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?,
-                comment: row
-                    .try_get("comment")
-                    .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?,
+                kind: HitKind::Annotation,
+                key: ItemKey::from(row.try_get::<String, _>("key")?),
+                text: row.try_get("text")?,
+                comment: row.try_get("comment")?,
                 parent_key: row
-                    .try_get::<Option<String>, _>("parentKey")
-                    .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?
+                    .try_get::<Option<String>, _>("parentKey")?
                     .map(ItemKey::from),
-                parent_title: row
-                    .try_get("parentTitle")
-                    .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?,
-                page_label: row
-                    .try_get("pageLabel")
-                    .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?,
-                color: row
-                    .try_get("color")
-                    .map_err(|e| ZoteroMcpError::LocalDb(e.to_string()))?,
+                parent_title: row.try_get("parentTitle")?,
+                page_label: row.try_get("pageLabel")?,
+                color: row.try_get("color")?,
             });
         }
         hits.truncate(limit);
@@ -338,12 +291,33 @@ impl LocalZoteroDb {
     }
 }
 
+/// Kind of a local search hit.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Deserialize,
+    Serialize,
+    schemars::JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum HitKind {
+    /// A note child of a parent item.
+    Note,
+    /// A PDF annotation.
+    Annotation,
+}
+
 /// A single full-text search hit.
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 pub(crate) struct FulltextHit {
     pub(crate) key: ItemKey,
     pub(crate) item_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) doi: Option<String>,
     pub(crate) creators: String,
     pub(crate) snippet: String,
@@ -352,13 +326,19 @@ pub(crate) struct FulltextHit {
 /// A single note or annotation search hit.
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 pub(crate) struct NoteAnnotationHit {
-    pub(crate) kind: String,
+    pub(crate) kind: HitKind,
     pub(crate) key: ItemKey,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) comment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) parent_key: Option<ItemKey>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) parent_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) page_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) color: Option<String>,
 }
 
@@ -735,7 +715,7 @@ mod tests {
         let hits = db.search_notes_annotations("ownership", 10).await.unwrap();
         assert_eq!(hits.len(), 1);
         let hit = hits.first().unwrap();
-        assert_eq!(hit.kind, "note");
+        assert_eq!(hit.kind, HitKind::Note);
         assert_eq!(
             hit.parent_key.as_ref().map(ItemKey::as_str),
             Some("K00001")

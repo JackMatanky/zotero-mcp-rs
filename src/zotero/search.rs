@@ -101,6 +101,31 @@ fn paginate<T>(results: Vec<T>, offset: usize, limit: usize) -> SearchPage<T> {
     }
 }
 
+/// Wraps a server-fetched page, falling back to `offset + items.len()` when
+/// the server reports no total.
+fn finish_page(
+    items: Vec<ZoteroItem>,
+    total: usize,
+    offset: usize,
+    limit: usize,
+) -> SearchPage<ZoteroItem> {
+    let total = if total == 0 {
+        offset.saturating_add(items.len())
+    } else {
+        total
+    };
+    let returned = items.len();
+    SearchPage {
+        items,
+        pagination: PaginationInfo {
+            limit,
+            offset,
+            total,
+            has_more: offset.saturating_add(returned) < total,
+        },
+    }
+}
+
 /// How multiple conditions are combined: `all` (AND, default) or `any` (OR).
 #[derive(
     Copy,
@@ -162,6 +187,7 @@ impl ZoteroClient<'_> {
     /// * `collection_key` - Optional collection key to scope the search
     /// * `offset` - 0-based offset into the full result set
     /// * `limit` - Maximum number of items to return
+    ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
@@ -186,27 +212,12 @@ impl ZoteroClient<'_> {
         let url = format!(
             "{base}?q={encoded_q}&start={offset}&limit={limit}&itemType=-note"
         );
-        let (items, total) = self.get_items_with_total(&url).await?;
-        let total = if total == 0 {
-            offset.saturating_add(items.len())
-        } else {
-            total
-        };
-        let returned = items.len();
-        Ok(SearchPage {
-            items,
-            pagination: PaginationInfo {
-                limit,
-                offset,
-                total,
-                has_more: offset.saturating_add(returned) < total,
-            },
-        })
+        let page = self.get_items_with_total(&url).await?;
+        Ok(finish_page(page.items, page.total, offset, limit))
     }
 
     /// Searches items by `tag` name, returning at most `limit` items (excluding
     /// notes).
-    ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
@@ -303,23 +314,8 @@ impl ZoteroClient<'_> {
         if join_mode == JoinMode::All {
             if let Some(url) = self.pushdown_url(&conditions) {
                 let full_url = format!("{url}&start={offset}&limit={limit}");
-                let (items, total) =
-                    self.get_items_with_total(&full_url).await?;
-                let total = if total == 0 {
-                    offset.saturating_add(items.len())
-                } else {
-                    total
-                };
-                let returned = items.len();
-                return Ok(SearchPage {
-                    items,
-                    pagination: PaginationInfo {
-                        limit,
-                        offset,
-                        total,
-                        has_more: offset.saturating_add(returned) < total,
-                    },
-                });
+                let page = self.get_items_with_total(&full_url).await?;
+                return Ok(finish_page(page.items, page.total, offset, limit));
             }
         }
 
@@ -358,7 +354,7 @@ impl ZoteroClient<'_> {
             return None;
         }
         let mut q: Option<String> = None;
-        let mut qmode = "titleCreatorYear".to_owned();
+        let mut qmode = "titleCreatorYear";
         let mut item_type: Option<String> = None;
         let mut tag: Option<String> = None;
 
@@ -383,11 +379,9 @@ impl ZoteroClient<'_> {
                     }
                     q = Some(value.clone());
                     qmode = match &cond.field {
-                        SearchField::Creator => "creator".to_owned(),
-                        SearchField::Year | SearchField::Date => {
-                            "year".to_owned()
-                        }
-                        _ => "titleCreatorYear".to_owned(),
+                        SearchField::Creator => "creator",
+                        SearchField::Year | SearchField::Date => "year",
+                        _ => "titleCreatorYear",
                     };
                 }
                 SearchField::ItemType
@@ -499,10 +493,17 @@ fn compare_dates(a: &str, b: &str) -> std::cmp::Ordering {
 /// Splits `s` into `(year, month, day)` numeric components.
 fn date_key(s: &str) -> (u32, u32, u32) {
     let mut parts = s.split('-').filter(|p| !p.is_empty());
-    let next = |it: &mut dyn Iterator<Item = &str>| {
-        it.next().and_then(|p| p.parse::<u32>().ok()).unwrap_or(0)
-    };
-    (next(&mut parts), next(&mut parts), next(&mut parts))
+    (
+        next_date_part(&mut parts),
+        next_date_part(&mut parts),
+        next_date_part(&mut parts),
+    )
+}
+
+/// Parses the next `-`-separated component of a date string as `u32`, or zero
+/// when absent or non-numeric.
+fn next_date_part<'a>(parts: &mut impl Iterator<Item = &'a str>) -> u32 {
+    parts.next().and_then(|p| p.parse::<u32>().ok()).unwrap_or(0)
 }
 
 /// Sorts `items` in place-order by `field` in `direction` and returns them.
@@ -511,15 +512,18 @@ fn sort_items(
     field: SortField,
     direction: SortDirection,
 ) -> Vec<ZoteroItem> {
-    let mut items = items;
-    items.sort_by(|a, b| {
-        let ord = sort_key(a, field).cmp(&sort_key(b, field));
-        match direction {
-            SortDirection::Asc => ord,
-            SortDirection::Desc => ord.reverse(),
-        }
-    });
-    items
+    let mut keyed: Vec<(String, ZoteroItem)> = items
+        .into_iter()
+        .map(|item| {
+            let key = sort_key(&item, field);
+            (key, item)
+        })
+        .collect();
+    match direction {
+        SortDirection::Asc => keyed.sort_by(|a, b| a.0.cmp(&b.0)),
+        SortDirection::Desc => keyed.sort_by(|a, b| b.0.cmp(&a.0)),
+    }
+    keyed.into_iter().map(|(_, item)| item).collect()
 }
 
 /// Returns the sort key string for `item` under `field`.

@@ -43,9 +43,13 @@ pub(crate) enum ZoteroMcpError {
     /// A local Zotero `SQLite` database could not be read.
     ///
     /// Occurs when the discovery step fails (no Zotero profile found), the
-    /// database cannot be opened read-only, or a query fails.
+    /// database cannot be opened read-only, or it is not a Zotero database.
     #[error("Local database error: {0}")]
     LocalDb(String),
+
+    /// A `SQLite` query or connection against the local Zotero database failed.
+    #[error("SQLite error: {0}")]
+    Sqlite(#[from] sqlx::Error),
 
     /// Write operation attempted when write permission is disabled in
     /// [`AppState`].
