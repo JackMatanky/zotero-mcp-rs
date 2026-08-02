@@ -5,6 +5,9 @@
 //!
 //! Exposed resources:
 //! - `zotero://collections`: Returns all collection metadata in JSON format.
+//! - `zotero://tags`: Returns all library tags in JSON format.
+//!
+//! Exposed resource templates:
 //! - `zotero://items/{item_key}`: Returns item data for a specific Zotero item.
 //!
 //! Exposed prompts:
@@ -18,15 +21,21 @@ use crate::{
     zotero::{CollectionKey, ItemKey, ItemType, ZoteroClient, ZoteroItem},
 };
 
+/// Builds a resource template where `name` is the programmatic identifier and
+/// `title` is the human-readable display string.
+///
+/// MCP treats `name` as a logical identifier and `title` as UI copy, falling
+/// back to `name` only when `title` is absent.
 fn resource_template(
     uri_template: &str,
     name: &str,
+    title: &str,
     description: &str,
 ) -> rmcp::model::ResourceTemplate {
     let raw = rmcp::model::RawResourceTemplate {
         uri_template: uri_template.to_owned(),
         name: name.to_owned(),
-        title: None,
+        title: Some(title.to_owned()),
         description: Some(description.to_owned()),
         mime_type: Some("application/json".to_owned()),
     };
@@ -45,10 +54,10 @@ impl ZoteroMcpServer {
     ///
     /// [`ListResourcesResult`]: rmcp::model::ListResourcesResult
     pub(crate) fn list_resources_impl() -> rmcp::model::ListResourcesResult {
-        let raw_resource = rmcp::model::RawResource {
+        let collections = rmcp::model::RawResource {
             uri: "zotero://collections".to_owned(),
-            name: "Zotero Collections".to_owned(),
-            title: None,
+            name: "collections".to_owned(),
+            title: Some("Zotero Collections".to_owned()),
             description: Some(
                 "List of all collections in Zotero library".to_owned(),
             ),
@@ -56,8 +65,20 @@ impl ZoteroMcpServer {
             mime_type: Some("application/json".to_owned()),
             size: None,
         };
+        let tags = rmcp::model::RawResource {
+            uri: "zotero://tags".to_owned(),
+            name: "tags".to_owned(),
+            title: Some("Zotero Tags".to_owned()),
+            description: Some("List of all tags in Zotero library".to_owned()),
+            icons: None,
+            mime_type: Some("application/json".to_owned()),
+            size: None,
+        };
         rmcp::model::ListResourcesResult {
-            resources: vec![rmcp::model::Annotated::new(raw_resource, None)],
+            resources: vec![
+                rmcp::model::Annotated::new(collections, None),
+                rmcp::model::Annotated::new(tags, None),
+            ],
             next_cursor: None,
         }
     }
@@ -68,34 +89,34 @@ impl ZoteroMcpServer {
             resource_templates: vec![
                 resource_template(
                     "zotero://items/{item_key}",
+                    "item",
                     "Zotero Item",
                     "Read one Zotero item by key",
                 ),
                 resource_template(
                     "zotero://items/{item_key}/children",
+                    "item_children",
                     "Zotero Item Children",
                     "Read child notes, attachments, and annotations for an \
                      item",
                 ),
                 resource_template(
                     "zotero://items/{item_key}/notes",
+                    "item_notes",
                     "Zotero Item Notes",
                     "Read child notes for an item",
                 ),
                 resource_template(
                     "zotero://items/{item_key}/relations",
+                    "item_relations",
                     "Zotero Item Relations",
                     "Read related items for an item",
                 ),
                 resource_template(
                     "zotero://collections/{collection_key}/items",
+                    "collection_items",
                     "Zotero Collection Items",
                     "Read items in a collection",
-                ),
-                resource_template(
-                    "zotero://tags",
-                    "Zotero Tags",
-                    "Read all Zotero tags",
                 ),
             ],
             next_cursor: None,
@@ -201,7 +222,7 @@ impl ZoteroMcpServer {
     pub(crate) fn list_prompts_impl() -> rmcp::model::ListPromptsResult {
         let prompt = rmcp::model::Prompt {
             name: "zotero_literature_review".to_owned(),
-            title: None,
+            title: Some("Literature Review".to_owned()),
             description: Some(
                 "Generate a literature review prompt for a Zotero collection"
                     .to_owned(),
@@ -209,7 +230,7 @@ impl ZoteroMcpServer {
             icons: None,
             arguments: Some(vec![rmcp::model::PromptArgument {
                 name: "collection_key".to_owned(),
-                title: None,
+                title: Some("Collection Key".to_owned()),
                 description: Some("Key of the Zotero collection".to_owned()),
                 required: Some(true),
             }]),
@@ -339,16 +360,37 @@ mod tests {
         use super::*;
 
         #[test]
-        fn list_resources_returns_collections_uri() {
+        fn list_resources_returns_static_zotero_uris() {
             // Act
             let res = ZoteroMcpServer::list_resources_impl();
 
             // Assert
-            assert_eq!(res.resources.len(), 1);
+            let uris: Vec<&str> = res
+                .resources
+                .iter()
+                .map(|resource| resource.raw.uri.as_str())
+                .collect();
+            assert_eq!(uris, ["zotero://collections", "zotero://tags"]);
+        }
+
+        #[test]
+        fn resource_names_are_identifiers_with_display_titles() {
+            // Act
+            let res = ZoteroMcpServer::list_resources_impl();
+
+            // Assert
+            let collections = &res.resources.first().expect("resource").raw;
+            assert_eq!(collections.name, "collections");
             assert_eq!(
-                res.resources.first().expect("resource").raw.uri,
-                "zotero://collections"
+                collections.title.as_deref(),
+                Some("Zotero Collections")
             );
+            for resource in &res.resources {
+                assert!(
+                    !resource.raw.name.contains(' '),
+                    "resource name must be a programmatic identifier"
+                );
+            }
         }
 
         #[test]
@@ -365,7 +407,21 @@ mod tests {
                 templates
                     .contains(&"zotero://collections/{collection_key}/items")
             );
-            assert!(templates.contains(&"zotero://tags"));
+        }
+
+        #[test]
+        fn resource_templates_all_declare_a_uri_variable() {
+            let res = ZoteroMcpServer::list_resource_templates_impl();
+
+            for template in &res.resource_templates {
+                assert!(
+                    template.raw.uri_template.contains('{'),
+                    "{} is static and belongs in resources/list",
+                    template.raw.uri_template
+                );
+                assert!(!template.raw.name.contains(' '));
+                assert!(template.raw.title.is_some());
+            }
         }
 
         #[tokio::test]
