@@ -53,13 +53,6 @@ pub(crate) struct AppState {
     pub(crate) write_enabled: bool,
     /// Whether direct read access to the local Zotero `SQLite` database is
     /// allowed. Defaults to false; enable by setting `ZOTERO_SQLITE_ACCESS`.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "used by local sqlite read tools in a later task"
-        )
-    )]
     pub(crate) sqlite_access: bool,
 }
 
@@ -151,13 +144,6 @@ impl AppState {
     /// - [`LocalDb`] if `sqlite_access` is `false` (the default)
     ///
     /// [`LocalDb`]: ZoteroMcpError::LocalDb
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "used by local sqlite read tools in a later task"
-        )
-    )]
     pub(crate) fn check_sqlite_access(&self) -> Result<(), ZoteroMcpError> {
         if self.sqlite_access {
             Ok(())

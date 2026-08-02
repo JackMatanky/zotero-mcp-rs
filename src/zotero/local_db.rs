@@ -29,10 +29,6 @@ const FULLTEXT_SCAN_CAP: usize = 2000;
 
 /// Opens Zotero's local sqlite database in immutable read-only mode.
 #[derive(Clone, Debug)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by local sqlite tools in a later task")
-)]
 pub(crate) struct LocalZoteroDb {
     pool: SqlitePool,
 }
@@ -46,13 +42,6 @@ impl LocalZoteroDb {
     ///
     /// - [`ZoteroMcpError::LocalDb`] if the path cannot be opened read-only or
     ///   the database is not a Zotero database
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "used by local sqlite tools in a later task"
-        )
-    )]
     pub(crate) async fn open(path: &Path) -> Result<Self, ZoteroMcpError> {
         let opts = SqliteConnectOptions::from_str(&format!(
             "sqlite://{}",
@@ -95,13 +84,6 @@ impl LocalZoteroDb {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalDb`] if a query or row read fails
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "used by local sqlite tools in a later task"
-        )
-    )]
     pub(crate) async fn search_fulltext(
         &self,
         query: &str,
@@ -216,13 +198,6 @@ impl LocalZoteroDb {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalDb`] if a query or row read fails
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "used by local sqlite tools in a later task"
-        )
-    )]
     #[expect(
         clippy::too_many_lines,
         reason = "SQL spans are long; mirrors digest query shape"
@@ -342,10 +317,6 @@ impl LocalZoteroDb {
 
 /// A single full-text search hit.
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by local sqlite tools in a later task")
-)]
 pub(crate) struct FulltextHit {
     pub(crate) key: ItemKey,
     pub(crate) item_type: String,
@@ -357,10 +328,6 @@ pub(crate) struct FulltextHit {
 
 /// A single note or annotation search hit.
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by local sqlite tools in a later task")
-)]
 pub(crate) struct NoteAnnotationHit {
     pub(crate) kind: String,
     pub(crate) key: ItemKey,
@@ -374,7 +341,6 @@ pub(crate) struct NoteAnnotationHit {
 
 /// Locates `zotero.sqlite` via `ZOTERO_DB_PATH`, the `prefs.js` `dataDir`
 /// preference in any profile dir, or the per-user default, in that order.
-#[expect(dead_code, reason = "used by local sqlite tools in a later task")]
 pub(crate) fn find_zotero_db() -> Option<PathBuf> {
     if let Some(path) = env::var_os("ZOTERO_DB_PATH").map(PathBuf::from) {
         if path.is_file() {
@@ -393,7 +359,6 @@ pub(crate) fn find_zotero_db() -> Option<PathBuf> {
 
 /// Looks up the `dataDir` pref in `prefs.js`, then falls back to the profile
 /// dir itself.
-#[expect(dead_code, reason = "used by local sqlite tools in a later task")]
 fn db_in_profile(profile_dir: &Path) -> Option<PathBuf> {
     let prefs = profile_dir.join("prefs.js");
     if prefs.is_file() {
@@ -409,7 +374,6 @@ fn db_in_profile(profile_dir: &Path) -> Option<PathBuf> {
 }
 
 /// Returns `dir/zotero.sqlite` if it exists.
-#[expect(dead_code, reason = "used by local sqlite tools in a later task")]
 fn db_in_dir(dir: &Path) -> Option<PathBuf> {
     let db = dir.join("zotero.sqlite");
     db.is_file().then_some(db)
@@ -417,7 +381,6 @@ fn db_in_dir(dir: &Path) -> Option<PathBuf> {
 
 /// Candidate profile directories, per-OS (mirrors the digest's
 /// `_zotero_profiles_dirs`).
-#[expect(dead_code, reason = "used by local sqlite tools in a later task")]
 fn profiles_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(appdata) = env::var_os("APPDATA") {
@@ -447,7 +410,6 @@ fn profiles_dirs() -> Vec<PathBuf> {
 
 /// Parses `user_pref("key", "value");` from Zotero's `prefs.js`, returning
 /// the unquoted value.
-#[expect(dead_code, reason = "used by local sqlite tools in a later task")]
 fn read_string_pref(prefs: &Path, key: &str) -> Option<String> {
     let contents = std::fs::read_to_string(prefs).ok()?;
     let needle = format!("user_pref(\"{key}\",");
@@ -463,10 +425,6 @@ fn read_string_pref(prefs: &Path, key: &str) -> Option<String> {
 }
 
 /// Strips HTML tags from Zotero note HTML.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by local sqlite tools in a later task")
-)]
 fn strip_html(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut in_tag = false;

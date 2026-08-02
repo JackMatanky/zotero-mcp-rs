@@ -28,9 +28,9 @@ use crate::{
     pdf::{extract_pdf_outline, extract_pdf_pages},
     zotero::{
         AnnotationDraft, AnnotationType, CitationKey, CollectionItemAction,
-        CollectionKey, ItemKey, ItemType, JoinMode, SearchCondition,
-        SearchField, SearchOperator, SortDirection, SortField, TagName,
-        TrashAction, ZoteroClient,
+        CollectionKey, ItemKey, ItemType, JoinMode, LocalZoteroDb,
+        SearchCondition, SearchField, SearchOperator, SortDirection, SortField,
+        TagName, TrashAction, ZoteroClient, find_zotero_db,
     },
 };
 
@@ -327,6 +327,25 @@ pub(crate) struct AdvancedSearchArgs {
     /// 0-based offset into the full result set (default: 0).
     pub(crate) start: Option<usize>,
     /// Maximum number of items to return (default: 20).
+    pub(crate) limit: Option<usize>,
+}
+
+/// Arguments for `zotero_fulltext_search`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct FulltextSearchArgs {
+    /// Free-text query matched against title, creators, DOI, and indexed
+    /// fulltext.
+    pub(crate) query: String,
+    /// Maximum number of results to return (default: 20).
+    pub(crate) limit: Option<usize>,
+}
+
+/// Arguments for `zotero_search_notes_annotations`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SearchNotesAnnotationsArgs {
+    /// Free-text query matched against note body and annotation text/comment.
+    pub(crate) query: String,
+    /// Maximum number of results to return (default: 20).
     pub(crate) limit: Option<usize>,
 }
 
@@ -997,6 +1016,58 @@ impl ZoteroMcpServer {
                 )
                 .await,
         ))
+    }
+
+    /// Handles local full-text search tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_fulltext_search_impl(
+        &self,
+        args: FulltextSearchArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = args.limit.unwrap_or(20);
+        let state = &self.state;
+        let result = async {
+            state.check_sqlite_access()?;
+            let Some(db_path) = find_zotero_db() else {
+                return Err(ZoteroMcpError::LocalDb(
+                    "Zotero sqlite database not found".to_owned(),
+                ));
+            };
+            let db = LocalZoteroDb::open(&db_path).await?;
+            db.search_fulltext(&args.query, limit).await
+        }
+        .await;
+        Ok(super::json_result(result))
+    }
+
+    /// Handles local note/annotation search tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_search_notes_annotations_impl(
+        &self,
+        args: SearchNotesAnnotationsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = args.limit.unwrap_or(20);
+        let state = &self.state;
+        let result = async {
+            state.check_sqlite_access()?;
+            let Some(db_path) = find_zotero_db() else {
+                return Err(ZoteroMcpError::LocalDb(
+                    "Zotero sqlite database not found".to_owned(),
+                ));
+            };
+            let db = LocalZoteroDb::open(&db_path).await?;
+            db.search_notes_annotations(&args.query, limit).await
+        }
+        .await;
+        Ok(super::json_result(result))
     }
 
     /// Handles Zotero library coverage analysis tool calls.
@@ -2472,6 +2543,190 @@ mod tests {
             // Assert
             assert_eq!(res.is_error, Some(false));
             assert!(tool_text(&res).contains("Item relation removed"));
+        }
+    }
+
+    mod sqlite_tools {
+        use std::{path::Path, str::FromStr};
+
+        use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
+
+        use super::*;
+
+        #[expect(
+            clippy::too_many_lines,
+            reason = "seeds a realistic Zotero schema across many tables"
+        )]
+        async fn seed_db(path: &Path) {
+            let opts = SqliteConnectOptions::from_str(&format!(
+                "sqlite://{}",
+                path.display()
+            ))
+            .unwrap()
+            .create_if_missing(true);
+            let pool = SqlitePool::connect_with(opts).await.unwrap();
+            sqlx::query(
+                "CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, \
+                 typeName TEXT)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, \
+                 itemTypeID INTEGER, dateAdded TEXT, dateModified TEXT)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "CREATE TABLE fields (fieldID INTEGER PRIMARY KEY, fieldName \
+                 TEXT)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, \
+                 valueID INTEGER)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, \
+                 value TEXT)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, \
+                 firstName TEXT, lastName TEXT, name TEXT)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "CREATE TABLE itemCreators (itemID INTEGER, creatorID INTEGER)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query("CREATE TABLE deletedItems (itemID INTEGER)")
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query(
+                "CREATE TABLE fulltextItems (itemID INTEGER, content TEXT, \
+                 indexedChars INTEGER, totalChars INTEGER, version INTEGER)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "CREATE TABLE itemNotes (itemID INTEGER, parentItemID \
+                 INTEGER, note TEXT, title TEXT)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "CREATE TABLE itemAnnotations (itemID INTEGER, parentItemID \
+                 INTEGER, text TEXT, comment TEXT, type INTEGER, color TEXT, \
+                 pageLabel TEXT)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "CREATE TABLE itemAttachments (itemID INTEGER, parentItemID \
+                 INTEGER, path TEXT, contentType TEXT)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO fields (fieldID, fieldName) VALUES (1, 'title'), \
+                 (16, 'extra'), (7, 'DOI')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO itemTypes (itemTypeID, typeName) VALUES (1, \
+                 'journalArticle'), (2, 'note')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
+                 dateModified) VALUES (1, 'K00001', 1, '2024-01-01', \
+                 '2024-02-01')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO itemData (itemID, fieldID, valueID) VALUES (1, \
+                 1, 100), (1, 7, 101)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO itemDataValues (valueID, value) VALUES (100, \
+                 'Rust in Action'), (101, '10.1000/rust')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO fulltextItems (itemID, content) VALUES (1, 'The \
+                 borrow checker ensures memory safety.')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            pool.close().await;
+        }
+
+        #[tokio::test]
+        async fn fulltext_tool_returns_gate_error_when_disabled() {
+            let mut state = zotero_state(String::new());
+            state.sqlite_access = false;
+            let server = ZoteroMcpServer::new(state.clone());
+            let res = server
+                .zotero_fulltext_search_impl(FulltextSearchArgs {
+                    query: "borrow".to_owned(),
+                    limit: Some(10),
+                })
+                .await
+                .unwrap();
+            let text = tool_text(&res);
+            assert!(text.contains("ZOTERO_SQLITE_ACCESS"));
+        }
+
+        #[tokio::test]
+        async fn fulltext_tool_returns_hits_when_enabled() {
+            let dir = tempfile::tempdir().unwrap();
+            let db_path = dir.path().join("zotero.sqlite");
+            seed_db(&db_path).await;
+
+            let mut state = zotero_state(String::new());
+            state.sqlite_access = true;
+            std::env::set_var("ZOTERO_DB_PATH", &db_path);
+            let server = ZoteroMcpServer::new(state);
+            let res = server
+                .zotero_fulltext_search_impl(FulltextSearchArgs {
+                    query: "borrow checker".to_owned(),
+                    limit: Some(10),
+                })
+                .await
+                .unwrap();
+            let text = tool_text(&res);
+            assert!(text.contains("Rust in Action"));
         }
     }
 }

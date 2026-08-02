@@ -30,7 +30,9 @@ pub(crate) use collections::CollectionItemAction;
 pub(crate) use identifiers::IdentifierKind;
 pub(crate) use items::{AnnotationDraft, TrashAction};
 #[allow(unused_imports, reason = "facade re-exports for crate consumers")]
-pub(crate) use local_db::{FulltextHit, LocalZoteroDb, NoteAnnotationHit};
+pub(crate) use local_db::{
+    FulltextHit, LocalZoteroDb, NoteAnnotationHit, find_zotero_db,
+};
 #[allow(unused_imports, reason = "facade re-exports for crate consumers")]
 pub(crate) use models::{
     AnnotationType, CitationKey, CollectionKey, ItemKey, ItemType,

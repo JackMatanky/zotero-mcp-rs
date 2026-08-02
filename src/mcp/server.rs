@@ -36,15 +36,15 @@ use crate::{
             AttachFileArgs, BatchUpdateTagsArgs, CreateAnnotationArgs,
             CreateCollectionArgs, CreateNoteArgs, DeleteCollectionArgs,
             DeleteItemArgs, DeleteTagsArgs, EmptyArgs, FindDuplicatesArgs,
-            GetCollectionItemsArgs, GetItemArgs, GetItemChildrenArgs,
-            GetItemFulltextArgs, GetItemMetadataArgs, GetNotesArgs,
-            GetPdfOutlineArgs, GetPdfPathArgs, GetRecentArgs,
+            FulltextSearchArgs, GetCollectionItemsArgs, GetItemArgs,
+            GetItemChildrenArgs, GetItemFulltextArgs, GetItemMetadataArgs,
+            GetNotesArgs, GetPdfOutlineArgs, GetPdfPathArgs, GetRecentArgs,
             GetRelatedItemsArgs, GetUnfiledItemsArgs, LibraryCoverageArgs,
             ListTagsArgs, ManageCollectionsArgs, ReadPdfPagesArgs,
             RemoveItemRelationArgs, RenameTagArgs, SearchByCitationKeyArgs,
             SearchByTagArgs, SearchCollectionsArgs, SearchItemsArgs,
-            SynthesizeAnnotationsArgs, TrashItemArgs, UpdateCollectionArgs,
-            UpdateItemArgs,
+            SearchNotesAnnotationsArgs, SynthesizeAnnotationsArgs,
+            TrashItemArgs, UpdateCollectionArgs, UpdateItemArgs,
         },
     },
     state::AppState,
@@ -625,6 +625,39 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<AdvancedSearchArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_advanced_search_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_fulltext_search",
+        description = "Search Zotero's local sqlite database for full-text \
+                       matches across titles, creators, and indexed PDF text \
+                       (requires ZOTERO_SQLITE_ACCESS=1)"
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_fulltext_search(
+        &self,
+        Parameters(args): Parameters<FulltextSearchArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_fulltext_search_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_search_notes_annotations",
+        description = "Search Zotero's local sqlite database for note and PDF \
+                       annotation text (requires ZOTERO_SQLITE_ACCESS=1)"
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_search_notes_annotations(
+        &self,
+        Parameters(args): Parameters<SearchNotesAnnotationsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_search_notes_annotations_impl(args).await
     }
 
     #[tool(
