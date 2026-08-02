@@ -111,246 +111,6 @@ pub(crate) struct AddByIdentifierArgs {
     pub(crate) collection_key: Option<CollectionKey>,
 }
 
-impl ZoteroMcpServer {
-    /// Handles recent Zotero item lookup tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_recent_impl(
-        &self,
-        args: GetRecentArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let limit = args.limit.unwrap_or(10).min(100);
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.get_recent_items(limit).await))
-    }
-
-    /// Handles Zotero item retrieval tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_item_impl(
-        &self,
-        args: GetItemArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.get_item(&args.item_key).await))
-    }
-
-    /// Handles Zotero item metadata formatting tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_item_metadata_impl(
-        &self,
-        args: GetItemMetadataArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        if args.format.unwrap_or_default() == MetadataFormat::Bibtex {
-            let bbt_client = BetterBibtexClient::new(&self.state);
-            let translator = TranslatorName::from("bibtex");
-            let result = async {
-                let citekeys = bbt_client
-                    .get_citekeys(std::slice::from_ref(&args.item_key))
-                    .await?;
-                let citekey = citekeys
-                    .get(&args.item_key)
-                    .and_then(Option::as_ref)
-                    .ok_or_else(|| {
-                        ZoteroMcpError::BetterBibTeX(format!(
-                            "no citation key for item {}",
-                            args.item_key
-                        ))
-                    })?;
-                bbt_client
-                    .export_items(std::slice::from_ref(citekey), &translator)
-                    .await
-            }
-            .await;
-            Ok(text_result(result))
-        } else {
-            let client = ZoteroClient::new(&self.state);
-            Ok(json_result(client.get_item(&args.item_key).await))
-        }
-    }
-
-    /// Handles Zotero child item listing tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_item_children_impl(
-        &self,
-        args: GetItemChildrenArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.get_item_children(&args.item_key).await))
-    }
-
-    /// Handles Zotero full-text retrieval tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_item_fulltext_impl(
-        &self,
-        args: GetItemFulltextArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(text_result(client.get_item_fulltext(&args.item_key).await))
-    }
-
-    /// Handles Zotero item update tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_update_item_impl(
-        &self,
-        args: UpdateItemArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.update_item(&args.item_key, args.fields).await))
-    }
-
-    /// Handles Zotero linked-file attachment tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_attach_file_impl(
-        &self,
-        args: AttachFileArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(
-            client
-                .attach_file_link(
-                    &args.parent_item_key,
-                    &args.title,
-                    &args.path_or_url,
-                    args.content_type.as_deref(),
-                )
-                .await,
-        ))
-    }
-
-    /// Handles Zotero item permanent deletion tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_delete_item_impl(
-        &self,
-        args: DeleteItemArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        match client.delete_item(&args.item_key).await {
-            Ok(()) => Ok(text_success("Item permanently deleted")),
-            Err(e) => Ok(text_error(&e)),
-        }
-    }
-
-    /// Handles Zotero item trash tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_trash_item_impl(
-        &self,
-        args: TrashItemArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(
-            client
-                .set_item_deleted(&args.item_key, TrashAction::MoveToTrash)
-                .await,
-        ))
-    }
-
-    /// Handles Zotero item restore-from-trash tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_restore_item_impl(
-        &self,
-        args: TrashItemArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(
-            client.set_item_deleted(&args.item_key, TrashAction::Restore).await,
-        ))
-    }
-
-    /// Handles Zotero add-by-identifier tool calls using `args`.
-    ///
-    /// Resolves the identifier via a public metadata API and creates the item,
-    /// returning the existing item instead if an exact title match is already
-    /// present in the library.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_add_by_identifier_impl(
-        &self,
-        args: AddByIdentifierArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        let mut draft = match crate::zotero::identifiers::resolve_metadata(
-            &self.state,
-            args.kind,
-            &args.identifier,
-        )
-        .await
-        {
-            Ok(d) => d,
-            Err(e) => return Ok(text_error(&e)),
-        };
-
-        if !draft.title.is_empty() {
-            let cond = SearchCondition {
-                field: SearchField::Title,
-                operator: SearchOperator::Is,
-                value: draft.title.clone(),
-            };
-            let existing = client
-                .advanced_search(
-                    vec![cond],
-                    JoinMode::All,
-                    None,
-                    SortDirection::Asc,
-                    0,
-                    1,
-                )
-                .await;
-            if let Ok(page) = existing {
-                if let Some(found) = page.items.into_iter().next() {
-                    return Ok(json_success(&found));
-                }
-            }
-        }
-
-        if let Some(col) = args.collection_key {
-            draft.collections.push(col);
-        }
-        Ok(json_result(client.create_item_from_metadata(draft).await))
-    }
-}
-
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
@@ -579,29 +339,6 @@ impl ZoteroMcpServer {
     }
 
     #[tool(
-        name = "zotero_attach_file",
-        description = "Attach a file link to a parent item (requires write \
-                       permission)",
-        annotations(
-            title = "Attach File to Item",
-            read_only_hint = false,
-            destructive_hint = false,
-            idempotent_hint = false,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_attach_file(
-        &self,
-        Parameters(args): Parameters<AttachFileArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_attach_file_impl(args).await
-    }
-
-    #[tool(
         name = "zotero_delete_item",
         description = "Permanently delete an item (article, note, annotation, \
                        or attachment) (requires write permission)",
@@ -692,6 +429,269 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<AddByIdentifierArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_add_by_identifier_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_attach_file",
+        description = "Attach a file link to a parent item (requires write \
+                       permission)",
+        annotations(
+            title = "Attach File to Item",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_attach_file(
+        &self,
+        Parameters(args): Parameters<AttachFileArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_attach_file_impl(args).await
+    }
+}
+
+impl ZoteroMcpServer {
+    /// Handles recent Zotero item lookup tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_recent_impl(
+        &self,
+        args: GetRecentArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = args.limit.unwrap_or(10).min(100);
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.get_recent_items(limit).await))
+    }
+
+    /// Handles Zotero item retrieval tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_item_impl(
+        &self,
+        args: GetItemArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.get_item(&args.item_key).await))
+    }
+
+    /// Handles Zotero item metadata formatting tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_item_metadata_impl(
+        &self,
+        args: GetItemMetadataArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        if args.format.unwrap_or_default() == MetadataFormat::Bibtex {
+            let bbt_client = BetterBibtexClient::new(&self.state);
+            let translator = TranslatorName::from("bibtex");
+            let result = async {
+                let citekeys = bbt_client
+                    .get_citekeys(std::slice::from_ref(&args.item_key))
+                    .await?;
+                let citekey = citekeys
+                    .get(&args.item_key)
+                    .and_then(Option::as_ref)
+                    .ok_or_else(|| {
+                        ZoteroMcpError::BetterBibTeX(format!(
+                            "no citation key for item {}",
+                            args.item_key
+                        ))
+                    })?;
+                bbt_client
+                    .export_items(std::slice::from_ref(citekey), &translator)
+                    .await
+            }
+            .await;
+            Ok(text_result(result))
+        } else {
+            let client = ZoteroClient::new(&self.state);
+            Ok(json_result(client.get_item(&args.item_key).await))
+        }
+    }
+
+    /// Handles Zotero child item listing tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_item_children_impl(
+        &self,
+        args: GetItemChildrenArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.get_item_children(&args.item_key).await))
+    }
+
+    /// Handles Zotero full-text retrieval tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_item_fulltext_impl(
+        &self,
+        args: GetItemFulltextArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(text_result(client.get_item_fulltext(&args.item_key).await))
+    }
+
+    /// Handles Zotero item update tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_update_item_impl(
+        &self,
+        args: UpdateItemArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.update_item(&args.item_key, args.fields).await))
+    }
+
+    /// Handles Zotero item permanent deletion tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_delete_item_impl(
+        &self,
+        args: DeleteItemArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.delete_item(&args.item_key).await {
+            Ok(()) => Ok(text_success("Item permanently deleted")),
+            Err(e) => Ok(text_error(&e)),
+        }
+    }
+
+    /// Handles Zotero item trash tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_trash_item_impl(
+        &self,
+        args: TrashItemArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client
+                .set_item_deleted(&args.item_key, TrashAction::MoveToTrash)
+                .await,
+        ))
+    }
+
+    /// Handles Zotero item restore-from-trash tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_restore_item_impl(
+        &self,
+        args: TrashItemArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client.set_item_deleted(&args.item_key, TrashAction::Restore).await,
+        ))
+    }
+
+    /// Handles Zotero add-by-identifier tool calls using `args`.
+    ///
+    /// Resolves the identifier via a public metadata API and creates the item,
+    /// returning the existing item instead if an exact title match is already
+    /// present in the library.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_add_by_identifier_impl(
+        &self,
+        args: AddByIdentifierArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        let mut draft = match crate::zotero::identifiers::resolve_metadata(
+            &self.state,
+            args.kind,
+            &args.identifier,
+        )
+        .await
+        {
+            Ok(d) => d,
+            Err(e) => return Ok(text_error(&e)),
+        };
+
+        if !draft.title.is_empty() {
+            let cond = SearchCondition {
+                field: SearchField::Title,
+                operator: SearchOperator::Is,
+                value: draft.title.clone(),
+            };
+            let existing = client
+                .advanced_search(
+                    vec![cond],
+                    JoinMode::All,
+                    None,
+                    SortDirection::Asc,
+                    0,
+                    1,
+                )
+                .await;
+            if let Ok(page) = existing {
+                if let Some(found) = page.items.into_iter().next() {
+                    return Ok(json_success(&found));
+                }
+            }
+        }
+
+        if let Some(col) = args.collection_key {
+            draft.collections.push(col);
+        }
+        Ok(json_result(client.create_item_from_metadata(draft).await))
+    }
+
+    /// Handles Zotero linked-file attachment tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_attach_file_impl(
+        &self,
+        args: AttachFileArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client
+                .attach_file_link(
+                    &args.parent_item_key,
+                    &args.title,
+                    &args.path_or_url,
+                    args.content_type.as_deref(),
+                )
+                .await,
+        ))
     }
 }
 

@@ -60,84 +60,6 @@ pub(crate) struct CreateAnnotationArgs {
     pub(crate) position: AnnotationPosition,
 }
 
-impl ZoteroMcpServer {
-    /// Handles Zotero note retrieval tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_notes_impl(
-        &self,
-        args: GetNotesArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        match client.get_item_children(&args.item_key).await {
-            Ok(children) => {
-                let notes: Vec<_> = children
-                    .into_iter()
-                    .filter(|c| c.data.item_type == ItemType::Note)
-                    .collect();
-                Ok(json_success(&notes))
-            }
-            Err(e) => Ok(text_error(&e)),
-        }
-    }
-
-    /// Handles Zotero note creation tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_create_note_impl(
-        &self,
-        args: CreateNoteArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(
-            client.create_note(&args.parent_item_key, &args.note_content).await,
-        ))
-    }
-
-    /// Handles Zotero annotation synthesis tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_synthesize_annotations_impl(
-        &self,
-        args: SynthesizeAnnotationsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(text_result(client.synthesize_annotations(&args.item_key).await))
-    }
-
-    /// Handles Zotero PDF annotation creation tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_create_annotation_impl(
-        &self,
-        args: CreateAnnotationArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        let draft = AnnotationDraft {
-            parent_attachment_key: args.parent_attachment_key,
-            annotation_type: args.annotation_type,
-            text: args.text,
-            comment: args.comment,
-            color: args.color,
-            page_label: args.page_label,
-            position: args.position,
-        };
-        Ok(json_result(client.create_annotation(draft).await))
-    }
-}
-
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
@@ -233,6 +155,27 @@ impl ZoteroMcpServer {
     }
 
     #[tool(
+        name = "zotero_synthesize_annotations",
+        description = "Extract and synthesize annotations and notes into \
+                       structured Markdown",
+        annotations(
+            title = "Synthesize Annotations",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_synthesize_annotations(
+        &self,
+        Parameters(args): Parameters<SynthesizeAnnotationsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_synthesize_annotations_impl(args).await
+    }
+
+    #[tool(
         name = "zotero_create_note",
         description = "Attach a new note to an item (requires write \
                        permission)",
@@ -256,27 +199,6 @@ impl ZoteroMcpServer {
     }
 
     #[tool(
-        name = "zotero_synthesize_annotations",
-        description = "Extract and synthesize annotations and notes into \
-                       structured Markdown",
-        annotations(
-            title = "Synthesize Annotations",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_synthesize_annotations(
-        &self,
-        Parameters(args): Parameters<SynthesizeAnnotationsArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_synthesize_annotations_impl(args).await
-    }
-
-    #[tool(
         name = "zotero_create_annotation",
         description = "Create a PDF highlight/underline/note annotation on an \
                        attachment (requires write permission)",
@@ -297,6 +219,84 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<CreateAnnotationArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_create_annotation_impl(args).await
+    }
+}
+
+impl ZoteroMcpServer {
+    /// Handles Zotero note retrieval tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_notes_impl(
+        &self,
+        args: GetNotesArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.get_item_children(&args.item_key).await {
+            Ok(children) => {
+                let notes: Vec<_> = children
+                    .into_iter()
+                    .filter(|c| c.data.item_type == ItemType::Note)
+                    .collect();
+                Ok(json_success(&notes))
+            }
+            Err(e) => Ok(text_error(&e)),
+        }
+    }
+
+    /// Handles Zotero annotation synthesis tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_synthesize_annotations_impl(
+        &self,
+        args: SynthesizeAnnotationsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(text_result(client.synthesize_annotations(&args.item_key).await))
+    }
+
+    /// Handles Zotero note creation tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_create_note_impl(
+        &self,
+        args: CreateNoteArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client.create_note(&args.parent_item_key, &args.note_content).await,
+        ))
+    }
+
+    /// Handles Zotero PDF annotation creation tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_create_annotation_impl(
+        &self,
+        args: CreateAnnotationArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        let draft = AnnotationDraft {
+            parent_attachment_key: args.parent_attachment_key,
+            annotation_type: args.annotation_type,
+            text: args.text,
+            comment: args.comment,
+            color: args.color,
+            page_label: args.page_label,
+            position: args.position,
+        };
+        Ok(json_result(client.create_annotation(draft).await))
     }
 }
 

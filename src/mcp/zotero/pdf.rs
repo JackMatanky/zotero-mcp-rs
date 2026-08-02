@@ -52,6 +52,110 @@ pub(crate) struct GetPdfOutlineArgs {
     pub(crate) item_key_or_path: String,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
+pub(crate) enum ZoteroPdfCommand {
+    Path(GetPdfPathArgs),
+    ReadPages(ReadPdfPagesArgs),
+    Outline(GetPdfOutlineArgs),
+}
+
+#[tool_router(router = pdf_router, vis = "pub(crate)")]
+impl ZoteroMcpServer {
+    #[tool(
+        name = "zotero_pdf",
+        description = "Grouped Zotero PDF router. action: path, read_pages, \
+                       outline",
+        annotations(
+            title = "Read Zotero PDFs",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures.
+    pub(crate) async fn zotero_pdf(
+        &self,
+        Parameters(args): Parameters<ZoteroPdfCommand>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        match args {
+            ZoteroPdfCommand::Path(args) => {
+                self.zotero_get_pdf_path_impl(args).await
+            }
+            ZoteroPdfCommand::ReadPages(args) => {
+                self.zotero_read_pdf_pages_impl(args).await
+            }
+            ZoteroPdfCommand::Outline(args) => {
+                self.zotero_get_pdf_outline_impl(args).await
+            }
+        }
+    }
+
+    #[tool(
+        name = "zotero_get_pdf_path",
+        description = "Locate the local PDF file path for an item or its \
+                       attachment",
+        annotations(
+            title = "Locate Item PDF",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_pdf_path(
+        &self,
+        Parameters(args): Parameters<GetPdfPathArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_get_pdf_path_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_read_pdf_pages",
+        description = "Extract raw text from specific 1-based pages of a PDF",
+        annotations(
+            title = "Read PDF Pages",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_read_pdf_pages(
+        &self,
+        Parameters(args): Parameters<ReadPdfPagesArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_read_pdf_pages_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_get_pdf_outline",
+        description = "Extract the PDF outline (table of contents/bookmarks) \
+                       for an item's PDF attachment or a direct PDF path",
+        annotations(
+            title = "Get PDF Outline",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_pdf_outline(
+        &self,
+        Parameters(args): Parameters<GetPdfOutlineArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_get_pdf_outline_impl(args).await
+    }
+}
+
 impl ZoteroMcpServer {
     /// Handles Zotero PDF path discovery tool calls.
     ///
@@ -192,110 +296,6 @@ impl ZoteroMcpServer {
             &pdf_path,
             self.state.security.max_pdf_bytes,
         )))
-    }
-}
-
-#[derive(Deserialize, JsonSchema)]
-#[serde(tag = "action", rename_all = "snake_case")]
-#[schemars(extend("type" = "object"))]
-pub(crate) enum ZoteroPdfCommand {
-    Path(GetPdfPathArgs),
-    ReadPages(ReadPdfPagesArgs),
-    Outline(GetPdfOutlineArgs),
-}
-
-#[tool_router(router = pdf_router, vis = "pub(crate)")]
-impl ZoteroMcpServer {
-    #[tool(
-        name = "zotero_pdf",
-        description = "Grouped Zotero PDF router. action: path, read_pages, \
-                       outline",
-        annotations(
-            title = "Read Zotero PDFs",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures.
-    pub(crate) async fn zotero_pdf(
-        &self,
-        Parameters(args): Parameters<ZoteroPdfCommand>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        match args {
-            ZoteroPdfCommand::Path(args) => {
-                self.zotero_get_pdf_path_impl(args).await
-            }
-            ZoteroPdfCommand::ReadPages(args) => {
-                self.zotero_read_pdf_pages_impl(args).await
-            }
-            ZoteroPdfCommand::Outline(args) => {
-                self.zotero_get_pdf_outline_impl(args).await
-            }
-        }
-    }
-
-    #[tool(
-        name = "zotero_get_pdf_path",
-        description = "Locate the local PDF file path for an item or its \
-                       attachment",
-        annotations(
-            title = "Locate Item PDF",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_pdf_path(
-        &self,
-        Parameters(args): Parameters<GetPdfPathArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_get_pdf_path_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_read_pdf_pages",
-        description = "Extract raw text from specific 1-based pages of a PDF",
-        annotations(
-            title = "Read PDF Pages",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_read_pdf_pages(
-        &self,
-        Parameters(args): Parameters<ReadPdfPagesArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_read_pdf_pages_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_get_pdf_outline",
-        description = "Extract the PDF outline (table of contents/bookmarks) \
-                       for an item's PDF attachment or a direct PDF path",
-        annotations(
-            title = "Get PDF Outline",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_pdf_outline(
-        &self,
-        Parameters(args): Parameters<GetPdfOutlineArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_get_pdf_outline_impl(args).await
     }
 }
 

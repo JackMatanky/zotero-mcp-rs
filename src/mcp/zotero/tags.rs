@@ -48,83 +48,6 @@ pub(crate) struct BatchUpdateTagsArgs {
     pub(crate) remove_tags: Option<Vec<TagName>>,
 }
 
-impl ZoteroMcpServer {
-    /// Handles Zotero tag listing tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_list_tags_impl(
-        &self,
-        args: ListTagsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let limit = args.limit.unwrap_or(100);
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.list_tags(limit).await))
-    }
-
-    /// Handles Zotero tag rename tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_rename_tag_impl(
-        &self,
-        args: RenameTagArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        let old_tag = args.old_tag;
-        let new_tag = args.new_tag;
-        match client.rename_tag(&old_tag, &new_tag).await {
-            Ok(count) => {
-                Ok(text_success(format!("Renamed tag on {count} items")))
-            }
-            Err(e) => Ok(text_error(&e)),
-        }
-    }
-
-    /// Handles Zotero tag deletion tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_delete_tags_impl(
-        &self,
-        args: DeleteTagsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        let tags = args.tags;
-        match client.delete_tags(&tags).await {
-            Ok(()) => Ok(text_success("Tags deleted")),
-            Err(e) => Ok(text_error(&e)),
-        }
-    }
-
-    /// Handles Zotero batch tag update tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_batch_update_tags_impl(
-        &self,
-        args: BatchUpdateTagsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        let add = args.add_tags.unwrap_or_default();
-        let rem = args.remove_tags.unwrap_or_default();
-        match client.batch_update_tags(&args.item_keys, &add, &rem).await {
-            Ok(count) => {
-                Ok(text_success(format!("Batch updated tags on {count} items")))
-            }
-            Err(e) => Ok(text_error(&e)),
-        }
-    }
-}
-
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
@@ -203,6 +126,26 @@ impl ZoteroMcpServer {
     }
 
     #[tool(
+        name = "zotero_list_tags",
+        description = "List all tag names in the library",
+        annotations(
+            title = "List Tags",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_list_tags(
+        &self,
+        Parameters(args): Parameters<ListTagsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_list_tags_impl(args).await
+    }
+
+    #[tool(
         name = "zotero_batch_update_tags",
         description = "Batch add/remove tags across items (requires write \
                        permission)",
@@ -223,26 +166,6 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<BatchUpdateTagsArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_batch_update_tags_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_list_tags",
-        description = "List all tag names in the library",
-        annotations(
-            title = "List Tags",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_list_tags(
-        &self,
-        Parameters(args): Parameters<ListTagsArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_list_tags_impl(args).await
     }
 
     #[tool(
@@ -289,6 +212,83 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<DeleteTagsArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_delete_tags_impl(args).await
+    }
+}
+
+impl ZoteroMcpServer {
+    /// Handles Zotero tag listing tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_list_tags_impl(
+        &self,
+        args: ListTagsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = args.limit.unwrap_or(100);
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.list_tags(limit).await))
+    }
+
+    /// Handles Zotero batch tag update tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_batch_update_tags_impl(
+        &self,
+        args: BatchUpdateTagsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        let add = args.add_tags.unwrap_or_default();
+        let rem = args.remove_tags.unwrap_or_default();
+        match client.batch_update_tags(&args.item_keys, &add, &rem).await {
+            Ok(count) => {
+                Ok(text_success(format!("Batch updated tags on {count} items")))
+            }
+            Err(e) => Ok(text_error(&e)),
+        }
+    }
+
+    /// Handles Zotero tag rename tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_rename_tag_impl(
+        &self,
+        args: RenameTagArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        let old_tag = args.old_tag;
+        let new_tag = args.new_tag;
+        match client.rename_tag(&old_tag, &new_tag).await {
+            Ok(count) => {
+                Ok(text_success(format!("Renamed tag on {count} items")))
+            }
+            Err(e) => Ok(text_error(&e)),
+        }
+    }
+
+    /// Handles Zotero tag deletion tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_delete_tags_impl(
+        &self,
+        args: DeleteTagsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        let tags = args.tags;
+        match client.delete_tags(&tags).await {
+            Ok(()) => Ok(text_success("Tags deleted")),
+            Err(e) => Ok(text_error(&e)),
+        }
     }
 }
 

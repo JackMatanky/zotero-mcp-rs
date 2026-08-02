@@ -74,137 +74,6 @@ pub(crate) struct GetUnfiledItemsArgs {
     pub(crate) limit: Option<usize>,
 }
 
-impl ZoteroMcpServer {
-    /// Handles Zotero collection item listing tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_collection_items_impl(
-        &self,
-        args: GetCollectionItemsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.get_collection_items(&args.collection_key).await))
-    }
-
-    /// Handles Zotero collection creation tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_create_collection_impl(
-        &self,
-        args: CreateCollectionArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(
-            client
-                .create_collection(&args.name, args.parent_key.as_ref())
-                .await,
-        ))
-    }
-
-    /// Handles Zotero collection search tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_search_collections_impl(
-        &self,
-        args: SearchCollectionsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.search_collections(&args.query).await))
-    }
-
-    /// Handles Zotero collection item membership tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_manage_collections_impl(
-        &self,
-        args: ManageCollectionsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        let action = if args.remove.unwrap_or(false) {
-            CollectionItemAction::Remove
-        } else {
-            CollectionItemAction::Add
-        };
-        match client
-            .manage_collection_items(
-                &args.collection_key,
-                &args.item_keys,
-                action,
-            )
-            .await
-        {
-            Ok(()) => Ok(text_success("Collection items updated successfully")),
-            Err(e) => Ok(text_error(&e)),
-        }
-    }
-
-    /// Handles Zotero collection permanent deletion tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_delete_collection_impl(
-        &self,
-        args: DeleteCollectionArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        match client.delete_collection(&args.collection_key).await {
-            Ok(()) => Ok(text_success("Collection permanently deleted")),
-            Err(e) => Ok(text_error(&e)),
-        }
-    }
-
-    /// Handles Zotero collection rename/move tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_update_collection_impl(
-        &self,
-        args: UpdateCollectionArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(
-            client
-                .update_collection(
-                    &args.collection_key,
-                    args.name.as_deref(),
-                    args.parent_key.as_ref(),
-                )
-                .await,
-        ))
-    }
-
-    /// Handles Zotero unfiled items listing tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_unfiled_items_impl(
-        &self,
-        args: GetUnfiledItemsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let limit = args.limit.unwrap_or(50);
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.get_unfiled_items(limit).await))
-    }
-}
-
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
@@ -312,6 +181,46 @@ impl ZoteroMcpServer {
     }
 
     #[tool(
+        name = "zotero_search_collections",
+        description = "Search collections by collection name query",
+        annotations(
+            title = "Search Collections",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_search_collections(
+        &self,
+        Parameters(args): Parameters<SearchCollectionsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_search_collections_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_get_unfiled_items",
+        description = "List top-level items not in any collection",
+        annotations(
+            title = "List Unfiled Items",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_unfiled_items(
+        &self,
+        Parameters(args): Parameters<GetUnfiledItemsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_get_unfiled_items_impl(args).await
+    }
+
+    #[tool(
         name = "zotero_create_collection",
         description = "Create a new Zotero collection (requires write \
                        permission)",
@@ -332,26 +241,6 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<CreateCollectionArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_create_collection_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_search_collections",
-        description = "Search collections by collection name query",
-        annotations(
-            title = "Search Collections",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_search_collections(
-        &self,
-        Parameters(args): Parameters<SearchCollectionsArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_search_collections_impl(args).await
     }
 
     #[tool(
@@ -378,49 +267,6 @@ impl ZoteroMcpServer {
     }
 
     #[tool(
-        name = "zotero_delete_collection",
-        description = "Permanently delete a collection; items inside are not \
-                       deleted (requires write permission)",
-        annotations(
-            title = "Delete Collection",
-            read_only_hint = false,
-            destructive_hint = true,
-            idempotent_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_delete_collection(
-        &self,
-        Parameters(args): Parameters<DeleteCollectionArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_delete_collection_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_get_unfiled_items",
-        description = "List top-level items not in any collection",
-        annotations(
-            title = "List Unfiled Items",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_unfiled_items(
-        &self,
-        Parameters(args): Parameters<GetUnfiledItemsArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_get_unfiled_items_impl(args).await
-    }
-
-    #[tool(
         name = "zotero_update_collection",
         description = "Rename and/or move a collection (pass an empty string \
                        for parent_key to move to the top level) (requires \
@@ -442,6 +288,160 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<UpdateCollectionArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_update_collection_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_delete_collection",
+        description = "Permanently delete a collection; items inside are not \
+                       deleted (requires write permission)",
+        annotations(
+            title = "Delete Collection",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_delete_collection(
+        &self,
+        Parameters(args): Parameters<DeleteCollectionArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_delete_collection_impl(args).await
+    }
+}
+
+impl ZoteroMcpServer {
+    /// Handles Zotero collection item listing tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_collection_items_impl(
+        &self,
+        args: GetCollectionItemsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.get_collection_items(&args.collection_key).await))
+    }
+
+    /// Handles Zotero collection search tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_search_collections_impl(
+        &self,
+        args: SearchCollectionsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.search_collections(&args.query).await))
+    }
+
+    /// Handles Zotero unfiled items listing tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_unfiled_items_impl(
+        &self,
+        args: GetUnfiledItemsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = args.limit.unwrap_or(50);
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.get_unfiled_items(limit).await))
+    }
+
+    /// Handles Zotero collection creation tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_create_collection_impl(
+        &self,
+        args: CreateCollectionArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client
+                .create_collection(&args.name, args.parent_key.as_ref())
+                .await,
+        ))
+    }
+
+    /// Handles Zotero collection item membership tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_manage_collections_impl(
+        &self,
+        args: ManageCollectionsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        let action = if args.remove.unwrap_or(false) {
+            CollectionItemAction::Remove
+        } else {
+            CollectionItemAction::Add
+        };
+        match client
+            .manage_collection_items(
+                &args.collection_key,
+                &args.item_keys,
+                action,
+            )
+            .await
+        {
+            Ok(()) => Ok(text_success("Collection items updated successfully")),
+            Err(e) => Ok(text_error(&e)),
+        }
+    }
+
+    /// Handles Zotero collection rename/move tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_update_collection_impl(
+        &self,
+        args: UpdateCollectionArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client
+                .update_collection(
+                    &args.collection_key,
+                    args.name.as_deref(),
+                    args.parent_key.as_ref(),
+                )
+                .await,
+        ))
+    }
+
+    /// Handles Zotero collection permanent deletion tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_delete_collection_impl(
+        &self,
+        args: DeleteCollectionArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client.delete_collection(&args.collection_key).await {
+            Ok(()) => Ok(text_success("Collection permanently deleted")),
+            Err(e) => Ok(text_error(&e)),
+        }
     }
 }
 

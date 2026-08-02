@@ -31,48 +31,6 @@ pub(crate) struct SearchNotesAnnotationsArgs {
     pub(crate) limit: Option<usize>,
 }
 
-impl ZoteroMcpServer {
-    /// Handles local full-text search tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_fulltext_search_impl(
-        &self,
-        args: FulltextSearchArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let limit = args.limit.unwrap_or(20);
-        let state = &self.state;
-        let result = async {
-            let db = state.local_zotero_db().await?;
-            db.search_fulltext(&args.query, limit).await
-        }
-        .await;
-        Ok(json_result(result))
-    }
-
-    /// Handles local note/annotation search tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_search_notes_annotations_impl(
-        &self,
-        args: SearchNotesAnnotationsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let limit = args.limit.unwrap_or(20);
-        let state = &self.state;
-        let result = async {
-            let db = state.local_zotero_db().await?;
-            db.search_notes_annotations(&args.query, limit).await
-        }
-        .await;
-        Ok(json_result(result))
-    }
-}
-
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
@@ -151,6 +109,48 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<SearchNotesAnnotationsArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_search_notes_annotations_impl(args).await
+    }
+}
+
+impl ZoteroMcpServer {
+    /// Handles local full-text search tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_fulltext_search_impl(
+        &self,
+        args: FulltextSearchArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = args.limit.unwrap_or(20);
+        let state = &self.state;
+        let result = async {
+            let db = state.local_zotero_db().await?;
+            db.search_fulltext(&args.query, limit).await
+        }
+        .await;
+        Ok(json_result(result))
+    }
+
+    /// Handles local note/annotation search tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_search_notes_annotations_impl(
+        &self,
+        args: SearchNotesAnnotationsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = args.limit.unwrap_or(20);
+        let state = &self.state;
+        let result = async {
+            let db = state.local_zotero_db().await?;
+            db.search_notes_annotations(&args.query, limit).await
+        }
+        .await;
+        Ok(json_result(result))
     }
 }
 

@@ -80,129 +80,6 @@ pub(crate) struct LibraryCoverageArgs {
     pub(crate) limit: Option<usize>,
 }
 
-impl ZoteroMcpServer {
-    /// Handles Zotero item search tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_search_items_impl(
-        &self,
-        args: SearchItemsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let offset = args.start.unwrap_or(0);
-        let limit = args.limit.unwrap_or(20);
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(
-            client
-                .search_items(
-                    &args.query,
-                    args.collection_key.as_ref(),
-                    offset,
-                    limit,
-                )
-                .await,
-        ))
-    }
-
-    /// Handles Zotero duplicate detection tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_find_duplicates_impl(
-        &self,
-        args: FindDuplicatesArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(
-            client.find_duplicates(args.collection_key.as_ref()).await,
-        ))
-    }
-
-    /// Handles Zotero tag search tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_search_by_tag_impl(
-        &self,
-        args: SearchByTagArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let limit = args.limit.unwrap_or(20);
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.search_by_tag(&args.tag, limit).await))
-    }
-
-    /// Handles Zotero citation-key search tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_search_by_citation_key_impl(
-        &self,
-        args: SearchByCitationKeyArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.search_by_citation_key(&args.citekey).await))
-    }
-
-    /// Handles Zotero structured search tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_advanced_search_impl(
-        &self,
-        args: AdvancedSearchArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let offset = args.start.unwrap_or(0);
-        let limit = args.limit.unwrap_or(20);
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(
-            client
-                .advanced_search(
-                    args.conditions,
-                    args.join_mode.unwrap_or_default(),
-                    args.sort_by,
-                    args.sort_direction.unwrap_or_default(),
-                    offset,
-                    limit,
-                )
-                .await,
-        ))
-    }
-
-    /// Handles Zotero library coverage analysis tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_library_coverage_impl(
-        &self,
-        args: LibraryCoverageArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let offset = args.start.unwrap_or(0);
-        let limit = args.limit.unwrap_or(100).min(500);
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(
-            client
-                .get_library_coverage(
-                    args.collection_key.as_ref(),
-                    offset,
-                    limit,
-                )
-                .await,
-        ))
-    }
-}
-
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
@@ -277,27 +154,6 @@ impl ZoteroMcpServer {
     }
 
     #[tool(
-        name = "zotero_find_duplicates",
-        description = "Finds potential duplicate items in library or \
-                       collection by matching title or DOI",
-        annotations(
-            title = "Find Duplicate Items",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_find_duplicates(
-        &self,
-        Parameters(args): Parameters<FindDuplicatesArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_find_duplicates_impl(args).await
-    }
-
-    #[tool(
         name = "zotero_search_by_tag",
         description = "Search Zotero items by tag string",
         annotations(
@@ -359,6 +215,27 @@ impl ZoteroMcpServer {
     }
 
     #[tool(
+        name = "zotero_find_duplicates",
+        description = "Finds potential duplicate items in library or \
+                       collection by matching title or DOI",
+        annotations(
+            title = "Find Duplicate Items",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_find_duplicates(
+        &self,
+        Parameters(args): Parameters<FindDuplicatesArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_find_duplicates_impl(args).await
+    }
+
+    #[tool(
         name = "zotero_library_coverage",
         description = "Analyze library or collection statistics for PDF, DOI, \
                        and note coverage",
@@ -377,5 +254,128 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<LibraryCoverageArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_library_coverage_impl(args).await
+    }
+}
+
+impl ZoteroMcpServer {
+    /// Handles Zotero item search tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_search_items_impl(
+        &self,
+        args: SearchItemsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let offset = args.start.unwrap_or(0);
+        let limit = args.limit.unwrap_or(20);
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client
+                .search_items(
+                    &args.query,
+                    args.collection_key.as_ref(),
+                    offset,
+                    limit,
+                )
+                .await,
+        ))
+    }
+
+    /// Handles Zotero tag search tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_search_by_tag_impl(
+        &self,
+        args: SearchByTagArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = args.limit.unwrap_or(20);
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.search_by_tag(&args.tag, limit).await))
+    }
+
+    /// Handles Zotero citation-key search tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_search_by_citation_key_impl(
+        &self,
+        args: SearchByCitationKeyArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.search_by_citation_key(&args.citekey).await))
+    }
+
+    /// Handles Zotero structured search tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_advanced_search_impl(
+        &self,
+        args: AdvancedSearchArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let offset = args.start.unwrap_or(0);
+        let limit = args.limit.unwrap_or(20);
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client
+                .advanced_search(
+                    args.conditions,
+                    args.join_mode.unwrap_or_default(),
+                    args.sort_by,
+                    args.sort_direction.unwrap_or_default(),
+                    offset,
+                    limit,
+                )
+                .await,
+        ))
+    }
+
+    /// Handles Zotero duplicate detection tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_find_duplicates_impl(
+        &self,
+        args: FindDuplicatesArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client.find_duplicates(args.collection_key.as_ref()).await,
+        ))
+    }
+
+    /// Handles Zotero library coverage analysis tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_library_coverage_impl(
+        &self,
+        args: LibraryCoverageArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let offset = args.start.unwrap_or(0);
+        let limit = args.limit.unwrap_or(100).min(500);
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client
+                .get_library_coverage(
+                    args.collection_key.as_ref(),
+                    offset,
+                    limit,
+                )
+                .await,
+        ))
     }
 }

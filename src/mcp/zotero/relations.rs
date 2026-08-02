@@ -44,63 +44,6 @@ pub(crate) struct RemoveItemRelationArgs {
     pub(crate) related_item_key: ItemKey,
 }
 
-impl ZoteroMcpServer {
-    /// Handles Zotero related-item listing tool calls, returning the items
-    /// linked to `item_key` as `RelatedItem` JSON.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_related_items_impl(
-        &self,
-        args: GetRelatedItemsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.get_related_items(&args.item_key).await))
-    }
-
-    /// Handles Zotero related-item linking tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_add_item_relation_impl(
-        &self,
-        args: AddItemRelationArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        match client
-            .add_item_relation(&args.item_key, &args.related_item_key)
-            .await
-        {
-            Ok(()) => Ok(text_success("Item relation added")),
-            Err(e) => Ok(text_error(&e)),
-        }
-    }
-
-    /// Handles Zotero related-item unlinking tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_remove_item_relation_impl(
-        &self,
-        args: RemoveItemRelationArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let client = ZoteroClient::new(&self.state);
-        match client
-            .remove_item_relation(&args.item_key, &args.related_item_key)
-            .await
-        {
-            Ok(()) => Ok(text_success("Item relation removed")),
-            Err(e) => Ok(text_error(&e)),
-        }
-    }
-}
-
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
@@ -235,6 +178,63 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<RemoveItemRelationArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_remove_item_relation_impl(args).await
+    }
+}
+
+impl ZoteroMcpServer {
+    /// Handles Zotero related-item listing tool calls, returning the items
+    /// linked to `item_key` as `RelatedItem` JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_related_items_impl(
+        &self,
+        args: GetRelatedItemsArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.get_related_items(&args.item_key).await))
+    }
+
+    /// Handles Zotero related-item linking tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_add_item_relation_impl(
+        &self,
+        args: AddItemRelationArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client
+            .add_item_relation(&args.item_key, &args.related_item_key)
+            .await
+        {
+            Ok(()) => Ok(text_success("Item relation added")),
+            Err(e) => Ok(text_error(&e)),
+        }
+    }
+
+    /// Handles Zotero related-item unlinking tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_remove_item_relation_impl(
+        &self,
+        args: RemoveItemRelationArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        match client
+            .remove_item_relation(&args.item_key, &args.related_item_key)
+            .await
+        {
+            Ok(()) => Ok(text_success("Item relation removed")),
+            Err(e) => Ok(text_error(&e)),
+        }
     }
 }
 
