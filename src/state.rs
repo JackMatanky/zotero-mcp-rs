@@ -85,7 +85,8 @@ pub(crate) struct AppState {
     pub(crate) sqlite_access: bool,
     /// Optional direct path to `zotero.sqlite` for local database reads.
     pub(crate) zotero_db_path: Option<PathBuf>,
-    /// Cached read-only local database handle shared across SQLite tool calls.
+    /// Cached read-only local database handle shared across `SQLite` tool
+    /// calls.
     pub(crate) local_zotero_db: Arc<OnceCell<CachedLocalZoteroDb>>,
     /// Which MCP tools are advertised to clients. Defaults to compact mode.
     pub(crate) tool_mode: ToolExposureMode,

@@ -6,7 +6,7 @@
 //! 2. The `prefs.js` `dataDir` preference
 //! 3. The per-user default Zotero data directory
 //!
-//! The database is opened with SQLite `immutable=1` and read-only flags so a
+//! The database is opened with `SQLite` `immutable=1` and read-only flags so a
 //! running Zotero instance does not block reads. Queries inspect Zotero's
 //! `itemData`, `fulltextWords`, `itemNotes`, and `itemAnnotations` tables
 //! directly.
@@ -29,7 +29,7 @@ use crate::{errors::ZoteroMcpError, zotero::models::ItemKey};
 /// Maximum rows to scan before full-text results are filtered in Rust.
 const FULLTEXT_SCAN_CAP: usize = 2000;
 
-/// Opens Zotero's local SQLite database in immutable read-only mode.
+/// Opens Zotero's local `SQLite` database in immutable read-only mode.
 #[derive(Clone, Debug)]
 pub(crate) struct LocalZoteroDb {
     pool: SqlitePool,
@@ -87,7 +87,7 @@ pub(crate) struct NoteAnnotationHit {
 }
 
 impl LocalZoteroDb {
-    /// Opens `path` with SQLite `immutable=1` and read-only semantics.
+    /// Opens `path` with `SQLite` `immutable=1` and read-only semantics.
     ///
     /// # Errors
     ///

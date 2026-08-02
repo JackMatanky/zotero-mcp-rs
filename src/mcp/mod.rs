@@ -10,6 +10,7 @@
 //!   bibliographies, search).
 //! - `better_notes`: Tools for Better Notes plugin integration (export, import,
 //!   templates, trees).
+//! - `catalog`: Tool/resource/prompt capability catalog and discovery.
 //! - `connector_tools`: High-level `search` and `fetch` compatibility tools.
 //! - `pdf`: PDF path resolution and security policy enforcement.
 //! - `resources`: Resource and prompt definitions (`zotero://...`).
@@ -19,6 +20,7 @@
 
 mod better_bibtex;
 mod better_notes;
+mod catalog;
 mod connector_tools;
 mod pdf;
 mod resources;

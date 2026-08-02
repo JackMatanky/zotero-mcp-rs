@@ -8,7 +8,10 @@
 //! - `search`: Performs general item searches ([`SearchArgs`])
 //! - `fetch`: Retrieves item metadata by identifier ([`FetchArgs`])
 
-use rmcp::model::CallToolResult;
+use rmcp::{
+    handler::server::wrapper::Parameters, model::CallToolResult, tool,
+    tool_router,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -73,6 +76,50 @@ impl ZoteroMcpServer {
             format: None,
         })
         .await
+    }
+}
+
+#[tool_router(router = connector_router, vis = "pub(crate)")]
+impl ZoteroMcpServer {
+    #[tool(
+        name = "search",
+        description = "Connector search tool - search Zotero items by query",
+        annotations(
+            title = "Search Zotero",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn connector_search(
+        &self,
+        Parameters(args): Parameters<SearchArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.connector_search_impl(args).await
+    }
+
+    #[tool(
+        name = "fetch",
+        description = "Connector fetch tool - get Zotero item metadata by \
+                       item ID/key",
+        annotations(
+            title = "Fetch Zotero Item",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn connector_fetch(
+        &self,
+        Parameters(args): Parameters<FetchArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.connector_fetch_impl(args).await
     }
 }
 

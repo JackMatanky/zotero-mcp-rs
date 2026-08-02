@@ -8,7 +8,10 @@
 //! - Querying note relations ([`NoteRelationsArgs`])
 //! - Retrieving note tree structures ([`NoteTreeArgs`])
 
-use rmcp::model::CallToolResult;
+use rmcp::{
+    handler::server::wrapper::Parameters, model::CallToolResult, tool,
+    tool_router,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -146,6 +149,164 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterNotesClient::new(&self.state);
         Ok(super::json_result(client.get_tree(&args.item_key).await))
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
+pub(crate) enum BetterNotesCommand {
+    Export(NoteExportArgs),
+    FromMarkdown(FromMarkdownArgs),
+    RunTemplate(RunTemplateArgs),
+    Relations(NoteRelationsArgs),
+    Tree(NoteTreeArgs),
+}
+
+#[tool_router(router = better_notes_router, vis = "pub(crate)")]
+impl ZoteroMcpServer {
+    #[tool(
+        name = "better_notes",
+        description = "Grouped Better Notes router. action: export, \
+                       from_markdown, run_template, relations, tree",
+        annotations(
+            title = "Better Notes",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures.
+    pub(crate) async fn better_notes(
+        &self,
+        Parameters(args): Parameters<BetterNotesCommand>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        match args {
+            BetterNotesCommand::Export(args) => {
+                self.better_notes_export_impl(args).await
+            }
+            BetterNotesCommand::FromMarkdown(args) => {
+                self.better_notes_from_markdown_impl(args).await
+            }
+            BetterNotesCommand::RunTemplate(args) => {
+                self.better_notes_run_template_impl(args).await
+            }
+            BetterNotesCommand::Relations(args) => {
+                self.better_notes_get_relations_impl(args).await
+            }
+            BetterNotesCommand::Tree(args) => {
+                self.better_notes_get_tree_impl(args).await
+            }
+        }
+    }
+
+    #[tool(
+        name = "better_notes_export",
+        description = "Export a Zotero note item as Markdown or HTML via \
+                       Better Notes",
+        annotations(
+            title = "Export Note",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_notes_export(
+        &self,
+        Parameters(args): Parameters<NoteExportArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_notes_export_impl(args).await
+    }
+
+    #[tool(
+        name = "better_notes_from_markdown",
+        description = "Convert Markdown to HTML formatted for Zotero notes \
+                       via Better Notes",
+        annotations(
+            title = "Create Note from Markdown",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_notes_from_markdown(
+        &self,
+        Parameters(args): Parameters<FromMarkdownArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_notes_from_markdown_impl(args).await
+    }
+
+    #[tool(
+        name = "better_notes_run_template",
+        description = "Execute a Better Notes template against an item",
+        annotations(
+            title = "Run Note Template",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_notes_run_template(
+        &self,
+        Parameters(args): Parameters<RunTemplateArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_notes_run_template_impl(args).await
+    }
+
+    #[tool(
+        name = "better_notes_get_relations",
+        description = "Fetch linked items / note network for a note via \
+                       Better Notes",
+        annotations(
+            title = "Get Note Relations",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_notes_get_relations(
+        &self,
+        Parameters(args): Parameters<NoteRelationsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_notes_get_relations_impl(args).await
+    }
+
+    #[tool(
+        name = "better_notes_get_tree",
+        description = "Fetch the hierarchical note outline/tree for a note \
+                       via Better Notes",
+        annotations(
+            title = "Get Note Tree",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_notes_get_tree(
+        &self,
+        Parameters(args): Parameters<NoteTreeArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_notes_get_tree_impl(args).await
     }
 }
 

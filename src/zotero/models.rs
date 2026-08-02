@@ -573,7 +573,7 @@ pub(crate) struct ZoteroItemData {
     ///
     /// Zotero 9 exposes this as `itemFields.citationKey`, and quicksearch can
     /// search it server-side. This field takes precedence over any
-    /// `Citation Key: ...` line Better BibTeX may write to
+    /// `Citation Key: ...` line Better `BibTeX` may write to
     /// [`ZoteroItemData::extra`].
     #[serde(rename = "citationKey")]
     pub(crate) citation_key: Option<String>,

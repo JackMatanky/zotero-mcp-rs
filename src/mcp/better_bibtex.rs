@@ -12,7 +12,10 @@
 //! - Configuring auto-exports ([`AutoExportAddArgs`])
 //! - Performing quick search queries ([`BetterBibtexSearchArgs`])
 
-use rmcp::model::CallToolResult;
+use rmcp::{
+    handler::server::wrapper::Parameters, model::CallToolResult, tool,
+    tool_router,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -225,6 +228,240 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = BetterBibtexClient::new(&self.state);
         Ok(super::json_result(client.search(&args.query).await))
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
+pub(crate) enum BetterBibtexCommand {
+    Citekeys(GetCitekeysArgs),
+    Regenerate(RegenerateKeysArgs),
+    Export(ExportItemsArgs),
+    Bibliography(BibliographyArgs),
+    ScanAux(ScanAuxArgs),
+    PandocFilter(PandocFilterArgs),
+    AutoexportAdd(AutoExportAddArgs),
+    Search(BetterBibtexSearchArgs),
+}
+
+#[tool_router(router = better_bibtex_router, vis = "pub(crate)")]
+impl ZoteroMcpServer {
+    #[tool(
+        name = "better_bibtex",
+        description = "Grouped Better BibTeX router. action: citekeys, \
+                       regenerate, export, bibliography, scan_aux, \
+                       pandoc_filter, autoexport_add, search",
+        annotations(
+            title = "Better BibTeX",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures.
+    pub(crate) async fn better_bibtex(
+        &self,
+        Parameters(args): Parameters<BetterBibtexCommand>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        match args {
+            BetterBibtexCommand::Citekeys(args) => {
+                self.better_bibtex_get_citekeys_impl(args).await
+            }
+            BetterBibtexCommand::Regenerate(args) => {
+                self.better_bibtex_regenerate_citekeys_impl(args).await
+            }
+            BetterBibtexCommand::Export(args) => {
+                self.better_bibtex_export_items_impl(args).await
+            }
+            BetterBibtexCommand::Bibliography(args) => {
+                self.better_bibtex_format_bibliography_impl(args).await
+            }
+            BetterBibtexCommand::ScanAux(args) => {
+                self.better_bibtex_scan_aux_impl(args).await
+            }
+            BetterBibtexCommand::PandocFilter(args) => {
+                self.better_bibtex_pandoc_filter_impl(args).await
+            }
+            BetterBibtexCommand::AutoexportAdd(args) => {
+                self.better_bibtex_autoexport_add_impl(args).await
+            }
+            BetterBibtexCommand::Search(args) => {
+                self.better_bibtex_search_impl(args).await
+            }
+        }
+    }
+
+    #[tool(
+        name = "better_bibtex_get_citekeys",
+        description = "Fetch citation keys for Zotero items via Better BibTeX",
+        annotations(
+            title = "Get Citation Keys",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_bibtex_get_citekeys(
+        &self,
+        Parameters(args): Parameters<GetCitekeysArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_bibtex_get_citekeys_impl(args).await
+    }
+
+    #[tool(
+        name = "better_bibtex_regenerate_citekeys",
+        description = "Regenerate Better BibTeX citation keys (requires write \
+                       permission)",
+        annotations(
+            title = "Regenerate Citation Keys",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_bibtex_regenerate_citekeys(
+        &self,
+        Parameters(args): Parameters<RegenerateKeysArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_bibtex_regenerate_citekeys_impl(args).await
+    }
+
+    #[tool(
+        name = "better_bibtex_export_items",
+        description = "Export citekeys using a Better BibTeX translator",
+        annotations(
+            title = "Export Items (Better BibTeX)",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_bibtex_export_items(
+        &self,
+        Parameters(args): Parameters<ExportItemsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_bibtex_export_items_impl(args).await
+    }
+
+    #[tool(
+        name = "better_bibtex_format_bibliography",
+        description = "Format a bibliography for citekeys with Better BibTeX",
+        annotations(
+            title = "Format Bibliography",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_bibtex_format_bibliography(
+        &self,
+        Parameters(args): Parameters<BibliographyArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_bibtex_format_bibliography_impl(args).await
+    }
+
+    #[tool(
+        name = "better_bibtex_scan_aux",
+        description = "Extract citekeys from a LaTeX .aux file via Better \
+                       BibTeX",
+        annotations(
+            title = "Scan LaTeX Aux File",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_bibtex_scan_aux(
+        &self,
+        Parameters(args): Parameters<ScanAuxArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_bibtex_scan_aux_impl(args).await
+    }
+
+    #[tool(
+        name = "better_bibtex_pandoc_filter",
+        description = "Process citekeys through Better BibTeX's Pandoc filter",
+        annotations(
+            title = "Pandoc Citation Filter",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_bibtex_pandoc_filter(
+        &self,
+        Parameters(args): Parameters<PandocFilterArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_bibtex_pandoc_filter_impl(args).await
+    }
+
+    #[tool(
+        name = "better_bibtex_autoexport_add",
+        description = "Configure Better BibTeX auto-export for a collection \
+                       path (requires write permission)",
+        annotations(
+            title = "Register Auto-Export",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_bibtex_autoexport_add(
+        &self,
+        Parameters(args): Parameters<AutoExportAddArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_bibtex_autoexport_add_impl(args).await
+    }
+
+    #[tool(
+        name = "better_bibtex_search",
+        description = "Search items using Better BibTeX's query engine",
+        annotations(
+            title = "Search (Better BibTeX)",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn better_bibtex_search(
+        &self,
+        Parameters(args): Parameters<BetterBibtexSearchArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.better_bibtex_search_impl(args).await
     }
 }
 

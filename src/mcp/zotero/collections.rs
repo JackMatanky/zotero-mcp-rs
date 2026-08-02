@@ -4,7 +4,10 @@
 //! actions: collection item listing, name search, unfiled items, creation,
 //! item membership management, rename/move, and deletion.
 
-use rmcp::model::CallToolResult;
+use rmcp::{
+    handler::server::wrapper::Parameters, model::CallToolResult, tool,
+    tool_router,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -199,5 +202,345 @@ impl ZoteroMcpServer {
         let limit = args.limit.unwrap_or(50);
         let client = ZoteroClient::new(&self.state);
         Ok(json_result(client.get_unfiled_items(limit).await))
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
+pub(crate) enum ZoteroCollectionsCommand {
+    Items(GetCollectionItemsArgs),
+    Search(SearchCollectionsArgs),
+    Unfiled(GetUnfiledItemsArgs),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
+pub(crate) enum ZoteroCollectionsWriteCommand {
+    Create(CreateCollectionArgs),
+    Manage(ManageCollectionsArgs),
+    Update(UpdateCollectionArgs),
+    Delete(DeleteCollectionArgs),
+}
+
+#[tool_router(router = collections_router, vis = "pub(crate)")]
+impl ZoteroMcpServer {
+    #[tool(
+        name = "zotero_collections",
+        description = "Grouped Zotero collection read router. action: items, \
+                       search, unfiled",
+        annotations(
+            title = "Read Zotero Collections",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures.
+    pub(crate) async fn zotero_collections(
+        &self,
+        Parameters(args): Parameters<ZoteroCollectionsCommand>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        match args {
+            ZoteroCollectionsCommand::Items(args) => {
+                self.zotero_get_collection_items_impl(args).await
+            }
+            ZoteroCollectionsCommand::Search(args) => {
+                self.zotero_search_collections_impl(args).await
+            }
+            ZoteroCollectionsCommand::Unfiled(args) => {
+                self.zotero_get_unfiled_items_impl(args).await
+            }
+        }
+    }
+
+    #[tool(
+        name = "zotero_collections_write",
+        description = "Grouped Zotero collection write router. action: \
+                       create, manage, update, delete",
+        annotations(
+            title = "Write Zotero Collections",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures.
+    pub(crate) async fn zotero_collections_write(
+        &self,
+        Parameters(args): Parameters<ZoteroCollectionsWriteCommand>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        match args {
+            ZoteroCollectionsWriteCommand::Create(args) => {
+                self.zotero_create_collection_impl(args).await
+            }
+            ZoteroCollectionsWriteCommand::Manage(args) => {
+                self.zotero_manage_collections_impl(args).await
+            }
+            ZoteroCollectionsWriteCommand::Update(args) => {
+                self.zotero_update_collection_impl(args).await
+            }
+            ZoteroCollectionsWriteCommand::Delete(args) => {
+                self.zotero_delete_collection_impl(args).await
+            }
+        }
+    }
+
+    #[tool(
+        name = "zotero_get_collection_items",
+        description = "Fetch items inside a specific Zotero collection",
+        annotations(
+            title = "Get Collection Items",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_collection_items(
+        &self,
+        Parameters(args): Parameters<GetCollectionItemsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_get_collection_items_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_create_collection",
+        description = "Create a new Zotero collection (requires write \
+                       permission)",
+        annotations(
+            title = "Create Collection",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_create_collection(
+        &self,
+        Parameters(args): Parameters<CreateCollectionArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_create_collection_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_search_collections",
+        description = "Search collections by collection name query",
+        annotations(
+            title = "Search Collections",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_search_collections(
+        &self,
+        Parameters(args): Parameters<SearchCollectionsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_search_collections_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_manage_collections",
+        description = "Add or remove items to/from a collection (requires \
+                       write permission)",
+        annotations(
+            title = "Add or Remove Collection Items",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_manage_collections(
+        &self,
+        Parameters(args): Parameters<ManageCollectionsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_manage_collections_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_delete_collection",
+        description = "Permanently delete a collection; items inside are not \
+                       deleted (requires write permission)",
+        annotations(
+            title = "Delete Collection",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_delete_collection(
+        &self,
+        Parameters(args): Parameters<DeleteCollectionArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_delete_collection_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_get_unfiled_items",
+        description = "List top-level items not in any collection",
+        annotations(
+            title = "List Unfiled Items",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_get_unfiled_items(
+        &self,
+        Parameters(args): Parameters<GetUnfiledItemsArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_get_unfiled_items_impl(args).await
+    }
+
+    #[tool(
+        name = "zotero_update_collection",
+        description = "Rename and/or move a collection (pass an empty string \
+                       for parent_key to move to the top level) (requires \
+                       write permission)",
+        annotations(
+            title = "Rename or Move Collection",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_update_collection(
+        &self,
+        Parameters(args): Parameters<UpdateCollectionArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_update_collection_impl(args).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::{ZoteroMcpServer, mcp::zotero::fixtures::*};
+
+    mod read_operations {
+
+        use super::*;
+
+        #[tokio::test]
+        async fn get_unfiled_items_returns_items() {
+            // Arrange
+            let items = json!([{
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle", "title": "Unfiled Item", "collections": [] }
+            }]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let res = server
+                .zotero_get_unfiled_items_impl(GetUnfiledItemsArgs {
+                    limit: Some(50),
+                })
+                .await
+                .expect("get unfiled ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+        }
+    }
+
+    mod write_operations {
+
+        use super::*;
+
+        #[tokio::test]
+        async fn delete_collection_removes_collection() {
+            // Arrange
+            let collection = json!({
+                "key": "COL1",
+                "version": 1,
+                "data": { "key": "COL1", "name": "Old Collection", "parentCollection": false }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &collection.to_string()),
+                http_response("204 No Content", ""),
+            ]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let res = server
+                .zotero_delete_collection_impl(DeleteCollectionArgs {
+                    collection_key: "COL1".into(),
+                })
+                .await
+                .expect("delete collection ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+        }
+        #[tokio::test]
+        async fn update_collection_renames_collection() {
+            // Arrange
+            let current = json!({
+                "key": "COL1",
+                "version": 3,
+                "data": { "key": "COL1", "name": "Old Name", "parentCollection": false }
+            });
+            let updated = json!({
+                "key": "COL1",
+                "version": 4,
+                "data": { "key": "COL1", "name": "New Name", "parentCollection": false }
+            });
+            let base = mock_server(vec![
+                http_response("200 OK", &current.to_string()),
+                http_response("200 OK", &updated.to_string()),
+            ]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let res = server
+                .zotero_update_collection_impl(UpdateCollectionArgs {
+                    collection_key: "COL1".into(),
+                    name: Some("New Name".to_owned()),
+                    parent_key: None,
+                })
+                .await
+                .expect("update collection ok");
+
+            // Assert
+            assert_eq!(res.is_error, Some(false));
+        }
     }
 }

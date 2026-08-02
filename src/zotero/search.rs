@@ -8,7 +8,7 @@
 //! - [`ZoteroClient::search_items`]: free-text search over title, creator,
 //!   year, or fulltext.
 //! - [`ZoteroClient::search_by_citation_key`]: lookup by native Zotero citation
-//!   key or legacy Better BibTeX metadata.
+//!   key or legacy Better `BibTeX` metadata.
 //! - [`ZoteroClient::advanced_search`]: structured search with
 //!   [`SearchCondition`], [`SearchField`], and [`SearchOperator`].
 
