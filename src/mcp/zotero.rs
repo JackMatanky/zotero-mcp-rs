@@ -66,33 +66,9 @@ mod fixtures {
         }
     }
 
-    pub(in crate::mcp::zotero) fn http_response(
-        status: &str,
-        body: &str,
-    ) -> String {
-        format!(
-            "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
-             application/json\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        )
-    }
-
-    pub(in crate::mcp::zotero) fn http_response_with_headers(
-        status: &str,
-        headers: &[(&str, &str)],
-        body: &str,
-    ) -> String {
-        let mut hdrs = String::new();
-        for (name, value) in headers {
-            use std::fmt::Write as _;
-            let _ = write!(hdrs, "{name}: {value}\r\n");
-        }
-        format!(
-            "HTTP/1.1 {status}\r\n{hdrs}Content-Length: {}\r\nContent-Type: \
-             application/json\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        )
-    }
+    pub(in crate::mcp::zotero) use crate::zotero::test_http::{
+        http_response, http_response_with_headers,
+    };
 
     pub(in crate::mcp::zotero) fn mock_server(
         responses: Vec<String>,

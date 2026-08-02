@@ -25,27 +25,17 @@ mod types;
 pub(crate) use annotations::{AnnotationDraft, AnnotationPosition};
 pub(crate) use client::ZoteroClient;
 pub(crate) use collections::CollectionItemAction;
-#[allow(unused_imports, reason = "facade re-exports for crate consumers")]
-pub(crate) use coverage::{ItemCoverageFlags, LibraryCoverage};
-#[allow(unused_imports, reason = "facade re-exports for crate consumers")]
-pub(crate) use duplicates::{DuplicateGroup, DuplicateType};
 pub(crate) use items::TrashAction;
 pub(crate) use keys::{
     CitationKey, CollectionKey, ItemKey, LibraryVersion, TagName,
 };
 pub(crate) use metadata::IdentifierKind;
 pub(crate) use objects::{ZoteroCollection, ZoteroItem};
-#[allow(unused_imports, reason = "facade re-exports for crate consumers")]
-pub(crate) use relations::RelatedItem;
 pub(crate) use search::{
     JoinMode, SearchCondition, SearchField, SearchOperator, SortDirection,
     SortField,
 };
-#[allow(unused_imports, reason = "facade re-exports for crate consumers")]
-pub(crate) use sqlite::{
-    FulltextHit, LocalZoteroDb, NoteAnnotationHit, find_zotero_db,
-};
-#[allow(unused_imports, reason = "facade re-exports for crate consumers")]
+pub(crate) use sqlite::{LocalZoteroDb, find_zotero_db};
 pub(crate) use types::{AnnotationType, CollectionParent, ItemType, LinkMode};
 
 #[cfg(test)]
