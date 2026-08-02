@@ -18,17 +18,17 @@ use crate::{ZoteroMcpServer, mcp::json_result};
 pub(crate) struct FulltextSearchArgs {
     /// Free-text query matched against title, creators, DOI, and indexed
     /// fulltext.
-    pub(crate) query: String,
+    query: String,
     /// Maximum number of results to return (default: 20).
-    pub(crate) limit: Option<usize>,
+    limit: Option<usize>,
 }
 /// Arguments for `zotero_search_notes_annotations`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchNotesAnnotationsArgs {
     /// Free-text query matched against note body and annotation text/comment.
-    pub(crate) query: String,
+    query: String,
     /// Maximum number of results to return (default: 20).
-    pub(crate) limit: Option<usize>,
+    limit: Option<usize>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -119,7 +119,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_fulltext_search_impl(
+    async fn zotero_fulltext_search_impl(
         &self,
         args: FulltextSearchArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -139,7 +139,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_search_notes_annotations_impl(
+    async fn zotero_search_notes_annotations_impl(
         &self,
         args: SearchNotesAnnotationsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {

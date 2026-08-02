@@ -21,27 +21,27 @@ use crate::{
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetRelatedItemsArgs {
     /// Zotero item key ([`ItemKey`]) whose related items to list.
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
 }
 /// Arguments for `zotero_add_item_relation`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AddItemRelationArgs {
     /// Zotero item key ([`ItemKey`]) of the first item to link (bidirectional,
     /// order-independent).
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
     /// Zotero item key ([`ItemKey`]) of the second item to link
     /// (bidirectional, order-independent).
-    pub(crate) related_item_key: ItemKey,
+    related_item_key: ItemKey,
 }
 /// Arguments for `zotero_remove_item_relation`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RemoveItemRelationArgs {
     /// Zotero item key ([`ItemKey`]) of the first item to unlink
     /// (bidirectional, order-independent).
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
     /// Zotero item key ([`ItemKey`]) of the second item to unlink
     /// (bidirectional, order-independent).
-    pub(crate) related_item_key: ItemKey,
+    related_item_key: ItemKey,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -189,7 +189,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_related_items_impl(
+    async fn zotero_get_related_items_impl(
         &self,
         args: GetRelatedItemsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -203,7 +203,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_add_item_relation_impl(
+    async fn zotero_add_item_relation_impl(
         &self,
         args: AddItemRelationArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -223,7 +223,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_remove_item_relation_impl(
+    async fn zotero_remove_item_relation_impl(
         &self,
         args: RemoveItemRelationArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {

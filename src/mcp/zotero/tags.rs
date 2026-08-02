@@ -10,7 +10,6 @@ use rmcp::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use super::search::SearchByTagArgs;
 use crate::{
     ZoteroMcpServer,
     mcp::{json_result, text_error, text_success},
@@ -21,31 +20,40 @@ use crate::{
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ListTagsArgs {
     /// Maximum number of tags to return (default: 100).
-    pub(crate) limit: Option<usize>,
+    limit: Option<usize>,
+}
+
+/// Arguments for `zotero_search_by_tag`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SearchByTagArgs {
+    /// Tag name ([`TagName`]) to search for.
+    tag: TagName,
+    /// Maximum number of items to return (default: 20).
+    limit: Option<usize>,
 }
 /// Arguments for `zotero_rename_tag`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RenameTagArgs {
     /// Existing tag name ([`TagName`]).
-    pub(crate) old_tag: TagName,
+    old_tag: TagName,
     /// New tag name ([`TagName`]).
-    pub(crate) new_tag: TagName,
+    new_tag: TagName,
 }
 /// Arguments for `zotero_delete_tags`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteTagsArgs {
     /// Tag names ([`TagName`]) to delete from the library (up to 50).
-    pub(crate) tags: Vec<TagName>,
+    tags: Vec<TagName>,
 }
 /// Arguments for `zotero_batch_update_tags`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BatchUpdateTagsArgs {
     /// List of item keys ([`ItemKey`]).
-    pub(crate) item_keys: Vec<ItemKey>,
+    item_keys: Vec<ItemKey>,
     /// Tags ([`TagName`]) to add.
-    pub(crate) add_tags: Option<Vec<TagName>>,
+    add_tags: Option<Vec<TagName>>,
     /// Tags ([`TagName`]) to remove.
-    pub(crate) remove_tags: Option<Vec<TagName>>,
+    remove_tags: Option<Vec<TagName>>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -222,7 +230,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_list_tags_impl(
+    async fn zotero_list_tags_impl(
         &self,
         args: ListTagsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -231,13 +239,28 @@ impl ZoteroMcpServer {
         Ok(json_result(client.list_tags(limit).await))
     }
 
+    /// Handles Zotero tag search tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_search_by_tag_impl(
+        &self,
+        args: SearchByTagArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = args.limit.unwrap_or(20);
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(client.search_by_tag(&args.tag, limit).await))
+    }
+
     /// Handles Zotero batch tag update tool calls.
     ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_batch_update_tags_impl(
+    async fn zotero_batch_update_tags_impl(
         &self,
         args: BatchUpdateTagsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -258,7 +281,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_rename_tag_impl(
+    async fn zotero_rename_tag_impl(
         &self,
         args: RenameTagArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -279,7 +302,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_delete_tags_impl(
+    async fn zotero_delete_tags_impl(
         &self,
         args: DeleteTagsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {

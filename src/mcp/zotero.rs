@@ -25,7 +25,7 @@ pub(crate) use items::GetItemMetadataArgs;
 pub(crate) use search::SearchItemsArgs;
 
 #[cfg(test)]
-pub(crate) mod fixtures {
+mod fixtures {
     use std::{
         io::{Read, Write},
         net::TcpListener,
@@ -35,7 +35,9 @@ pub(crate) mod fixtures {
     use serde_json::json;
 
     use crate::{security::SecurityConfig, state::AppState};
-    pub(crate) fn zotero_state(zotero_api_url: String) -> AppState {
+    pub(in crate::mcp::zotero) fn zotero_state(
+        zotero_api_url: String,
+    ) -> AppState {
         AppState {
             zotero_api_url,
             better_bibtex_url: String::new(),
@@ -48,7 +50,10 @@ pub(crate) mod fixtures {
         }
     }
 
-    pub(crate) fn http_response(status: &str, body: &str) -> String {
+    pub(in crate::mcp::zotero) fn http_response(
+        status: &str,
+        body: &str,
+    ) -> String {
         format!(
             "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
              application/json\r\nConnection: close\r\n\r\n{body}",
@@ -56,7 +61,7 @@ pub(crate) mod fixtures {
         )
     }
 
-    pub(crate) fn http_response_with_headers(
+    pub(in crate::mcp::zotero) fn http_response_with_headers(
         status: &str,
         headers: &[(&str, &str)],
         body: &str,
@@ -73,7 +78,9 @@ pub(crate) mod fixtures {
         )
     }
 
-    pub(crate) fn mock_server(responses: Vec<String>) -> String {
+    pub(in crate::mcp::zotero) fn mock_server(
+        responses: Vec<String>,
+    ) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
         let addr = listener.local_addr().expect("local addr");
         std::thread::spawn(move || {
@@ -88,7 +95,7 @@ pub(crate) mod fixtures {
         format!("http://{addr}")
     }
 
-    pub(crate) fn security_with_pdf_limit(
+    pub(in crate::mcp::zotero) fn security_with_pdf_limit(
         max_pdf_bytes: u64,
     ) -> SecurityConfig {
         SecurityConfig {
@@ -97,7 +104,7 @@ pub(crate) mod fixtures {
         }
     }
 
-    pub(crate) fn parent_journal_item() -> serde_json::Value {
+    pub(in crate::mcp::zotero) fn parent_journal_item() -> serde_json::Value {
         json!({
             "key": "ITEM0001",
             "version": 1,
@@ -109,14 +116,16 @@ pub(crate) mod fixtures {
         })
     }
 
-    pub(crate) fn zotero_pdf_server(children: serde_json::Value) -> String {
+    pub(in crate::mcp::zotero) fn zotero_pdf_server(
+        children: serde_json::Value,
+    ) -> String {
         mock_server(vec![
             http_response("200 OK", &parent_journal_item().to_string()),
             http_response("200 OK", &children.to_string()),
         ])
     }
 
-    pub(crate) fn bridge_pdf_root(
+    pub(in crate::mcp::zotero) fn bridge_pdf_root(
         kind: &str,
         path: &std::path::Path,
     ) -> String {
@@ -129,7 +138,7 @@ pub(crate) mod fixtures {
         mock_server(vec![http_response("200 OK", &body.to_string())])
     }
 
-    pub(crate) fn tool_text(res: &CallToolResult) -> String {
+    pub(in crate::mcp::zotero) fn tool_text(res: &CallToolResult) -> String {
         res.content
             .first()
             .and_then(|c| c.as_text())

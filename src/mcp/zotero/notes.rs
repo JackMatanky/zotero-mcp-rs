@@ -25,39 +25,39 @@ use crate::{
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetNotesArgs {
     /// Zotero item key ([`ItemKey`]).
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
 }
 /// Arguments for `zotero_create_note`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateNoteArgs {
     /// Key of the parent item ([`ItemKey`]).
-    pub(crate) parent_item_key: ItemKey,
+    parent_item_key: ItemKey,
     /// HTML or Markdown content for the note.
-    pub(crate) note_content: String,
+    note_content: String,
 }
 /// Arguments for `zotero_synthesize_annotations`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SynthesizeAnnotationsArgs {
     /// Zotero item key ([`ItemKey`]).
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
 }
 /// Arguments for `zotero_create_annotation`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateAnnotationArgs {
     /// Key of the parent PDF attachment ([`ItemKey`]).
-    pub(crate) parent_attachment_key: ItemKey,
+    parent_attachment_key: ItemKey,
     /// Type of annotation ([`AnnotationType`]).
-    pub(crate) annotation_type: AnnotationType,
+    annotation_type: AnnotationType,
     /// Selected text (required for highlight/underline, omit for note).
-    pub(crate) text: Option<String>,
+    text: Option<String>,
     /// Optional user comment attached to the annotation.
-    pub(crate) comment: Option<String>,
+    comment: Option<String>,
     /// CSS-style hex color, e.g. `"#ffd400"`.
-    pub(crate) color: Option<String>,
+    color: Option<String>,
     /// Optional PDF page label where the annotation appears.
-    pub(crate) page_label: Option<String>,
+    page_label: Option<String>,
     /// Zotero `annotationPosition` JSON object.
-    pub(crate) position: AnnotationPosition,
+    position: AnnotationPosition,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -229,7 +229,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_notes_impl(
+    async fn zotero_get_notes_impl(
         &self,
         args: GetNotesArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -252,7 +252,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_synthesize_annotations_impl(
+    async fn zotero_synthesize_annotations_impl(
         &self,
         args: SynthesizeAnnotationsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -266,7 +266,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_create_note_impl(
+    async fn zotero_create_note_impl(
         &self,
         args: CreateNoteArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -282,7 +282,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_create_annotation_impl(
+    async fn zotero_create_annotation_impl(
         &self,
         args: CreateAnnotationArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {

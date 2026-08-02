@@ -24,54 +24,54 @@ use crate::{
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetCollectionItemsArgs {
     /// Zotero collection key ([`CollectionKey`]).
-    pub(crate) collection_key: CollectionKey,
+    collection_key: CollectionKey,
 }
 /// Arguments for `zotero_create_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateCollectionArgs {
     /// Name of the collection to create.
-    pub(crate) name: String,
+    name: String,
     /// Optional parent collection key ([`CollectionKey`]).
-    pub(crate) parent_key: Option<CollectionKey>,
+    parent_key: Option<CollectionKey>,
 }
 /// Arguments for `zotero_search_collections`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchCollectionsArgs {
     /// Search query matching collection names.
-    pub(crate) query: String,
+    query: String,
 }
 /// Arguments for `zotero_manage_collections`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ManageCollectionsArgs {
     /// Zotero collection key ([`CollectionKey`]).
-    pub(crate) collection_key: CollectionKey,
+    collection_key: CollectionKey,
     /// List of item keys ([`ItemKey`]) to add or remove.
-    pub(crate) item_keys: Vec<ItemKey>,
+    item_keys: Vec<ItemKey>,
     /// Set to `true` to remove items instead of adding them.
-    pub(crate) remove: Option<bool>,
+    remove: Option<bool>,
 }
 /// Arguments for `zotero_delete_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteCollectionArgs {
     /// Key of the collection ([`CollectionKey`]) to permanently delete.
-    pub(crate) collection_key: CollectionKey,
+    collection_key: CollectionKey,
 }
 /// Arguments for `zotero_update_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct UpdateCollectionArgs {
     /// Zotero collection key ([`CollectionKey`]).
-    pub(crate) collection_key: CollectionKey,
+    collection_key: CollectionKey,
     /// New name for the collection.
-    pub(crate) name: Option<String>,
+    name: Option<String>,
     /// New parent collection. Omit to keep current parent; pass `false` or an
     /// empty string to move the collection to the top level.
-    pub(crate) parent_key: Option<CollectionParent>,
+    parent_key: Option<CollectionParent>,
 }
 /// Arguments for `zotero_get_unfiled_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetUnfiledItemsArgs {
     /// Maximum number of items to return (default: 50).
-    pub(crate) limit: Option<usize>,
+    limit: Option<usize>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -321,7 +321,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_collection_items_impl(
+    async fn zotero_get_collection_items_impl(
         &self,
         args: GetCollectionItemsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -335,7 +335,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_search_collections_impl(
+    async fn zotero_search_collections_impl(
         &self,
         args: SearchCollectionsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -349,7 +349,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_unfiled_items_impl(
+    async fn zotero_get_unfiled_items_impl(
         &self,
         args: GetUnfiledItemsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -364,7 +364,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_create_collection_impl(
+    async fn zotero_create_collection_impl(
         &self,
         args: CreateCollectionArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -382,7 +382,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_manage_collections_impl(
+    async fn zotero_manage_collections_impl(
         &self,
         args: ManageCollectionsArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -411,7 +411,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_update_collection_impl(
+    async fn zotero_update_collection_impl(
         &self,
         args: UpdateCollectionArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -433,7 +433,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_delete_collection_impl(
+    async fn zotero_delete_collection_impl(
         &self,
         args: DeleteCollectionArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {

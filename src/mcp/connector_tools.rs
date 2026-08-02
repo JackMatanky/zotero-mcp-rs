@@ -50,12 +50,9 @@ impl ZoteroMcpServer {
         &self,
         args: SearchArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_search_items_impl(SearchItemsArgs {
-            query: args.query,
-            collection_key: None,
-            start: None,
-            limit: Some(20),
-        })
+        self.zotero_search_items_impl(SearchItemsArgs::for_connector(
+            args.query,
+        ))
         .await
     }
 
@@ -71,10 +68,9 @@ impl ZoteroMcpServer {
         &self,
         args: FetchArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_get_item_metadata_impl(GetItemMetadataArgs {
-            item_key: args.id.into(),
-            format: None,
-        })
+        self.zotero_get_item_metadata_impl(GetItemMetadataArgs::json(
+            args.id.into(),
+        ))
         .await
     }
 }

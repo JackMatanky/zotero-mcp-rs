@@ -33,23 +33,23 @@ use crate::{
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetPdfPathArgs {
     /// Zotero item key ([`ItemKey`]) for parent item or attachment item.
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
 }
 /// Arguments for `zotero_read_pdf_pages`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ReadPdfPagesArgs {
     /// Zotero item key; direct PDF paths must resolve under configured or
     /// Zotero-reported PDF roots, otherwise direct-path opt-in is required.
-    pub(crate) item_key_or_path: String,
+    item_key_or_path: String,
     /// 1-based page numbers to extract (e.g. `[1, 2, 3]`).
-    pub(crate) pages: Option<Vec<usize>>,
+    pages: Option<Vec<usize>>,
 }
 /// Arguments for `zotero_get_pdf_outline`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetPdfOutlineArgs {
     /// Zotero item key; direct PDF paths must resolve under configured or
     /// Zotero-reported PDF roots, otherwise direct-path opt-in is required.
-    pub(crate) item_key_or_path: String,
+    item_key_or_path: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -163,7 +163,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_pdf_path_impl(
+    async fn zotero_get_pdf_path_impl(
         &self,
         args: GetPdfPathArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -211,7 +211,7 @@ impl ZoteroMcpServer {
     ///   children cannot be fetched)
     /// - [`ZoteroMcpError::InputRejected`] if the path fails security checks
     /// - [`ZoteroMcpError::Io`] if canonicalization or PDF validation fails
-    pub(crate) async fn resolve_pdf_path(
+    async fn resolve_pdf_path(
         &self,
         item_key_or_path: &str,
     ) -> Result<PathBuf, ZoteroMcpError> {
@@ -260,7 +260,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_read_pdf_pages_impl(
+    async fn zotero_read_pdf_pages_impl(
         &self,
         args: ReadPdfPagesArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -283,7 +283,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_pdf_outline_impl(
+    async fn zotero_get_pdf_outline_impl(
         &self,
         args: GetPdfOutlineArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {

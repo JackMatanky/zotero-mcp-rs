@@ -28,7 +28,7 @@ use crate::{
     Copy, Clone, Debug, Default, Eq, PartialEq, Deserialize, JsonSchema,
 )]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum MetadataFormat {
+enum MetadataFormat {
     /// Return Zotero item metadata as JSON.
     #[default]
     Json,
@@ -39,76 +39,85 @@ pub(crate) enum MetadataFormat {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetRecentArgs {
     /// Maximum number of items to return (default: 10, max: 100).
-    pub(crate) limit: Option<usize>,
+    limit: Option<usize>,
 }
 /// Arguments for `zotero_get_item`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemArgs {
     /// Zotero item key ([`ItemKey`]).
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
 }
 /// Arguments for `zotero_get_item_metadata`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemMetadataArgs {
     /// Zotero item key ([`ItemKey`]).
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
     /// Format: `"json"` or `"bibtex"` ([`MetadataFormat`]), defaulting to
     /// `"json"`.
-    pub(crate) format: Option<MetadataFormat>,
+    format: Option<MetadataFormat>,
+}
+
+impl GetItemMetadataArgs {
+    pub(crate) fn json(item_key: ItemKey) -> Self {
+        Self {
+            item_key,
+            format: None,
+        }
+    }
 }
 /// Arguments for `zotero_get_item_children`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemChildrenArgs {
     /// Zotero item key ([`ItemKey`]).
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
 }
 /// Arguments for `zotero_get_item_fulltext`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemFulltextArgs {
     /// Zotero item key ([`ItemKey`]).
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
 }
 /// Arguments for `zotero_update_item`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct UpdateItemArgs {
     /// Zotero item key ([`ItemKey`]).
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
     /// JSON object containing fields to update.
-    pub(crate) fields: serde_json::Value,
+    fields: serde_json::Value,
 }
 /// Arguments for `zotero_attach_file`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AttachFileArgs {
     /// Key of the parent item ([`ItemKey`]).
-    pub(crate) parent_item_key: ItemKey,
+    parent_item_key: ItemKey,
     /// Display title for the attachment.
-    pub(crate) title: String,
+    title: String,
     /// File path or URL.
-    pub(crate) path_or_url: String,
+    path_or_url: String,
     /// Optional content type (default: `"application/pdf"`).
-    pub(crate) content_type: Option<String>,
+    content_type: Option<String>,
 }
 /// Arguments for `zotero_delete_item`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteItemArgs {
     /// Key of the item ([`ItemKey`]) to permanently delete.
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
 }
 /// Arguments for `zotero_trash_item` and `zotero_restore_item`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct TrashItemArgs {
     /// Key of the item ([`ItemKey`]) to move to or restore from trash.
-    pub(crate) item_key: ItemKey,
+    item_key: ItemKey,
 }
 /// Arguments for `zotero_add_by_identifier`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AddByIdentifierArgs {
     /// Kind of identifier ([`IdentifierKind`](crate::zotero::IdentifierKind)).
-    pub(crate) kind: crate::zotero::IdentifierKind,
+    kind: crate::zotero::IdentifierKind,
     /// The DOI, arXiv ID, or ISBN to resolve.
-    pub(crate) identifier: String,
+    identifier: String,
     /// Optional collection key ([`CollectionKey`]) to file the new item into.
-    pub(crate) collection_key: Option<CollectionKey>,
+    collection_key: Option<CollectionKey>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -462,7 +471,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_recent_impl(
+    async fn zotero_get_recent_impl(
         &self,
         args: GetRecentArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -477,7 +486,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_item_impl(
+    async fn zotero_get_item_impl(
         &self,
         args: GetItemArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -529,7 +538,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_item_children_impl(
+    async fn zotero_get_item_children_impl(
         &self,
         args: GetItemChildrenArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -543,7 +552,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_item_fulltext_impl(
+    async fn zotero_get_item_fulltext_impl(
         &self,
         args: GetItemFulltextArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -557,7 +566,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_update_item_impl(
+    async fn zotero_update_item_impl(
         &self,
         args: UpdateItemArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -571,7 +580,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_delete_item_impl(
+    async fn zotero_delete_item_impl(
         &self,
         args: DeleteItemArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -588,7 +597,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_trash_item_impl(
+    async fn zotero_trash_item_impl(
         &self,
         args: TrashItemArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -606,7 +615,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_restore_item_impl(
+    async fn zotero_restore_item_impl(
         &self,
         args: TrashItemArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -626,7 +635,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_add_by_identifier_impl(
+    async fn zotero_add_by_identifier_impl(
         &self,
         args: AddByIdentifierArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
@@ -677,7 +686,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_attach_file_impl(
+    async fn zotero_attach_file_impl(
         &self,
         args: AttachFileArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {

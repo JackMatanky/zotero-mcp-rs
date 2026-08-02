@@ -44,7 +44,7 @@ impl ZoteroMcpServer {
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_status_impl(
+    async fn zotero_status_impl(
         &self,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
