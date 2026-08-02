@@ -13,7 +13,8 @@ use rmcp::{
     ServerHandler,
     handler::server::wrapper::Parameters,
     model::{
-        CallToolResult, Implementation, InitializeResult, ProtocolVersion,
+        CallToolResponse, CallToolResult, GetPromptResponse, Implementation,
+        InitializeResult, ProtocolVersion, ReadResourceResponse,
         ServerCapabilities,
     },
     tool, tool_router,
@@ -295,6 +296,7 @@ fn tool_visibility(name: &str) -> ToolVisibility {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroSearchCommand {
     Items(SearchItemsArgs),
     Tag(SearchByTagArgs),
@@ -306,6 +308,7 @@ pub(crate) enum ZoteroSearchCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroSqliteSearchCommand {
     Fulltext(FulltextSearchArgs),
     NotesAnnotations(SearchNotesAnnotationsArgs),
@@ -313,6 +316,7 @@ pub(crate) enum ZoteroSqliteSearchCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroPdfCommand {
     Path(GetPdfPathArgs),
     ReadPages(ReadPdfPagesArgs),
@@ -321,6 +325,7 @@ pub(crate) enum ZoteroPdfCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroNotesCommand {
     List(GetNotesArgs),
     Synthesize(SynthesizeAnnotationsArgs),
@@ -328,6 +333,7 @@ pub(crate) enum ZoteroNotesCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroNotesWriteCommand {
     Create(CreateNoteArgs),
     Annotation(CreateAnnotationArgs),
@@ -335,6 +341,7 @@ pub(crate) enum ZoteroNotesWriteCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroCollectionsCommand {
     Items(GetCollectionItemsArgs),
     Search(SearchCollectionsArgs),
@@ -343,6 +350,7 @@ pub(crate) enum ZoteroCollectionsCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroCollectionsWriteCommand {
     Create(CreateCollectionArgs),
     Manage(ManageCollectionsArgs),
@@ -352,6 +360,7 @@ pub(crate) enum ZoteroCollectionsWriteCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroItemsCommand {
     Recent(GetRecentArgs),
     Get(GetItemArgs),
@@ -362,6 +371,7 @@ pub(crate) enum ZoteroItemsCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroItemsWriteCommand {
     Update(UpdateItemArgs),
     Delete(DeleteItemArgs),
@@ -373,6 +383,7 @@ pub(crate) enum ZoteroItemsWriteCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroTagsCommand {
     List(ListTagsArgs),
     Search(SearchByTagArgs),
@@ -380,6 +391,7 @@ pub(crate) enum ZoteroTagsCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroTagsWriteCommand {
     BatchUpdate(BatchUpdateTagsArgs),
     Rename(RenameTagArgs),
@@ -388,12 +400,14 @@ pub(crate) enum ZoteroTagsWriteCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroRelationsCommand {
     Get(GetRelatedItemsArgs),
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroRelationsWriteCommand {
     Add(AddItemRelationArgs),
     Remove(RemoveItemRelationArgs),
@@ -401,6 +415,7 @@ pub(crate) enum ZoteroRelationsWriteCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum BetterBibtexCommand {
     Citekeys(GetCitekeysArgs),
     Regenerate(RegenerateKeysArgs),
@@ -414,6 +429,7 @@ pub(crate) enum BetterBibtexCommand {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
 pub(crate) enum BetterNotesCommand {
     Export(NoteExportArgs),
     FromMarkdown(FromMarkdownArgs),
@@ -510,43 +526,39 @@ impl ZoteroMcpServer {
 
 impl ServerHandler for ZoteroMcpServer {
     fn get_info(&self) -> InitializeResult {
-        InitializeResult {
-            // 2025-06-18 is the first revision defining `title` on tools,
-            // resources, and prompts, and `_meta` on resource contents.
-            protocol_version: ProtocolVersion::V_2025_06_18,
-            capabilities: ServerCapabilities::builder()
+        InitializeResult::new(
+            ServerCapabilities::builder()
                 .enable_tools()
                 .enable_resources()
                 .enable_prompts()
                 .build(),
-            server_info: Implementation {
-                name: "zotero-mcp-rs".to_owned(),
-                version: env!("CARGO_PKG_VERSION").to_owned(),
-                title: Some("Zotero".to_owned()),
-                icons: None,
-                website_url: None,
-            },
-            instructions: Some(SERVER_INSTRUCTIONS.to_owned()),
-        }
+        )
+        // 2025-06-18 is the first revision defining `title` on tools,
+        // resources, and prompts, and `_meta` on resource contents.
+        .with_protocol_version(ProtocolVersion::V_2025_06_18)
+        .with_server_info(
+            Implementation::new("zotero-mcp-rs", env!("CARGO_PKG_VERSION"))
+                .with_title("Zotero"),
+        )
+        .with_instructions(SERVER_INSTRUCTIONS)
     }
 
     fn list_tools(
         &self,
-        _param: Option<rmcp::model::PaginatedRequestParam>,
+        _param: Option<rmcp::model::PaginatedRequestParams>,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> impl Future<Output = Result<rmcp::model::ListToolsResult, rmcp::ErrorData>>
     {
-        std::future::ready(Ok(rmcp::model::ListToolsResult {
-            tools: Self::visible_tools_for_state(&self.state),
-            next_cursor: None,
-        }))
+        std::future::ready(Ok(rmcp::model::ListToolsResult::with_all_items(
+            Self::visible_tools_for_state(&self.state),
+        )))
     }
 
     async fn call_tool(
         &self,
-        param: rmcp::model::CallToolRequestParam,
+        param: rmcp::model::CallToolRequestParams,
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
+    ) -> Result<CallToolResponse, rmcp::ErrorData> {
         let ctx = rmcp::handler::server::tool::ToolCallContext::new(
             self, param, context,
         );
@@ -555,7 +567,7 @@ impl ServerHandler for ZoteroMcpServer {
 
     fn list_resources(
         &self,
-        _param: Option<rmcp::model::PaginatedRequestParam>,
+        _param: Option<rmcp::model::PaginatedRequestParams>,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> impl Future<
         Output = Result<rmcp::model::ListResourcesResult, rmcp::ErrorData>,
@@ -565,7 +577,7 @@ impl ServerHandler for ZoteroMcpServer {
 
     fn list_resource_templates(
         &self,
-        _param: Option<rmcp::model::PaginatedRequestParam>,
+        _param: Option<rmcp::model::PaginatedRequestParams>,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> impl Future<
         Output = Result<
@@ -578,15 +590,15 @@ impl ServerHandler for ZoteroMcpServer {
 
     async fn read_resource(
         &self,
-        param: rmcp::model::ReadResourceRequestParam,
+        param: rmcp::model::ReadResourceRequestParams,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
-    ) -> Result<rmcp::model::ReadResourceResult, rmcp::ErrorData> {
-        self.read_resource_impl(&param.uri).await
+    ) -> Result<ReadResourceResponse, rmcp::ErrorData> {
+        self.read_resource_impl(&param.uri).await.map(Into::into)
     }
 
     fn list_prompts(
         &self,
-        _param: Option<rmcp::model::PaginatedRequestParam>,
+        _param: Option<rmcp::model::PaginatedRequestParams>,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> impl Future<Output = Result<rmcp::model::ListPromptsResult, rmcp::ErrorData>>
     {
@@ -595,14 +607,13 @@ impl ServerHandler for ZoteroMcpServer {
 
     fn get_prompt(
         &self,
-        param: rmcp::model::GetPromptRequestParam,
+        param: rmcp::model::GetPromptRequestParams,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
-    ) -> impl Future<Output = Result<rmcp::model::GetPromptResult, rmcp::ErrorData>>
-    {
-        std::future::ready(Self::get_prompt_impl(
-            &param.name,
-            param.arguments.as_ref(),
-        ))
+    ) -> impl Future<Output = Result<GetPromptResponse, rmcp::ErrorData>> {
+        std::future::ready(
+            Self::get_prompt_impl(&param.name, param.arguments.as_ref())
+                .map(Into::into),
+        )
     }
 }
 

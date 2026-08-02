@@ -25,18 +25,18 @@ mod resources;
 mod server;
 mod zotero;
 
-use rmcp::model::{CallToolResult, Content};
+use rmcp::model::{CallToolResult, ContentBlock};
 use serde::Serialize;
 pub(crate) use server::ZoteroMcpServer;
 
 /// Wraps a text message in a successful [`CallToolResult`].
 fn text_success(text: impl Into<String>) -> CallToolResult {
-    CallToolResult::success(vec![Content::text(text.into())])
+    CallToolResult::success(vec![ContentBlock::text(text.into())])
 }
 
 /// Wraps an error message in an error [`CallToolResult`].
 fn text_error(error: &(impl ToString + ?Sized)) -> CallToolResult {
-    CallToolResult::error(vec![Content::text(error.to_string())])
+    CallToolResult::error(vec![ContentBlock::text(error.to_string())])
 }
 
 /// Converts a text [`Result<String, E>`] into a [`CallToolResult`].

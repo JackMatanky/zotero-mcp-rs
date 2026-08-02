@@ -14,6 +14,9 @@
 //! - `zotero_literature_review`: Generates a structured literature review
 //!   prompt for a collection.
 
+use rmcp::model::{
+    GetPromptResult, PromptMessage, ReadResourceResult, ResourceContents, Role,
+};
 use serde::Serialize;
 
 use crate::{
@@ -32,14 +35,10 @@ fn resource_template(
     title: &str,
     description: &str,
 ) -> rmcp::model::ResourceTemplate {
-    let raw = rmcp::model::RawResourceTemplate {
-        uri_template: uri_template.to_owned(),
-        name: name.to_owned(),
-        title: Some(title.to_owned()),
-        description: Some(description.to_owned()),
-        mime_type: Some("application/json".to_owned()),
-    };
-    rmcp::model::Annotated::new(raw, None)
+    rmcp::model::ResourceTemplate::new(uri_template, name)
+        .with_title(title)
+        .with_description(description)
+        .with_mime_type("application/json")
 }
 
 fn note_children(children: Vec<ZoteroItem>) -> Vec<ZoteroItem> {
@@ -54,73 +53,55 @@ impl ZoteroMcpServer {
     ///
     /// [`ListResourcesResult`]: rmcp::model::ListResourcesResult
     pub(crate) fn list_resources_impl() -> rmcp::model::ListResourcesResult {
-        let collections = rmcp::model::RawResource {
-            uri: "zotero://collections".to_owned(),
-            name: "collections".to_owned(),
-            title: Some("Zotero Collections".to_owned()),
-            description: Some(
-                "List of all collections in Zotero library".to_owned(),
-            ),
-            icons: None,
-            mime_type: Some("application/json".to_owned()),
-            size: None,
-        };
-        let tags = rmcp::model::RawResource {
-            uri: "zotero://tags".to_owned(),
-            name: "tags".to_owned(),
-            title: Some("Zotero Tags".to_owned()),
-            description: Some("List of all tags in Zotero library".to_owned()),
-            icons: None,
-            mime_type: Some("application/json".to_owned()),
-            size: None,
-        };
-        rmcp::model::ListResourcesResult {
-            resources: vec![
-                rmcp::model::Annotated::new(collections, None),
-                rmcp::model::Annotated::new(tags, None),
-            ],
-            next_cursor: None,
-        }
+        let collections =
+            rmcp::model::Resource::new("zotero://collections", "collections")
+                .with_title("Zotero Collections")
+                .with_description("List of all collections in Zotero library")
+                .with_mime_type("application/json");
+        let tags = rmcp::model::Resource::new("zotero://tags", "tags")
+            .with_title("Zotero Tags")
+            .with_description("List of all tags in Zotero library")
+            .with_mime_type("application/json");
+        rmcp::model::ListResourcesResult::with_all_items(vec![
+            collections,
+            tags,
+        ])
     }
 
     pub(crate) fn list_resource_templates_impl()
     -> rmcp::model::ListResourceTemplatesResult {
-        rmcp::model::ListResourceTemplatesResult {
-            resource_templates: vec![
-                resource_template(
-                    "zotero://items/{item_key}",
-                    "item",
-                    "Zotero Item",
-                    "Read one Zotero item by key",
-                ),
-                resource_template(
-                    "zotero://items/{item_key}/children",
-                    "item_children",
-                    "Zotero Item Children",
-                    "Read child notes, attachments, and annotations for an \
-                     item",
-                ),
-                resource_template(
-                    "zotero://items/{item_key}/notes",
-                    "item_notes",
-                    "Zotero Item Notes",
-                    "Read child notes for an item",
-                ),
-                resource_template(
-                    "zotero://items/{item_key}/relations",
-                    "item_relations",
-                    "Zotero Item Relations",
-                    "Read related items for an item",
-                ),
-                resource_template(
-                    "zotero://collections/{collection_key}/items",
-                    "collection_items",
-                    "Zotero Collection Items",
-                    "Read items in a collection",
-                ),
-            ],
-            next_cursor: None,
-        }
+        rmcp::model::ListResourceTemplatesResult::with_all_items(vec![
+            resource_template(
+                "zotero://items/{item_key}",
+                "item",
+                "Zotero Item",
+                "Read one Zotero item by key",
+            ),
+            resource_template(
+                "zotero://items/{item_key}/children",
+                "item_children",
+                "Zotero Item Children",
+                "Read child notes, attachments, and annotations for an item",
+            ),
+            resource_template(
+                "zotero://items/{item_key}/notes",
+                "item_notes",
+                "Zotero Item Notes",
+                "Read child notes for an item",
+            ),
+            resource_template(
+                "zotero://items/{item_key}/relations",
+                "item_relations",
+                "Zotero Item Relations",
+                "Read related items for an item",
+            ),
+            resource_template(
+                "zotero://collections/{collection_key}/items",
+                "collection_items",
+                "Zotero Collection Items",
+                "Read items in a collection",
+            ),
+        ])
     }
 
     /// Reads a single MCP resource identified by `uri`.
@@ -220,25 +201,17 @@ impl ZoteroMcpServer {
     ///
     /// [`ListPromptsResult`]: rmcp::model::ListPromptsResult
     pub(crate) fn list_prompts_impl() -> rmcp::model::ListPromptsResult {
-        let prompt = rmcp::model::Prompt {
-            name: "zotero_literature_review".to_owned(),
-            title: Some("Literature Review".to_owned()),
-            description: Some(
-                "Generate a literature review prompt for a Zotero collection"
-                    .to_owned(),
-            ),
-            icons: None,
-            arguments: Some(vec![rmcp::model::PromptArgument {
-                name: "collection_key".to_owned(),
-                title: Some("Collection Key".to_owned()),
-                description: Some("Key of the Zotero collection".to_owned()),
-                required: Some(true),
-            }]),
-        };
-        rmcp::model::ListPromptsResult {
-            prompts: vec![prompt],
-            next_cursor: None,
-        }
+        let argument = rmcp::model::PromptArgument::new("collection_key")
+            .with_title("Collection Key")
+            .with_description("Key of the Zotero collection")
+            .with_required(true);
+        let prompt = rmcp::model::Prompt::new(
+            "zotero_literature_review",
+            Some("Generate a literature review prompt for a Zotero collection"),
+            Some(vec![argument]),
+        )
+        .with_title("Literature Review");
+        rmcp::model::ListPromptsResult::with_all_items(vec![prompt])
     }
 
     /// Builds an MCP prompt response for `name` using `arguments`.
@@ -257,21 +230,14 @@ impl ZoteroMcpServer {
                 .and_then(|args| args.get("collection_key"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            Ok(rmcp::model::GetPromptResult {
-                description: Some(
-                    "Synthesize literature review from Zotero items".to_owned(),
+            Ok(GetPromptResult::new(vec![PromptMessage::new_text(
+                Role::User,
+                format!(
+                    "Please perform a structured literature review of all \
+                     paper items in Zotero collection key '{col_key}'."
                 ),
-                messages: vec![rmcp::model::PromptMessage {
-                    role: rmcp::model::PromptMessageRole::User,
-                    content: rmcp::model::PromptMessageContent::Text {
-                        text: format!(
-                            "Please perform a structured literature review of \
-                             all paper items in Zotero collection key \
-                             '{col_key}'."
-                        ),
-                    },
-                }],
-            })
+            )])
+            .with_description("Synthesize literature review from Zotero items"))
         } else {
             Err(rmcp::ErrorData::invalid_params(
                 format!("Unknown prompt: {name}"),
@@ -289,14 +255,13 @@ fn json_resource<T: Serialize>(
     uri: &str,
     value: &T,
 ) -> rmcp::model::ReadResourceResult {
-    rmcp::model::ReadResourceResult {
-        contents: vec![rmcp::model::ResourceContents::TextResourceContents {
-            uri: uri.to_owned(),
-            mime_type: Some("application/json".to_owned()),
-            text: serde_json::to_string_pretty(value).unwrap_or_default(),
-            meta: None,
-        }],
-    }
+    ReadResourceResult::new(vec![
+        ResourceContents::text(
+            serde_json::to_string_pretty(value).unwrap_or_default(),
+            uri.to_owned(),
+        )
+        .with_mime_type("application/json"),
+    ])
 }
 
 #[cfg(test)]
@@ -368,7 +333,7 @@ mod tests {
             let uris: Vec<&str> = res
                 .resources
                 .iter()
-                .map(|resource| resource.raw.uri.as_str())
+                .map(|resource| resource.uri.as_str())
                 .collect();
             assert_eq!(uris, ["zotero://collections", "zotero://tags"]);
         }
@@ -379,7 +344,7 @@ mod tests {
             let res = ZoteroMcpServer::list_resources_impl();
 
             // Assert
-            let collections = &res.resources.first().expect("resource").raw;
+            let collections = res.resources.first().expect("resource");
             assert_eq!(collections.name, "collections");
             assert_eq!(
                 collections.title.as_deref(),
@@ -387,7 +352,7 @@ mod tests {
             );
             for resource in &res.resources {
                 assert!(
-                    !resource.raw.name.contains(' '),
+                    !resource.name.contains(' '),
                     "resource name must be a programmatic identifier"
                 );
             }
@@ -399,7 +364,7 @@ mod tests {
             let templates: Vec<&str> = res
                 .resource_templates
                 .iter()
-                .map(|template| template.raw.uri_template.as_str())
+                .map(|template| template.uri_template.as_str())
                 .collect();
 
             assert!(templates.contains(&"zotero://items/{item_key}"));
@@ -415,12 +380,12 @@ mod tests {
 
             for template in &res.resource_templates {
                 assert!(
-                    template.raw.uri_template.contains('{'),
+                    template.uri_template.contains('{'),
                     "{} is static and belongs in resources/list",
-                    template.raw.uri_template
+                    template.uri_template
                 );
-                assert!(!template.raw.name.contains(' '));
-                assert!(template.raw.title.is_some());
+                assert!(!template.name.contains(' '));
+                assert!(template.title.is_some());
             }
         }
 
@@ -566,14 +531,8 @@ mod tests {
             // Assert
             assert_eq!(prompt.messages.len(), 1);
             let msg = prompt.messages.first().expect("message");
-            if let rmcp::model::PromptMessageContent::Text {
-                text,
-            } = &msg.content
-            {
-                assert!(text.contains("COL123"));
-            } else {
-                panic!("expected text content");
-            }
+            let text = msg.content.as_text().expect("text content");
+            assert!(text.text.contains("COL123"));
         }
 
         #[test]
