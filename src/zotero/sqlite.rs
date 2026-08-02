@@ -24,7 +24,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool, sqlite::SqliteConnectOptions};
 
-use crate::{errors::ZoteroMcpError, zotero::models::ItemKey};
+use crate::{errors::ZoteroMcpError, zotero::ItemKey};
 
 /// Maximum rows to scan before full-text results are filtered in Rust.
 const FULLTEXT_SCAN_CAP: usize = 2000;

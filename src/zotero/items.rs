@@ -1,73 +1,15 @@
-//! Item, note, attachment, and annotation operations for the Zotero Local HTTP
-//! API.
+//! Core item lifecycle operations for the Zotero Local HTTP API.
 //!
-//! Adds [`ZoteroClient`] methods for item reads, note and attachment creation,
-//! bibliographic field updates, trash state changes, and PDF annotation
-//! creation.
-//!
-//! # Key operations
-//!
-//! - [`ZoteroClient::get_recent_items`] and [`ZoteroClient::get_item`]: query
-//!   items and child nodes.
-//! - [`ZoteroClient::create_note`] and [`ZoteroClient::attach_file_link`]:
-//!   create notes and linked attachments.
-//! - [`ZoteroClient::update_item`] and [`ZoteroClient::set_item_deleted`]:
-//!   update fields or trash state.
-//! - [`ZoteroClient::create_annotation`]: create PDF annotations.
+//! Adds [`ZoteroClient`] methods for item reads, metadata-created item writes,
+//! field updates, trash/restore, and deletion.
 
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     errors::ZoteroMcpError,
-    zotero::{
-        client::ZoteroClient,
-        identifiers::ItemDraft,
-        models::{AnnotationType, ItemKey, ItemType, LinkMode, ZoteroItem},
-    },
+    zotero::{ItemKey, ZoteroItem, client::ZoteroClient, metadata::ItemDraft},
 };
-
-/// Serialized Zotero annotation position payload.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(transparent)]
-pub(crate) struct AnnotationPosition(serde_json::Value);
-
-impl AnnotationPosition {
-    fn as_zotero_string(&self) -> String {
-        self.0.to_string()
-    }
-}
-impl schemars::JsonSchema for AnnotationPosition {
-    #[inline]
-    fn schema_name() -> std::borrow::Cow<'static, str> {
-        "AnnotationPosition".into()
-    }
-
-    #[inline]
-    fn json_schema(
-        generator: &mut schemars::SchemaGenerator,
-    ) -> schemars::Schema {
-        serde_json::Value::json_schema(generator)
-    }
-}
-
-impl From<serde_json::Value> for AnnotationPosition {
-    fn from(value: serde_json::Value) -> Self {
-        Self(value)
-    }
-}
-
-/// Payload for creating a PDF annotation.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub(crate) struct AnnotationDraft {
-    pub(crate) parent_attachment_key: ItemKey,
-    pub(crate) annotation_type: AnnotationType,
-    pub(crate) text: Option<String>,
-    pub(crate) comment: Option<String>,
-    pub(crate) color: Option<String>,
-    pub(crate) page_label: Option<String>,
-    pub(crate) position: AnnotationPosition,
-}
 
 /// Requested trash state transition for an item.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -190,59 +132,6 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Fetches Zotero's indexed fulltext content for `item_key`, returning an
-    /// empty string if unindexed.
-    ///
-    /// # Errors
-    ///
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
-    pub(crate) async fn get_item_fulltext(
-        &self,
-        item_key: &ItemKey,
-    ) -> Result<String, ZoteroMcpError> {
-        let url = format!(
-            "{}/users/0/items/{}/fulltext",
-            self.state.zotero_api_url, item_key
-        );
-        let val: serde_json::Value = self.get_json(&url).await?;
-        let content = val
-            .get("content")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_owned();
-        Ok(content)
-    }
-
-    /// Creates a note item attached to `parent_item_key` with body
-    /// `note_content`.
-    ///
-    /// # Errors
-    ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
-    pub(crate) async fn create_note(
-        &self,
-        parent_item_key: &ItemKey,
-        note_content: &str,
-    ) -> Result<ZoteroItem, ZoteroMcpError> {
-        self.state.check_write_permission()?;
-        let url = format!("{}/users/0/items", self.state.zotero_api_url);
-        let payload = serde_json::json!([{
-            "itemType": ItemType::Note,
-            "parentItem": parent_item_key,
-            "note": note_content,
-        }]);
-
-        self.post_json_first(&url, &payload, "Created note array was empty")
-            .await
-    }
-
     /// Updates fields of an existing item identified by `item_key` with JSON
     /// `fields`.
     ///
@@ -270,49 +159,6 @@ impl ZoteroClient<'_> {
             Ok(item) => Ok(item),
             Err(_) => self.get_item(item_key).await,
         }
-    }
-
-    /// Attaches a linked file to a parent item.
-    ///
-    /// # Arguments
-    ///
-    /// * `parent_item_key` - Key of the parent item to attach to
-    /// * `title` - Title for the attachment
-    /// * `file_path_or_url` - File path or URL to link
-    /// * `content_type` - Optional MIME content type (defaults to
-    ///   `"application/pdf"`)
-    ///
-    /// # Errors
-    ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
-    pub(crate) async fn attach_file_link(
-        &self,
-        parent_item_key: &ItemKey,
-        title: &str,
-        file_path_or_url: &str,
-        content_type: Option<&str>,
-    ) -> Result<ZoteroItem, ZoteroMcpError> {
-        self.state.check_write_permission()?;
-        let url = format!("{}/users/0/items", self.state.zotero_api_url);
-        let payload = serde_json::json!([{
-            "itemType": ItemType::Attachment,
-            "parentItem": parent_item_key,
-            "title": title,
-            "linkMode": LinkMode::ImportedFile,
-            "path": file_path_or_url,
-            "contentType": content_type.unwrap_or("application/pdf"),
-        }]);
-
-        self.post_json_first(
-            &url,
-            &payload,
-            "Created attachment array was empty",
-        )
-        .await
     }
 
     /// Permanently deletes the item identified by `item_key`.
@@ -360,42 +206,8 @@ impl ZoteroClient<'_> {
         .await
     }
 
-    /// Creates a PDF annotation attached to a parent attachment item.
-    ///
-    /// # Errors
-    ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if response decoding fails
-    pub(crate) async fn create_annotation(
-        &self,
-        draft: AnnotationDraft,
-    ) -> Result<ZoteroItem, ZoteroMcpError> {
-        self.state.check_write_permission()?;
-        let position = draft.position.as_zotero_string();
-        let url = format!("{}/users/0/items", self.state.zotero_api_url);
-        let payload = serde_json::json!([{
-            "itemType": ItemType::Annotation,
-            "parentItem": draft.parent_attachment_key,
-            "annotationType": draft.annotation_type,
-            "annotationText": draft.text,
-            "annotationComment": draft.comment.as_deref().unwrap_or(""),
-            "annotationColor": draft.color.as_deref().unwrap_or("#ffd400"),
-            "annotationPageLabel": draft.page_label,
-            "annotationPosition": position,
-        }]);
-        self.post_json_first(
-            &url,
-            &payload,
-            "Created annotation array was empty",
-        )
-        .await
-    }
-
     /// Creates a new item from a resolved metadata `draft` (as returned by
-    /// [`crate::zotero::identifiers::resolve_metadata`]).
+    /// [`crate::zotero::metadata::resolve_metadata`]).
     ///
     /// # Errors
     ///

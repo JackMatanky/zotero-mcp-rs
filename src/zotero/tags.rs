@@ -14,10 +14,7 @@ use std::collections::BTreeSet;
 
 use crate::{
     errors::ZoteroMcpError,
-    zotero::{
-        client::ZoteroClient,
-        models::{ItemKey, TagName, ZoteroTag},
-    },
+    zotero::{ItemKey, TagName, client::ZoteroClient, objects::ZoteroTag},
 };
 
 impl ZoteroClient<'_> {
@@ -161,7 +158,7 @@ pub(crate) fn diff_tags(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::zotero::models::TagOrigin;
+    use crate::zotero::types::TagOrigin;
 
     mod diff_tags {
         use pretty_assertions::assert_eq;

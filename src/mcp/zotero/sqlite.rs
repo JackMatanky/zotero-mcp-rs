@@ -17,7 +17,7 @@ use crate::{ZoteroMcpServer, mcp::json_result};
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FulltextSearchArgs {
     /// Free-text query matched against title, creators, DOI, and indexed
-    /// fulltext.
+    /// full-text content.
     query: String,
     /// Maximum number of results to return (default: 20).
     limit: Option<usize>,
@@ -71,7 +71,7 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_fulltext_search",
-        description = "Search Zotero's local sqlite database for full-text \
+        description = "Search Zotero's local SQLite database for full-text \
                        matches across titles, creators, and indexed PDF text \
                        (requires ZOTERO_SQLITE_ACCESS=1)",
         annotations(
@@ -93,7 +93,7 @@ impl ZoteroMcpServer {
 
     #[tool(
         name = "zotero_search_notes_annotations",
-        description = "Search Zotero's local sqlite database for note and PDF \
+        description = "Search Zotero's local SQLite database for note and PDF \
                        annotation text (requires ZOTERO_SQLITE_ACCESS=1)",
         annotations(
             title = "Search Notes and Annotations",

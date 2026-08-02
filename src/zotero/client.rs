@@ -15,7 +15,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use crate::{
     errors::ZoteroMcpError,
     state::AppState,
-    zotero::models::{LibraryVersion, LocalApiStatus, ZoteroItem},
+    zotero::{LibraryVersion, ZoteroItem, objects::LocalApiStatus},
 };
 
 /// One page of Zotero items and the optional `Total-Results` header count.

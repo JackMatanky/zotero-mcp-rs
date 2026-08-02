@@ -1,18 +1,34 @@
 //! MCP tool handlers and argument models for Zotero operations.
 //!
-//! Each sibling module owns one grouped-router domain exposed to MCP clients:
+//! Each sibling module owns one flat Zotero domain exposed to MCP clients:
 //! - `status`: `zotero_status`
-//! - `items`: `zotero_items` / `zotero_items_write`
+//! - `items`: `zotero_items` / `zotero_items_write` core item lifecycle plus
+//!   compatibility dispatch
+//! - `metadata`: `zotero_get_item_metadata` and `zotero_add_by_identifier`
 //! - `collections`: `zotero_collections` / `zotero_collections_write`
-//! - `notes`: `zotero_notes` / `zotero_notes_write`
+//! - `notes`: `zotero_notes` / `zotero_notes_write` note list/create plus
+//!   compatibility dispatch
+//! - `annotations`: `zotero_synthesize_annotations` and
+//!   `zotero_create_annotation`
+//! - `attachments`: `zotero_attach_file`
+//! - `fulltext`: `zotero_get_item_fulltext`
 //! - `tags`: `zotero_tags` / `zotero_tags_write`
 //! - `relations`: `zotero_relations` / `zotero_relations_write`
-//! - `search`: `zotero_search`
+//! - `search`: `zotero_search` item/tag/citation-key/advanced search plus
+//!   compatibility dispatch
+//! - `duplicates`: `zotero_find_duplicates`
+//! - `coverage`: `zotero_library_coverage`
 //! - `sqlite`: `zotero_sqlite_search`
 //! - `pdf`: `zotero_pdf`
 
+mod annotations;
+mod attachments;
 mod collections;
+mod coverage;
+mod duplicates;
+mod fulltext;
 mod items;
+mod metadata;
 mod notes;
 mod pdf;
 mod relations;
@@ -21,7 +37,7 @@ mod sqlite;
 mod status;
 mod tags;
 
-pub(crate) use items::GetItemMetadataArgs;
+pub(crate) use metadata::GetItemMetadataArgs;
 pub(crate) use search::SearchItemsArgs;
 
 #[cfg(test)]

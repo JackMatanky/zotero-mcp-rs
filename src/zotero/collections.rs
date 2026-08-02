@@ -17,11 +17,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     errors::ZoteroMcpError,
     zotero::{
+        CollectionKey, CollectionParent, ItemKey, ZoteroCollection, ZoteroItem,
         client::ZoteroClient,
-        models::{
-            CollectionKey, CollectionParent, ItemKey, ZoteroCollection,
-            ZoteroItem,
-        },
     },
 };
 

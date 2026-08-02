@@ -15,7 +15,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     errors::ZoteroMcpError,
     state::AppState,
-    zotero::models::{CollectionKey, CreatorType, ItemType, ZoteroCreator},
+    zotero::{
+        CollectionKey, ItemType, objects::ZoteroCreator, types::CreatorType,
+    },
 };
 
 /// Zotero item payload resolved from a DOI, arXiv ID, or ISBN lookup.

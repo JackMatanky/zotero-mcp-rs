@@ -1,8 +1,8 @@
 //! MCP tool handlers and argument models for Zotero collection operations.
 //!
 //! Covers `zotero_collections` / `zotero_collections_write` grouped-router
-//! actions: collection item listing, name search, unfiled items, creation,
-//! item membership management, rename/move, and deletion.
+//! actions: collection item listing, name search, creation, item membership
+//! management, rename/move, deletion, plus compatible unfiled-item dispatch.
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -26,21 +26,12 @@ pub(crate) struct GetCollectionItemsArgs {
     /// Zotero collection key ([`CollectionKey`]).
     collection_key: CollectionKey,
 }
-
 /// Arguments for `zotero_search_collections`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchCollectionsArgs {
     /// Search query matching collection names.
     query: String,
 }
-
-/// Arguments for `zotero_get_unfiled_items`.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct GetUnfiledItemsArgs {
-    /// Maximum number of items to return (default: 50).
-    limit: Option<usize>,
-}
-
 /// Arguments for `zotero_create_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateCollectionArgs {
@@ -49,7 +40,6 @@ pub(crate) struct CreateCollectionArgs {
     /// Optional parent collection key ([`CollectionKey`]).
     parent_key: Option<CollectionKey>,
 }
-
 /// Arguments for `zotero_manage_collections`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ManageCollectionsArgs {
@@ -60,7 +50,6 @@ pub(crate) struct ManageCollectionsArgs {
     /// Set to `true` to remove items instead of adding them.
     remove: Option<bool>,
 }
-
 /// Arguments for `zotero_update_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct UpdateCollectionArgs {
@@ -72,7 +61,6 @@ pub(crate) struct UpdateCollectionArgs {
     /// empty string to move the collection to the top level.
     parent_key: Option<CollectionParent>,
 }
-
 /// Arguments for `zotero_delete_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteCollectionArgs {
@@ -86,7 +74,7 @@ pub(crate) struct DeleteCollectionArgs {
 pub(crate) enum ZoteroCollectionsCommand {
     Items(GetCollectionItemsArgs),
     Search(SearchCollectionsArgs),
-    Unfiled(GetUnfiledItemsArgs),
+    Unfiled(crate::mcp::zotero::items::GetUnfiledItemsArgs),
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -204,26 +192,6 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<SearchCollectionsArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         self.zotero_search_collections_impl(args).await
-    }
-
-    #[tool(
-        name = "zotero_get_unfiled_items",
-        description = "List top-level items not in any collection",
-        annotations(
-            title = "List Unfiled Items",
-            read_only_hint = true,
-            open_world_hint = false
-        )
-    )]
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    pub(crate) async fn zotero_get_unfiled_items(
-        &self,
-        Parameters(args): Parameters<GetUnfiledItemsArgs>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.zotero_get_unfiled_items_impl(args).await
     }
 
     #[tool(
@@ -349,21 +317,6 @@ impl ZoteroMcpServer {
         Ok(json_result(client.search_collections(&args.query).await))
     }
 
-    /// Handles Zotero unfiled items listing tool calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
-    async fn zotero_get_unfiled_items_impl(
-        &self,
-        args: GetUnfiledItemsArgs,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let limit = args.limit.unwrap_or(50);
-        let client = ZoteroClient::new(&self.state);
-        Ok(json_result(client.get_unfiled_items(limit).await))
-    }
-
     /// Handles Zotero collection creation tool calls.
     ///
     /// # Errors
@@ -457,35 +410,6 @@ mod tests {
 
     use super::*;
     use crate::{ZoteroMcpServer, mcp::zotero::fixtures::*};
-
-    mod read_operations {
-
-        use super::*;
-
-        #[tokio::test]
-        async fn get_unfiled_items_returns_items() {
-            // Arrange
-            let items = json!([{
-                "key": "ITEM1",
-                "version": 1,
-                "data": { "key": "ITEM1", "version": 1, "itemType": "journalArticle", "title": "Unfiled Item", "collections": [] }
-            }]);
-            let base =
-                mock_server(vec![http_response("200 OK", &items.to_string())]);
-            let server = ZoteroMcpServer::new(zotero_state(base));
-
-            // Act
-            let res = server
-                .zotero_get_unfiled_items_impl(GetUnfiledItemsArgs {
-                    limit: Some(50),
-                })
-                .await
-                .expect("get unfiled ok");
-
-            // Assert
-            assert_eq!(res.is_error, Some(false));
-        }
-    }
 
     mod write_operations {
 

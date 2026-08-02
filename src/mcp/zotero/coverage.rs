@@ -1,0 +1,75 @@
+//! MCP tool handlers for Zotero library coverage metrics.
+
+use rmcp::{
+    handler::server::wrapper::Parameters, model::CallToolResult, tool,
+    tool_router,
+};
+use schemars::JsonSchema;
+use serde::Deserialize;
+
+use crate::{
+    ZoteroMcpServer,
+    mcp::json_result,
+    zotero::{CollectionKey, ZoteroClient},
+};
+
+/// Arguments for `zotero_library_coverage`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct LibraryCoverageArgs {
+    /// Optional collection key ([`CollectionKey`]) to scope coverage analysis.
+    collection_key: Option<CollectionKey>,
+    /// 0-based offset into the item set (default: 0).
+    start: Option<usize>,
+    /// Maximum number of items to analyze (default: 100, max: 500).
+    limit: Option<usize>,
+}
+
+#[tool_router(router = coverage_router, vis = "pub(crate)")]
+impl ZoteroMcpServer {
+    #[tool(
+        name = "zotero_library_coverage",
+        description = "Analyze library or collection statistics for PDF, DOI, \
+                       and note coverage",
+        annotations(
+            title = "Library Coverage Report",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn zotero_library_coverage(
+        &self,
+        Parameters(args): Parameters<LibraryCoverageArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_library_coverage_impl(args).await
+    }
+}
+
+impl ZoteroMcpServer {
+    /// Handles Zotero library coverage analysis tool calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(in crate::mcp::zotero) async fn zotero_library_coverage_impl(
+        &self,
+        args: LibraryCoverageArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let offset = args.start.unwrap_or(0);
+        let limit = args.limit.unwrap_or(100).min(500);
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client
+                .get_library_coverage(
+                    args.collection_key.as_ref(),
+                    offset,
+                    limit,
+                )
+                .await,
+        ))
+    }
+}

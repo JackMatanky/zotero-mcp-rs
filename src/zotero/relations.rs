@@ -20,10 +20,7 @@ use serde::Serialize;
 
 use crate::{
     errors::ZoteroMcpError,
-    zotero::{
-        client::ZoteroClient,
-        models::{ItemKey, ItemType, RelationUri},
-    },
+    zotero::{ItemKey, ItemType, client::ZoteroClient, keys::RelationUri},
 };
 
 /// A single item linked to another via a `dc:relation` URI.
@@ -542,7 +539,7 @@ mod tests {
             fixtures::{http_response, mock_server, test_state},
             *,
         };
-        use crate::zotero::models::{ItemKey, ItemType};
+        use crate::zotero::{ItemKey, ItemType};
 
         #[tokio::test]
         async fn resolves_related_items_and_skips_unresolvable_keys() {
@@ -639,7 +636,7 @@ mod tests {
             },
             *,
         };
-        use crate::zotero::models::ItemKey;
+        use crate::zotero::ItemKey;
 
         #[tokio::test]
         async fn patches_both_items_with_each_others_uri() {
@@ -750,7 +747,7 @@ mod tests {
             },
             *,
         };
-        use crate::zotero::models::ItemKey;
+        use crate::zotero::ItemKey;
 
         #[tokio::test]
         async fn patches_both_items_removing_each_others_uri() {

@@ -18,11 +18,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     errors::ZoteroMcpError,
     zotero::{
-        client::ZoteroClient,
-        models::{
-            CitationKey, CollectionKey, ItemType, TagName, ZoteroCreator,
-            ZoteroItem,
-        },
+        CitationKey, CollectionKey, ItemType, TagName, ZoteroItem,
+        client::ZoteroClient, objects::ZoteroCreator,
     },
 };
 
@@ -680,8 +677,8 @@ fn sort_key(item: &ZoteroItem, field: SortField) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::zotero::models::{
-        ItemKey, ItemType, LibraryVersion, ZoteroItemData,
+    use crate::zotero::{
+        ItemKey, ItemType, LibraryVersion, objects::ZoteroItemData,
     };
 
     mod deserialization {
@@ -858,7 +855,7 @@ mod tests {
         use pretty_assertions::assert_eq;
 
         use super::*;
-        use crate::zotero::models::{ItemKey, ItemType, ZoteroItemData};
+        use crate::zotero::{ItemKey, ItemType, objects::ZoteroItemData};
 
         fn item(key: &str, title: &str, date: &str) -> ZoteroItem {
             ZoteroItem {

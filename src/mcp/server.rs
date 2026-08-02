@@ -72,11 +72,17 @@ impl ZoteroMcpServer {
         let mut router = Self::catalog_router();
         router.merge(Self::status_router());
         router.merge(Self::search_router());
+        router.merge(Self::duplicates_router());
+        router.merge(Self::coverage_router());
         router.merge(Self::sqlite_router());
         router.merge(Self::pdf_router());
         router.merge(Self::notes_router());
+        router.merge(Self::annotations_router());
         router.merge(Self::collections_router());
         router.merge(Self::items_router());
+        router.merge(Self::metadata_router());
+        router.merge(Self::fulltext_router());
+        router.merge(Self::attachments_router());
         router.merge(Self::tags_router());
         router.merge(Self::relations_router());
         router.merge(Self::better_bibtex_router());
