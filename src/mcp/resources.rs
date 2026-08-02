@@ -5,10 +5,14 @@
 //!
 //! Exposed resources:
 //! - `zotero://collections`: Returns all collection metadata in JSON format.
+//! - `zotero://items/recent`: Returns recently modified item metadata in JSON
+//!   format.
 //! - `zotero://tags`: Returns all library tags in JSON format.
 //!
 //! Exposed resource templates:
 //! - `zotero://items/{item_key}`: Returns item data for a specific Zotero item.
+//! - `zotero://items/{item_key}/fulltext`: Returns indexed item full text.
+//! - `zotero://collections/{collection_key}`: Returns collection metadata.
 //!
 //! Exposed prompts:
 //! - `zotero_literature_review`: Generates a structured literature review
@@ -21,6 +25,7 @@ use serde::Serialize;
 
 use crate::{
     ZoteroMcpServer,
+    errors::ZoteroMcpError,
     zotero::{CollectionKey, ItemKey, ItemType, ZoteroClient, ZoteroItem},
 };
 
@@ -41,6 +46,18 @@ fn resource_template(
         .with_mime_type("application/json")
 }
 
+fn text_resource_template(
+    uri_template: &str,
+    name: &str,
+    title: &str,
+    description: &str,
+) -> rmcp::model::ResourceTemplate {
+    rmcp::model::ResourceTemplate::new(uri_template, name)
+        .with_title(title)
+        .with_description(description)
+        .with_mime_type("text/plain")
+}
+
 fn note_children(children: Vec<ZoteroItem>) -> Vec<ZoteroItem> {
     children
         .into_iter()
@@ -58,12 +75,20 @@ impl ZoteroMcpServer {
                 .with_title("Zotero Collections")
                 .with_description("List of all collections in Zotero library")
                 .with_mime_type("application/json");
+        let recent_items =
+            rmcp::model::Resource::new("zotero://items/recent", "recent_items")
+                .with_title("Recently Modified Zotero Items")
+                .with_description(
+                    "Recently modified Zotero items, excluding notes",
+                )
+                .with_mime_type("application/json");
         let tags = rmcp::model::Resource::new("zotero://tags", "tags")
             .with_title("Zotero Tags")
             .with_description("List of all tags in Zotero library")
             .with_mime_type("application/json");
         rmcp::model::ListResourcesResult::with_all_items(vec![
             collections,
+            recent_items,
             tags,
         ])
     }
@@ -76,6 +101,12 @@ impl ZoteroMcpServer {
                 "item",
                 "Zotero Item",
                 "Read one Zotero item by key",
+            ),
+            text_resource_template(
+                "zotero://items/{item_key}/fulltext",
+                "item_fulltext",
+                "Zotero Item Full Text",
+                "Read Zotero's indexed full text for an item",
             ),
             resource_template(
                 "zotero://items/{item_key}/children",
@@ -94,6 +125,12 @@ impl ZoteroMcpServer {
                 "item_relations",
                 "Zotero Item Relations",
                 "Read related items for an item",
+            ),
+            resource_template(
+                "zotero://collections/{collection_key}",
+                "collection",
+                "Zotero Collection",
+                "Read one Zotero collection by key",
             ),
             resource_template(
                 "zotero://collections/{collection_key}/items",
@@ -121,80 +158,29 @@ impl ZoteroMcpServer {
                 .get_collections()
                 .await
                 .map(|collections| json_resource(uri, &collections))
-                .map_err(|e| {
-                    rmcp::ErrorData::internal_error(e.to_string(), None)
-                });
+                .map_err(resource_error);
         }
         if uri == "zotero://tags" {
             return client
                 .list_tags(500)
                 .await
                 .map(|tags| json_resource(uri, &tags))
-                .map_err(|e| {
-                    rmcp::ErrorData::internal_error(e.to_string(), None)
-                });
+                .map_err(resource_error);
+        }
+        if uri == "zotero://items/recent" {
+            return client
+                .get_recent_items(10)
+                .await
+                .map(|items| json_resource(uri, &items))
+                .map_err(resource_error);
         }
         if let Some(rest) = uri.strip_prefix("zotero://items/") {
-            let mut parts = rest.split('/');
-            let item_key = parts.next().unwrap_or_default();
-            let nested = parts.next();
-            if item_key.is_empty() || parts.next().is_some() {
-                return Err(rmcp::ErrorData::invalid_params(
-                    format!("Unknown resource URI: {uri}"),
-                    None,
-                ));
-            }
-            let item_key = ItemKey::from(item_key);
-            return match nested {
-                None => client
-                    .get_item(&item_key)
-                    .await
-                    .map(|item| json_resource(uri, &item)),
-                Some("children") => client
-                    .get_item_children(&item_key)
-                    .await
-                    .map(|children| json_resource(uri, &children)),
-                Some("notes") => {
-                    client.get_item_children(&item_key).await.map(|children| {
-                        json_resource(uri, &note_children(children))
-                    })
-                }
-                Some("relations") => client
-                    .get_related_items(&item_key)
-                    .await
-                    .map(|relations| json_resource(uri, &relations)),
-                Some(_) => {
-                    return Err(rmcp::ErrorData::invalid_params(
-                        format!("Unknown resource URI: {uri}"),
-                        None,
-                    ));
-                }
-            }
-            .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None));
+            return read_item_resource(&client, uri, rest).await;
         }
         if let Some(rest) = uri.strip_prefix("zotero://collections/") {
-            match rest.strip_suffix("/items") {
-                Some(collection_key) if !collection_key.contains('/') => {
-                    let collection_key = CollectionKey::from(collection_key);
-                    return client
-                        .get_collection_items(&collection_key)
-                        .await
-                        .map(|items| json_resource(uri, &items))
-                        .map_err(|e| {
-                            rmcp::ErrorData::internal_error(e.to_string(), None)
-                        });
-                }
-                _ => {}
-            }
-            return Err(rmcp::ErrorData::invalid_params(
-                format!("Unknown resource URI: {uri}"),
-                None,
-            ));
+            return read_collection_resource(&client, uri, rest).await;
         }
-        Err(rmcp::ErrorData::invalid_params(
-            format!("Unknown resource URI: {uri}"),
-            None,
-        ))
+        Err(unknown_resource(uri))
     }
 
     /// Lists MCP prompts exposed by the server as a [`ListPromptsResult`].
@@ -262,6 +248,101 @@ fn json_resource<T: Serialize>(
         )
         .with_mime_type("application/json"),
     ])
+}
+
+fn text_resource(uri: &str, text: &str) -> rmcp::model::ReadResourceResult {
+    ReadResourceResult::new(vec![
+        ResourceContents::text(text.to_owned(), uri.to_owned())
+            .with_mime_type("text/plain"),
+    ])
+}
+
+async fn read_item_resource(
+    client: &ZoteroClient<'_>,
+    uri: &str,
+    rest: &str,
+) -> Result<rmcp::model::ReadResourceResult, rmcp::ErrorData> {
+    let mut parts = rest.split('/');
+    let item_key = parts.next().unwrap_or_default();
+    let nested = parts.next();
+    if item_key.is_empty() || parts.next().is_some() {
+        return Err(unknown_resource(uri));
+    }
+
+    let item_key = ItemKey::from(item_key);
+    match nested {
+        None => client
+            .get_item(&item_key)
+            .await
+            .map(|item| json_resource(uri, &item)),
+        Some("children") => client
+            .get_item_children(&item_key)
+            .await
+            .map(|children| json_resource(uri, &children)),
+        Some("notes") => client
+            .get_item_children(&item_key)
+            .await
+            .map(|children| json_resource(uri, &note_children(children))),
+        Some("fulltext") => client
+            .get_item_fulltext(&item_key)
+            .await
+            .map(|fulltext| text_resource(uri, &fulltext)),
+        Some("relations") => client
+            .get_related_items(&item_key)
+            .await
+            .map(|relations| json_resource(uri, &relations)),
+        Some(_) => return Err(unknown_resource(uri)),
+    }
+    .map_err(resource_error)
+}
+
+async fn read_collection_resource(
+    client: &ZoteroClient<'_>,
+    uri: &str,
+    rest: &str,
+) -> Result<rmcp::model::ReadResourceResult, rmcp::ErrorData> {
+    if let Some(collection_key) = rest
+        .strip_suffix("/items")
+        .filter(|key| !key.is_empty() && !key.contains('/'))
+    {
+        let collection_key = CollectionKey::from(collection_key);
+        return client
+            .get_collection_items(&collection_key)
+            .await
+            .map(|items| json_resource(uri, &items))
+            .map_err(resource_error);
+    }
+    if rest.is_empty() || rest.contains('/') {
+        return Err(unknown_resource(uri));
+    }
+
+    let collection_key = CollectionKey::from(rest);
+    client
+        .get_collections()
+        .await
+        .and_then(|collections| {
+            collections
+                .into_iter()
+                .find(|collection| collection.key == collection_key.as_str())
+                .ok_or_else(|| {
+                    ZoteroMcpError::NotFound(format!(
+                        "Collection {collection_key}"
+                    ))
+                })
+        })
+        .map(|collection| json_resource(uri, &collection))
+        .map_err(resource_error)
+}
+
+fn resource_error(error: impl std::fmt::Display) -> rmcp::ErrorData {
+    rmcp::ErrorData::internal_error(error.to_string(), None)
+}
+
+fn unknown_resource(uri: &str) -> rmcp::ErrorData {
+    rmcp::ErrorData::invalid_params(
+        format!("Unknown resource URI: {uri}"),
+        None,
+    )
 }
 
 #[cfg(test)]
@@ -335,7 +416,11 @@ mod tests {
                 .iter()
                 .map(|resource| resource.uri.as_str())
                 .collect();
-            assert_eq!(uris, ["zotero://collections", "zotero://tags"]);
+            assert_eq!(uris, [
+                "zotero://collections",
+                "zotero://items/recent",
+                "zotero://tags"
+            ]);
         }
 
         #[test]
@@ -368,6 +453,10 @@ mod tests {
                 .collect();
 
             assert!(templates.contains(&"zotero://items/{item_key}"));
+            assert!(templates.contains(&"zotero://items/{item_key}/fulltext"));
+            assert!(
+                templates.contains(&"zotero://collections/{collection_key}")
+            );
             assert!(
                 templates
                     .contains(&"zotero://collections/{collection_key}/items")
@@ -419,6 +508,34 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn read_resource_returns_recent_items_json_content() {
+            // Arrange
+            let items = json!([{
+                "key": "ITEM123",
+                "version": 1,
+                "data": { "key": "ITEM123", "itemType": "journalArticle", "title": "Recent Paper" }
+            }]);
+            let base =
+                mock_server(vec![http_response("200 OK", &items.to_string())]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let res = server
+                .read_resource_impl("zotero://items/recent")
+                .await
+                .expect("read recent items");
+
+            // Assert
+            let content = res.contents.first().expect("resource content");
+            let is_text = matches!(
+                content,
+                rmcp::model::ResourceContents::TextResourceContents { text, .. }
+                if text.contains("Recent Paper")
+            );
+            assert!(is_text);
+        }
+
+        #[tokio::test]
         async fn reads_item_children_resource_uri() {
             let children = json!([{
                 "key": "CHILD1",
@@ -446,6 +563,32 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn reads_item_fulltext_resource_uri_as_plain_text() {
+            // Arrange
+            let fulltext = json!({ "content": "Indexed full text" });
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &fulltext.to_string(),
+            )]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let res = server
+                .read_resource_impl("zotero://items/ITEM123/fulltext")
+                .await
+                .expect("read item fulltext");
+
+            // Assert
+            let content = res.contents.first().expect("resource content");
+            let is_text = matches!(
+                content,
+                rmcp::model::ResourceContents::TextResourceContents { text, .. }
+                if text == "Indexed full text"
+            );
+            assert!(is_text);
+        }
+
+        #[tokio::test]
         async fn read_resource_returns_collections_json_content() {
             // Arrange
             let collections = json!([{
@@ -467,6 +610,43 @@ mod tests {
 
             // Assert
             assert_eq!(res.contents.len(), 1);
+        }
+
+        #[tokio::test]
+        async fn read_resource_returns_collection_json_content() {
+            // Arrange
+            let collections = json!([
+                {
+                    "key": "COL1",
+                    "version": 1,
+                    "data": { "key": "COL1", "name": "Physics", "parentCollection": false }
+                },
+                {
+                    "key": "COL2",
+                    "version": 1,
+                    "data": { "key": "COL2", "name": "Chemistry", "parentCollection": false }
+                }
+            ]);
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &collections.to_string(),
+            )]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            // Act
+            let res = server
+                .read_resource_impl("zotero://collections/COL2")
+                .await
+                .expect("read collection");
+
+            // Assert
+            let content = res.contents.first().expect("resource content");
+            let is_text = matches!(
+                content,
+                rmcp::model::ResourceContents::TextResourceContents { text, .. }
+                if text.contains("Chemistry") && !text.contains("Physics")
+            );
+            assert!(is_text);
         }
 
         #[tokio::test]
