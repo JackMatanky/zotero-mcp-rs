@@ -136,10 +136,13 @@ impl LocalZoteroDb {
                 GROUP BY ic.itemID
             ) creators ON creators.itemID = i.itemID
             LEFT JOIN (
-                SELECT fiw.itemID, GROUP_CONCAT(fw.word, ' ') AS words
+                SELECT ia.parentItemID AS itemID,
+                       GROUP_CONCAT(fw.word, ' ') AS words
                 FROM fulltextItemWords fiw
                 JOIN fulltextWords fw ON fw.wordID = fiw.wordID
-                GROUP BY fiw.itemID
+                JOIN itemAttachments ia ON ia.itemID = fiw.itemID
+                WHERE ia.parentItemID IS NOT NULL
+                GROUP BY ia.parentItemID
             ) words ON words.itemID = i.itemID
             WHERE it.typeName NOT IN ('attachment', 'note', 'annotation')
               AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
@@ -577,13 +580,14 @@ mod tests {
         .unwrap();
         sqlx::query(
             "INSERT INTO itemTypes (itemTypeID, typeName) VALUES (1, \
-             'journalArticle'), (2, 'note')",
+             'journalArticle'), (2, 'note'), (3, 'attachment')",
         )
         .execute(&pool)
         .await
         .unwrap();
 
-        // item 1: "Rust in Action" with fulltext mentioning "borrow checker"
+        // item 1: "Rust in Action" whose PDF attachment indexes "borrow
+        // checker"
         sqlx::query(
             "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
              dateModified) VALUES (1, 'K00001', 1, '2024-01-01', '2024-02-01')",
@@ -605,6 +609,22 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
+        // attachment child (item 3) carries the indexed fulltext words
+        sqlx::query(
+            "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
+             dateModified) VALUES (3, 'A00001', 3, '2024-01-02', '2024-02-02')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO itemAttachments (itemID, parentItemID, path, \
+             contentType) VALUES (3, 1, 'storage:K00001.pdf', \
+             'application/pdf')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
         sqlx::query(
             "INSERT INTO fulltextWords (wordID, word) VALUES (1, 'the'), (2, \
              'borrow'), (3, 'checker'), (4, 'ensures'), (5, 'memory'), (6, \
@@ -614,8 +634,8 @@ mod tests {
         .await
         .unwrap();
         sqlx::query(
-            "INSERT INTO fulltextItemWords (wordID, itemID) VALUES (1, 1), \
-             (2, 1), (3, 1), (4, 1), (5, 1), (6, 1)",
+            "INSERT INTO fulltextItemWords (wordID, itemID) VALUES (1, 3), \
+             (2, 3), (3, 3), (4, 3), (5, 3), (6, 3)",
         )
         .execute(&pool)
         .await

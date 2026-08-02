@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = ZoteroMcpServer::new(state);
     let transport = rmcp::transport::stdio();
 
-    server.serve(transport).await?;
+    server.serve(transport).await?.waiting().await?;
 
     Ok(())
 }

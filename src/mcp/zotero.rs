@@ -2662,7 +2662,7 @@ mod tests {
             .unwrap();
             sqlx::query(
                 "INSERT INTO itemTypes (itemTypeID, typeName) VALUES (1, \
-                 'journalArticle'), (2, 'note')",
+                 'journalArticle'), (2, 'note'), (3, 'attachment')",
             )
             .execute(&pool)
             .await
@@ -2689,6 +2689,23 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
+            // attachment child (item 3) carries the indexed fulltext words
+            sqlx::query(
+                "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
+                 dateModified) VALUES (3, 'A00001', 3, '2024-01-02', \
+                 '2024-02-02')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO itemAttachments (itemID, parentItemID, path, \
+                 contentType) VALUES (3, 1, 'storage:K00001.pdf', \
+                 'application/pdf')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
             sqlx::query(
                 "INSERT INTO fulltextWords (wordID, word) VALUES (1, 'the'), \
                  (2, 'borrow'), (3, 'checker'), (4, 'ensures'), (5, \
@@ -2699,7 +2716,7 @@ mod tests {
             .unwrap();
             sqlx::query(
                 "INSERT INTO fulltextItemWords (wordID, itemID) VALUES (1, \
-                 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1)",
+                 3), (2, 3), (3, 3), (4, 3), (5, 3), (6, 3)",
             )
             .execute(&pool)
             .await
