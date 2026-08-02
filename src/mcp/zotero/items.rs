@@ -35,18 +35,21 @@ enum MetadataFormat {
     /// Return item metadata as Better `BibTeX`.
     Bibtex,
 }
+
 /// Arguments for `zotero_get_recent`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetRecentArgs {
     /// Maximum number of items to return (default: 10, max: 100).
     limit: Option<usize>,
 }
+
 /// Arguments for `zotero_get_item`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemArgs {
     /// Zotero item key ([`ItemKey`]).
     item_key: ItemKey,
 }
+
 /// Arguments for `zotero_get_item_metadata`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemMetadataArgs {
@@ -65,18 +68,21 @@ impl GetItemMetadataArgs {
         }
     }
 }
+
 /// Arguments for `zotero_get_item_children`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemChildrenArgs {
     /// Zotero item key ([`ItemKey`]).
     item_key: ItemKey,
 }
+
 /// Arguments for `zotero_get_item_fulltext`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemFulltextArgs {
     /// Zotero item key ([`ItemKey`]).
     item_key: ItemKey,
 }
+
 /// Arguments for `zotero_update_item`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct UpdateItemArgs {
@@ -85,6 +91,32 @@ pub(crate) struct UpdateItemArgs {
     /// JSON object containing fields to update.
     fields: serde_json::Value,
 }
+
+/// Arguments for `zotero_delete_item`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct DeleteItemArgs {
+    /// Key of the item ([`ItemKey`]) to permanently delete.
+    item_key: ItemKey,
+}
+
+/// Arguments for `zotero_trash_item` and `zotero_restore_item`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct TrashItemArgs {
+    /// Key of the item ([`ItemKey`]) to move to or restore from trash.
+    item_key: ItemKey,
+}
+
+/// Arguments for `zotero_add_by_identifier`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct AddByIdentifierArgs {
+    /// Kind of identifier ([`IdentifierKind`](crate::zotero::IdentifierKind)).
+    kind: crate::zotero::IdentifierKind,
+    /// The DOI, arXiv ID, or ISBN to resolve.
+    identifier: String,
+    /// Optional collection key ([`CollectionKey`]) to file the new item into.
+    collection_key: Option<CollectionKey>,
+}
+
 /// Arguments for `zotero_attach_file`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AttachFileArgs {
@@ -96,28 +128,6 @@ pub(crate) struct AttachFileArgs {
     path_or_url: String,
     /// Optional content type (default: `"application/pdf"`).
     content_type: Option<String>,
-}
-/// Arguments for `zotero_delete_item`.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct DeleteItemArgs {
-    /// Key of the item ([`ItemKey`]) to permanently delete.
-    item_key: ItemKey,
-}
-/// Arguments for `zotero_trash_item` and `zotero_restore_item`.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct TrashItemArgs {
-    /// Key of the item ([`ItemKey`]) to move to or restore from trash.
-    item_key: ItemKey,
-}
-/// Arguments for `zotero_add_by_identifier`.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct AddByIdentifierArgs {
-    /// Kind of identifier ([`IdentifierKind`](crate::zotero::IdentifierKind)).
-    kind: crate::zotero::IdentifierKind,
-    /// The DOI, arXiv ID, or ISBN to resolve.
-    identifier: String,
-    /// Optional collection key ([`CollectionKey`]) to file the new item into.
-    collection_key: Option<CollectionKey>,
 }
 
 #[derive(Deserialize, JsonSchema)]

@@ -23,6 +23,7 @@ pub(crate) struct GetRelatedItemsArgs {
     /// Zotero item key ([`ItemKey`]) whose related items to list.
     item_key: ItemKey,
 }
+
 /// Arguments for `zotero_add_item_relation`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AddItemRelationArgs {
@@ -33,6 +34,7 @@ pub(crate) struct AddItemRelationArgs {
     /// (bidirectional, order-independent).
     related_item_key: ItemKey,
 }
+
 /// Arguments for `zotero_remove_item_relation`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RemoveItemRelationArgs {

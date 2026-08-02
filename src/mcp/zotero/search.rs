@@ -3,6 +3,9 @@
 //! Covers `zotero_search` grouped-router actions: item search, tag search,
 //! citation-key search, structured advanced search, duplicate detection, and
 //! library coverage analysis.
+//!
+//! Tag-search arguments are defined in [`super::tags`] because `zotero_tags`
+//! and `zotero_search` share that action.
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -44,18 +47,14 @@ impl SearchItemsArgs {
         }
     }
 }
-/// Arguments for `zotero_find_duplicates`.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct FindDuplicatesArgs {
-    /// Optional collection key ([`CollectionKey`]) to scope duplicate search.
-    collection_key: Option<CollectionKey>,
-}
+
 /// Arguments for `zotero_search_by_citation_key`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchByCitationKeyArgs {
     /// Citation key ([`CitationKey`]) to match.
     citekey: CitationKey,
 }
+
 /// Arguments for `zotero_advanced_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AdvancedSearchArgs {
@@ -73,6 +72,14 @@ pub(crate) struct AdvancedSearchArgs {
     /// Maximum number of items to return (default: 20).
     limit: Option<usize>,
 }
+
+/// Arguments for `zotero_find_duplicates`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct FindDuplicatesArgs {
+    /// Optional collection key ([`CollectionKey`]) to scope duplicate search.
+    collection_key: Option<CollectionKey>,
+}
+
 /// Arguments for `zotero_library_coverage`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct LibraryCoverageArgs {

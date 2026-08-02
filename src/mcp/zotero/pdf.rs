@@ -35,6 +35,7 @@ pub(crate) struct GetPdfPathArgs {
     /// Zotero item key ([`ItemKey`]) for parent item or attachment item.
     item_key: ItemKey,
 }
+
 /// Arguments for `zotero_read_pdf_pages`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ReadPdfPagesArgs {
@@ -44,6 +45,7 @@ pub(crate) struct ReadPdfPagesArgs {
     /// 1-based page numbers to extract (e.g. `[1, 2, 3]`).
     pages: Option<Vec<usize>>,
 }
+
 /// Arguments for `zotero_get_pdf_outline`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetPdfOutlineArgs {

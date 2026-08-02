@@ -31,20 +31,7 @@ pub(crate) struct SearchByTagArgs {
     /// Maximum number of items to return (default: 20).
     limit: Option<usize>,
 }
-/// Arguments for `zotero_rename_tag`.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct RenameTagArgs {
-    /// Existing tag name ([`TagName`]).
-    old_tag: TagName,
-    /// New tag name ([`TagName`]).
-    new_tag: TagName,
-}
-/// Arguments for `zotero_delete_tags`.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct DeleteTagsArgs {
-    /// Tag names ([`TagName`]) to delete from the library (up to 50).
-    tags: Vec<TagName>,
-}
+
 /// Arguments for `zotero_batch_update_tags`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BatchUpdateTagsArgs {
@@ -54,6 +41,22 @@ pub(crate) struct BatchUpdateTagsArgs {
     add_tags: Option<Vec<TagName>>,
     /// Tags ([`TagName`]) to remove.
     remove_tags: Option<Vec<TagName>>,
+}
+
+/// Arguments for `zotero_rename_tag`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct RenameTagArgs {
+    /// Existing tag name ([`TagName`]).
+    old_tag: TagName,
+    /// New tag name ([`TagName`]).
+    new_tag: TagName,
+}
+
+/// Arguments for `zotero_delete_tags`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct DeleteTagsArgs {
+    /// Tag names ([`TagName`]) to delete from the library (up to 50).
+    tags: Vec<TagName>,
 }
 
 #[derive(Deserialize, JsonSchema)]

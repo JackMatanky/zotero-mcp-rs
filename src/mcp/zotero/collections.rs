@@ -26,6 +26,21 @@ pub(crate) struct GetCollectionItemsArgs {
     /// Zotero collection key ([`CollectionKey`]).
     collection_key: CollectionKey,
 }
+
+/// Arguments for `zotero_search_collections`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SearchCollectionsArgs {
+    /// Search query matching collection names.
+    query: String,
+}
+
+/// Arguments for `zotero_get_unfiled_items`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct GetUnfiledItemsArgs {
+    /// Maximum number of items to return (default: 50).
+    limit: Option<usize>,
+}
+
 /// Arguments for `zotero_create_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateCollectionArgs {
@@ -34,12 +49,7 @@ pub(crate) struct CreateCollectionArgs {
     /// Optional parent collection key ([`CollectionKey`]).
     parent_key: Option<CollectionKey>,
 }
-/// Arguments for `zotero_search_collections`.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct SearchCollectionsArgs {
-    /// Search query matching collection names.
-    query: String,
-}
+
 /// Arguments for `zotero_manage_collections`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ManageCollectionsArgs {
@@ -50,12 +60,7 @@ pub(crate) struct ManageCollectionsArgs {
     /// Set to `true` to remove items instead of adding them.
     remove: Option<bool>,
 }
-/// Arguments for `zotero_delete_collection`.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct DeleteCollectionArgs {
-    /// Key of the collection ([`CollectionKey`]) to permanently delete.
-    collection_key: CollectionKey,
-}
+
 /// Arguments for `zotero_update_collection`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct UpdateCollectionArgs {
@@ -67,11 +72,12 @@ pub(crate) struct UpdateCollectionArgs {
     /// empty string to move the collection to the top level.
     parent_key: Option<CollectionParent>,
 }
-/// Arguments for `zotero_get_unfiled_items`.
+
+/// Arguments for `zotero_delete_collection`.
 #[derive(Deserialize, JsonSchema)]
-pub(crate) struct GetUnfiledItemsArgs {
-    /// Maximum number of items to return (default: 50).
-    limit: Option<usize>,
+pub(crate) struct DeleteCollectionArgs {
+    /// Key of the collection ([`CollectionKey`]) to permanently delete.
+    collection_key: CollectionKey,
 }
 
 #[derive(Deserialize, JsonSchema)]

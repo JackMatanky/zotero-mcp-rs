@@ -27,6 +27,14 @@ pub(crate) struct GetNotesArgs {
     /// Zotero item key ([`ItemKey`]).
     item_key: ItemKey,
 }
+
+/// Arguments for `zotero_synthesize_annotations`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SynthesizeAnnotationsArgs {
+    /// Zotero item key ([`ItemKey`]).
+    item_key: ItemKey,
+}
+
 /// Arguments for `zotero_create_note`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateNoteArgs {
@@ -35,12 +43,7 @@ pub(crate) struct CreateNoteArgs {
     /// HTML or Markdown content for the note.
     note_content: String,
 }
-/// Arguments for `zotero_synthesize_annotations`.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct SynthesizeAnnotationsArgs {
-    /// Zotero item key ([`ItemKey`]).
-    item_key: ItemKey,
-}
+
 /// Arguments for `zotero_create_annotation`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateAnnotationArgs {

@@ -22,6 +22,7 @@ pub(crate) struct FulltextSearchArgs {
     /// Maximum number of results to return (default: 20).
     limit: Option<usize>,
 }
+
 /// Arguments for `zotero_search_notes_annotations`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchNotesAnnotationsArgs {
