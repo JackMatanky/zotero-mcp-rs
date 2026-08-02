@@ -133,15 +133,23 @@ mod tests {
             let item2 =
                 make_item("ITEM0002", Some("Paper B"), Some("10.1234/xyz "));
 
-            let groups = find_duplicate_groups(&vec![item1, item2]);
+            let items = vec![item1, item2];
+            let groups = find_duplicate_groups(&items);
             assert_eq!(groups.len(), 1);
-            let first_group = groups.first().expect("group exists");
-            assert_eq!(first_group.match_type, DuplicateType::Doi);
-            assert_eq!(first_group.match_value, "10.1234/xyz");
-            assert_eq!(first_group.item_keys, vec![
-                ItemKey::from("ITEM0001"),
-                ItemKey::from("ITEM0002")
-            ]);
+            assert_eq!(
+                groups.first().map(|group| group.match_type),
+                Some(DuplicateType::Doi)
+            );
+            assert_eq!(
+                groups.first().map(|group| group.match_value.as_str()),
+                Some("10.1234/xyz")
+            );
+            assert_eq!(
+                groups.first().map(|group| group.item_keys.as_slice()),
+                Some(
+                    &[ItemKey::from("ITEM0001"), ItemKey::from("ITEM0002")][..]
+                )
+            );
         }
 
         #[test]
@@ -151,11 +159,32 @@ mod tests {
             let item2 =
                 make_item("ITEM0002", Some("quantum computing advances"), None);
 
-            let groups = find_duplicate_groups(&vec![item1, item2]);
+            let items = vec![item1, item2];
+            let groups = find_duplicate_groups(&items);
             assert_eq!(groups.len(), 1);
-            let first_group = groups.first().expect("group exists");
-            assert_eq!(first_group.match_type, DuplicateType::Title);
-            assert_eq!(first_group.match_value, "quantum computing advances");
+            assert_eq!(
+                groups.first().map(|group| group.match_type),
+                Some(DuplicateType::Title)
+            );
+            assert_eq!(
+                groups.first().map(|group| group.match_value.as_str()),
+                Some("quantum computing advances")
+            );
+        }
+
+        #[test]
+        fn ignores_blank_doi_and_titles_that_are_too_short() {
+            let item1 = make_item("ITEM0001", Some("AI"), Some("  "));
+            let item2 = make_item("ITEM0002", Some("ai"), Some(""));
+
+            let items = vec![item1, item2];
+            let groups = find_duplicate_groups(&items);
+
+            assert!(
+                groups.is_empty(),
+                "blank DOI and titles shorter than three characters must be \
+                 ignored"
+            );
         }
 
         #[test]
@@ -165,8 +194,12 @@ mod tests {
             let item2 =
                 make_item("ITEM0002", Some("Paper 2"), Some("10.1000/2"));
 
-            let groups = find_duplicate_groups(&vec![item1, item2]);
-            assert!(groups.is_empty());
+            let items = vec![item1, item2];
+            let groups = find_duplicate_groups(&items);
+            assert!(
+                groups.is_empty(),
+                "distinct DOI/title pairs must not group"
+            );
         }
     }
 
@@ -174,38 +207,15 @@ mod tests {
         use pretty_assertions::assert_eq;
 
         use super::*;
-        use crate::zotero::client::ZoteroClient;
+        use crate::zotero::{
+            client::ZoteroClient,
+            test_http::{MockServer, http_response},
+        };
 
         fn item_json(key: &str, title: &str) -> String {
             format!(
                 r#"{{"key":"{key}","version":1,"data":{{"key":"{key}","version":1,"itemType":"journalArticle","title":"{title}"}}}}"#
             )
-        }
-
-        fn http_response(status: &str, body: &str) -> String {
-            format!(
-                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
-                 application/json\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            )
-        }
-
-        fn mock_server(responses: Vec<String>) -> String {
-            use std::{
-                io::{Read, Write},
-                net::TcpListener,
-            };
-            let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
-            let addr = listener.local_addr().expect("addr");
-            std::thread::spawn(move || {
-                for response in responses {
-                    let (mut stream, _) = listener.accept().expect("accept");
-                    let mut buf = [0_u8; 1024];
-                    let _ = stream.read(&mut buf);
-                    let _ = stream.write_all(response.as_bytes());
-                }
-            });
-            format!("http://{addr}")
         }
 
         fn test_state(zotero_api_url: String) -> crate::state::AppState {
@@ -261,18 +271,25 @@ mod tests {
                     .join(",")
             );
 
-            let base = mock_server(vec![
+            let server = MockServer::new(vec![
                 http_response("200 OK", &page1),
                 http_response("200 OK", &page2),
             ]);
-            let state = test_state(base);
+            let base = server.url();
+            let state = test_state(base.to_owned());
 
             let groups =
                 ZoteroClient::new(&state).find_duplicates(None).await.unwrap();
 
             assert_eq!(groups.len(), 1);
-            assert_eq!(groups[0].match_type, DuplicateType::Title);
-            assert_eq!(groups[0].item_keys.len(), 2);
+            assert_eq!(
+                groups.first().map(|group| group.match_type),
+                Some(DuplicateType::Title)
+            );
+            assert_eq!(
+                groups.first().map(|group| group.item_keys.len()),
+                Some(2)
+            );
         }
     }
 }

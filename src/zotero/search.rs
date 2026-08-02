@@ -741,6 +741,103 @@ mod tests {
         }
 
         #[test]
+        fn matches_creator_name_first_last_and_full_name() {
+            let mut item = make_item(None, None, None);
+            item.data.creators = vec![ZoteroCreator {
+                creator_type: None,
+                first_name: Some("Ada".to_owned()),
+                last_name: Some("Lovelace".to_owned()),
+                name: Some("Countess".to_owned()),
+            }];
+            for value in ["Ada", "Lovelace", "Ada Lovelace", "Countess"] {
+                let cond = SearchCondition {
+                    field: SearchField::Creator,
+                    operator: SearchOperator::Contains,
+                    value: value.to_owned(),
+                };
+                assert!(match_condition(&item, &cond), "creator case {value}");
+            }
+        }
+
+        #[test]
+        fn matches_item_type_tag_extra_and_other_mapped_fields() {
+            let mut item =
+                make_item(Some("Mapped Title"), None, Some("10.1000/x"));
+            item.data.extra = Some("Citation Key: mapped2024".to_owned());
+            item.data.tags = vec![crate::zotero::objects::ZoteroTag {
+                tag: TagName::from("Methods"),
+                origin: crate::zotero::types::TagOrigin::User,
+            }];
+            let cases = [
+                (SearchField::ItemType, "journalArticle"),
+                (SearchField::Tag, "methods"),
+                (SearchField::Extra, "mapped2024"),
+                (SearchField::Other("title".to_owned()), "mapped title"),
+                (SearchField::Other("doi".to_owned()), "10.1000/x"),
+            ];
+            for (field, value) in cases {
+                let cond = SearchCondition {
+                    field,
+                    operator: SearchOperator::Contains,
+                    value: value.to_owned(),
+                };
+                assert!(
+                    match_condition(&item, &cond),
+                    "mapped field case {value}"
+                );
+            }
+        }
+
+        #[test]
+        fn returns_false_for_unknown_other_field_and_missing_values() {
+            let item = make_item(None, None, None);
+            let unknown = SearchCondition {
+                field: SearchField::Other("unknown".to_owned()),
+                operator: SearchOperator::Contains,
+                value: "anything".to_owned(),
+            };
+            let missing_title = SearchCondition {
+                field: SearchField::Title,
+                operator: SearchOperator::Contains,
+                value: "anything".to_owned(),
+            };
+
+            assert!(
+                !match_condition(&item, &unknown),
+                "unknown other field must not match"
+            );
+            assert!(
+                !match_condition(&item, &missing_title),
+                "missing title must not match"
+            );
+        }
+
+        #[test]
+        fn matches_ends_with_and_is_before() {
+            let item =
+                make_item(Some("Learning Rust"), Some("2024-02-15"), None);
+            let ends_with = SearchCondition {
+                field: SearchField::Title,
+                operator: SearchOperator::EndsWith,
+                value: "rust".to_owned(),
+            };
+            let before = SearchCondition {
+                field: SearchField::Date,
+                operator: SearchOperator::IsBefore,
+                value: "2025-01-01".to_owned(),
+            };
+
+            assert!(
+                match_condition(&item, &ends_with),
+                "title should match EndsWith"
+            );
+            assert!(
+                match_condition(&item, &before),
+                "date should match IsBefore"
+            );
+        }
+
+        #[test]
         fn matches_title_field_with_contains_operator_case_insensitively() {
             let item = make_item(Some("Programming in Rust"), None, None);
             let cond = SearchCondition {
@@ -851,6 +948,66 @@ mod tests {
         }
     }
 
+    mod pagination {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        fn item(key: &str) -> ZoteroItem {
+            ZoteroItem {
+                key: ItemKey::from(key),
+                version: LibraryVersion(1),
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from(key),
+                    version: LibraryVersion(1),
+                    item_type: ItemType::JournalArticle,
+                    ..Default::default()
+                },
+            }
+        }
+
+        #[test]
+        fn accumulates_offset_limit_total_and_has_more() {
+            let mut accumulator = PageAccumulator::new(1, 2);
+            for key in ["K1", "K2", "K3", "K4"] {
+                accumulator.push_match(item(key));
+            }
+
+            let page = accumulator.into_page();
+
+            assert_eq!(page.pagination.offset, 1);
+            assert_eq!(page.pagination.limit, 2);
+            assert_eq!(page.pagination.total, 4);
+            assert!(
+                page.pagination.has_more,
+                "one matching item remains after this page"
+            );
+            assert_eq!(
+                page.items
+                    .iter()
+                    .map(|item| item.key.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["K2", "K3"]
+            );
+        }
+
+        #[test]
+        fn clamps_offset_when_paginating_past_end() {
+            let page = paginate(vec![item("K1")], 10, 5);
+
+            assert_eq!(page.pagination.offset, 1);
+            assert_eq!(page.pagination.total, 1);
+            assert_eq!(page.items.len(), 0);
+            assert_eq!(
+                page.pagination.has_more, false,
+                "offset past end has no next page"
+            );
+        }
+    }
+
     mod sort_items {
         use pretty_assertions::assert_eq;
 
@@ -910,14 +1067,22 @@ mod tests {
         use pretty_assertions::assert_eq;
 
         use super::*;
-        use crate::{state::AppState, zotero::client::ZoteroClient};
+        use crate::{
+            state::AppState,
+            zotero::{
+                client::ZoteroClient,
+                test_http::{
+                    MockServer, http_response, http_response_with_headers,
+                },
+            },
+        };
 
         fn items_page(items: &[serde_json::Value]) -> String {
             format!(
                 "[{}]",
                 items
                     .iter()
-                    .map(|i| i.to_string())
+                    .map(std::string::ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(",")
             )
@@ -943,14 +1108,44 @@ mod tests {
             })
         }
 
+        fn zotero_item_of_type(
+            key: &str,
+            title: &str,
+            item_type: &str,
+        ) -> serde_json::Value {
+            serde_json::json!({
+                "key": key,
+                "version": 1,
+                "data": {
+                    "key": key,
+                    "version": 1,
+                    "itemType": item_type,
+                    "title": title,
+                    "dateAdded": "2024-01-01T00:00:00Z",
+                    "dateModified": "2024-01-01T00:00:00Z",
+                },
+            })
+        }
+
         fn zotero_item_with_creator(
             key: &str,
             title: &str,
             creator: &str,
         ) -> serde_json::Value {
-            let mut item = zotero_item(key, title, None);
-            item["data"]["creators"] = serde_json::json!([{ "name": creator }]);
-            item
+            serde_json::json!({
+                "key": key,
+                "version": 1,
+                "data": {
+                    "key": key,
+                    "version": 1,
+                    "itemType": "journalArticle",
+                    "title": title,
+                    "extra": null,
+                    "creators": [{ "name": creator }],
+                    "dateAdded": "2024-01-01T00:00:00Z",
+                    "dateModified": "2024-01-01T00:00:00Z",
+                },
+            })
         }
 
         fn title_contains(value: &str) -> SearchCondition {
@@ -969,9 +1164,9 @@ mod tests {
             }
         }
 
-        fn zotero_state(zotero_api_url: String) -> AppState {
+        fn zotero_state(zotero_api_url: impl AsRef<str>) -> AppState {
             AppState {
-                zotero_api_url,
+                zotero_api_url: zotero_api_url.as_ref().to_owned(),
                 better_bibtex_url: String::new(),
                 better_notes_url: String::new(),
                 crossref_url: String::new(),
@@ -982,78 +1177,94 @@ mod tests {
             }
         }
 
-        fn http_response(status: &str, body: &str) -> String {
-            format!(
-                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
-                 application/json\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            )
-        }
-
-        fn http_response_with_headers(
-            status: &str,
-            headers: &[(&str, &str)],
-            body: &str,
-        ) -> String {
-            let hdrs = headers
-                .iter()
-                .map(|(k, v)| format!("{k}: {v}\r\n"))
-                .collect::<Vec<_>>()
-                .join("");
-            format!(
-                "HTTP/1.1 {status}\r\n{hdrs}Content-Length: \
-                 {}\r\nContent-Type: application/json\r\nConnection: \
-                 close\r\n\r\n{body}",
-                body.len()
-            )
-        }
-
-        fn mock_server(responses: Vec<String>) -> String {
-            use std::{
-                io::{Read, Write},
-                net::TcpListener,
+        #[tokio::test]
+        async fn uses_any_join_mode_on_slow_path() {
+            let item1 = zotero_item("K1", "Rust Book", Some("nomatch"));
+            let item2 = zotero_item("K2", "Go Book", Some("needle"));
+            let server = MockServer::new(vec![http_response(
+                "200 OK",
+                &items_page(&[item1, item2]),
+            )]);
+            let base = server.url();
+            let state = zotero_state(base);
+            let cond_extra = SearchCondition {
+                field: SearchField::Extra,
+                operator: SearchOperator::Contains,
+                value: "needle".to_owned(),
             };
-            let listener =
-                TcpListener::bind("127.0.0.1:0").expect("bind listener");
-            let addr = listener.local_addr().expect("local addr");
-            std::thread::spawn(move || {
-                for response in responses {
-                    let (mut stream, _) =
-                        listener.accept().expect("accept connection");
-                    let mut buf = [0_u8; 1024];
-                    let _ = stream.read(&mut buf);
-                    let _ = stream.write_all(response.as_bytes());
-                }
-            });
-            format!("http://{addr}")
+
+            let page = ZoteroClient::new(&state)
+                .advanced_search(
+                    vec![title_contains("Rust"), cond_extra],
+                    JoinMode::Any,
+                    None,
+                    SortDirection::Asc,
+                    0,
+                    10,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(page.items.len(), 2);
         }
 
-        fn mock_server_capturing(
-            responses: Vec<String>,
-        ) -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
-            use std::{
-                io::{BufRead, Write},
-                net::TcpListener,
-                sync::{Arc, Mutex},
+        #[tokio::test]
+        async fn excludes_notes_attachments_and_annotations_on_slow_path() {
+            let article = zotero_item("K1", "Rust", None);
+            let note = zotero_item_of_type("N1", "Rust", "note");
+            let attachment = zotero_item_of_type("A1", "Rust", "attachment");
+            let annotation = zotero_item_of_type("AN1", "Rust", "annotation");
+            let server = MockServer::new(vec![http_response(
+                "200 OK",
+                &items_page(&[article, note, attachment, annotation]),
+            )]);
+            let base = server.url();
+            let state = zotero_state(base);
+
+            let page = ZoteroClient::new(&state)
+                .advanced_search(
+                    vec![title_contains("Rust")],
+                    JoinMode::All,
+                    Some(SortField::Title),
+                    SortDirection::Asc,
+                    0,
+                    10,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(page.items.len(), 1);
+            assert_eq!(
+                page.items.first().map(|item| item.key.as_str()),
+                Some("K1")
+            );
+        }
+
+        #[test]
+        fn pushdown_url_refuses_empty_conditions() {
+            let state = zotero_state("http://127.0.0.1:23119/api");
+            let client = ZoteroClient::new(&state);
+
+            assert!(
+                client.pushdown_url(&[]).is_none(),
+                "empty conditions require slow path"
+            );
+        }
+
+        #[test]
+        fn pushdown_url_refuses_multiple_free_text_conditions() {
+            let state = zotero_state("http://127.0.0.1:23119/api");
+            let client = ZoteroClient::new(&state);
+            let year = SearchCondition {
+                field: SearchField::Year,
+                operator: SearchOperator::Is,
+                value: "2024".to_owned(),
             };
-            let requests = Arc::new(Mutex::new(Vec::new()));
-            let captured = Arc::clone(&requests);
-            let listener =
-                TcpListener::bind("127.0.0.1:0").expect("bind listener");
-            let addr = listener.local_addr().expect("local addr");
-            std::thread::spawn(move || {
-                for response in responses {
-                    let (mut stream, _) =
-                        listener.accept().expect("accept connection");
-                    let mut line = String::new();
-                    let mut reader = std::io::BufReader::new(&mut stream);
-                    let _ = reader.read_line(&mut line);
-                    drop(reader);
-                    captured.lock().expect("lock requests").push(line);
-                    let _ = stream.write_all(response.as_bytes());
-                }
-            });
-            (format!("http://{addr}"), requests)
+
+            assert!(
+                client.pushdown_url(&[creator_contains("Ada"), year]).is_none(),
+                "only one q/qmode pair can be pushed down"
+            );
         }
 
         #[tokio::test]
@@ -1061,10 +1272,11 @@ mod tests {
             let item1 = zotero_item("K1", "Rust in Action", Some("book"));
             let item2 = zotero_item("K2", "Rust for Beginners", Some("book"));
             let item3 = zotero_item("K3", "Rust Essentials", Some("talk"));
-            let base = mock_server(vec![http_response(
+            let server = MockServer::new(vec![http_response(
                 "200 OK",
                 &items_page(&[item1, item2, item3]),
             )]);
+            let base = server.url();
             let state = zotero_state(base);
 
             let cond_extra = SearchCondition {
@@ -1085,7 +1297,13 @@ mod tests {
                 .unwrap();
 
             assert_eq!(page.items.len(), 1);
-            assert_eq!(page.items[0].key.as_str(), "K2");
+            assert_eq!(
+                page.items
+                    .first()
+                    .map(|item| item.key.as_str())
+                    .unwrap_or_default(),
+                "K2"
+            );
             assert_eq!(page.pagination.limit, 1);
             assert_eq!(page.pagination.offset, 0);
             assert_eq!(page.pagination.total, 2);
@@ -1096,10 +1314,12 @@ mod tests {
         async fn sort_request_uses_slow_path_so_sort_is_applied() {
             let item1 = zotero_item("K1", "A Rust Book", None);
             let item2 = zotero_item("K2", "Z Rust Book", None);
-            let (base, requests) = mock_server_capturing(vec![http_response(
-                "200 OK",
-                &items_page(&[item1, item2]),
-            )]);
+            let (server, requests) =
+                MockServer::recording(vec![http_response(
+                    "200 OK",
+                    &items_page(&[item1, item2]),
+                )]);
+            let base = server.url();
             let state = zotero_state(base);
 
             let page = ZoteroClient::new(&state)
@@ -1134,10 +1354,11 @@ mod tests {
             let item1 = zotero_item("K1", "Rust Patterns", None);
             let item2 =
                 zotero_item_with_creator("K2", "Memory Safety", "Rustacean");
-            let base = mock_server(vec![http_response(
+            let server = MockServer::new(vec![http_response(
                 "200 OK",
                 &items_page(&[item1, item2]),
             )]);
+            let base = server.url();
             let state = zotero_state(base);
 
             let page = ZoteroClient::new(&state)
@@ -1154,7 +1375,7 @@ mod tests {
 
             assert_eq!(page.items.len(), 1);
             assert_eq!(
-                page.items[0].data.title.as_deref(),
+                page.items.first().and_then(|item| item.data.title.as_deref()),
                 Some("Rust Patterns")
             );
         }
@@ -1162,11 +1383,12 @@ mod tests {
         #[tokio::test]
         async fn fast_path_uses_server_side_search_and_total_header() {
             let item1 = zotero_item("K1", "Rust in Action", None);
-            let base = mock_server(vec![http_response_with_headers(
+            let server = MockServer::new(vec![http_response_with_headers(
                 "200 OK",
                 &[("Total-Results", "17")],
                 &items_page(&[item1]),
             )]);
+            let base = server.url();
             let state = zotero_state(base);
 
             let page = ZoteroClient::new(&state)
@@ -1190,10 +1412,11 @@ mod tests {
         #[tokio::test]
         async fn fast_path_without_total_marks_has_more_when_page_is_full() {
             let item1 = zotero_item("K1", "Rust in Action", None);
-            let base = mock_server(vec![http_response(
+            let server = MockServer::new(vec![http_response(
                 "200 OK",
                 &items_page(&[item1]),
             )]);
+            let base = server.url();
             let state = zotero_state(base);
             let cond_type = SearchCondition {
                 field: SearchField::ItemType,
@@ -1220,10 +1443,11 @@ mod tests {
         #[tokio::test]
         async fn fast_path_without_total_marks_done_when_page_is_short() {
             let item1 = zotero_item("K1", "Rust in Action", None);
-            let base = mock_server(vec![http_response(
+            let server = MockServer::new(vec![http_response(
                 "200 OK",
                 &items_page(&[item1]),
             )]);
+            let base = server.url();
             let state = zotero_state(base);
             let cond_type = SearchCondition {
                 field: SearchField::ItemType,
@@ -1250,12 +1474,13 @@ mod tests {
         #[tokio::test]
         async fn creator_fast_path_builds_single_merged_itemtype_param() {
             let item1 = zotero_item("K1", "Rust in Action", None);
-            let (base, requests) =
-                mock_server_capturing(vec![http_response_with_headers(
+            let (server, requests) =
+                MockServer::recording(vec![http_response_with_headers(
                     "200 OK",
                     &[("Total-Results", "1")],
                     &items_page(&[item1]),
                 )]);
+            let base = server.url();
             let state = zotero_state(base);
 
             ZoteroClient::new(&state)
@@ -1290,12 +1515,13 @@ mod tests {
         #[tokio::test]
         async fn fast_path_merges_positive_itemtype_with_exclusions() {
             let item1 = zotero_item("K1", "Rust in Action", None);
-            let (base, requests) =
-                mock_server_capturing(vec![http_response_with_headers(
+            let (server, requests) =
+                MockServer::recording(vec![http_response_with_headers(
                     "200 OK",
                     &[("Total-Results", "1")],
                     &items_page(&[item1]),
                 )]);
+            let base = server.url();
             let state = zotero_state(base);
 
             let cond_type = SearchCondition {
@@ -1332,7 +1558,7 @@ mod tests {
 
         #[test]
         fn pushdown_url_encodes_free_text_creator() {
-            let state = zotero_state("http://127.0.0.1:23119/api".to_owned());
+            let state = zotero_state("http://127.0.0.1:23119/api");
             let client = ZoteroClient::new(&state);
             let url = client
                 .pushdown_url(&[creator_contains("Ferris Crab")])
@@ -1343,14 +1569,14 @@ mod tests {
 
         #[test]
         fn pushdown_url_refuses_title() {
-            let state = zotero_state("http://127.0.0.1:23119/api".to_owned());
+            let state = zotero_state("http://127.0.0.1:23119/api");
             let client = ZoteroClient::new(&state);
             assert!(client.pushdown_url(&[title_contains("Rust")]).is_none());
         }
 
         #[test]
         fn pushdown_url_refuses_non_pushable_operator() {
-            let state = zotero_state("http://127.0.0.1:23119/api".to_owned());
+            let state = zotero_state("http://127.0.0.1:23119/api");
             let client = ZoteroClient::new(&state);
             let cond = SearchCondition {
                 field: SearchField::Creator,
@@ -1362,7 +1588,7 @@ mod tests {
 
         #[test]
         fn pushdown_url_encodes_item_type_and_tag() {
-            let state = zotero_state("http://127.0.0.1:23119/api".to_owned());
+            let state = zotero_state("http://127.0.0.1:23119/api");
             let client = ZoteroClient::new(&state);
             let conds = vec![
                 SearchCondition {

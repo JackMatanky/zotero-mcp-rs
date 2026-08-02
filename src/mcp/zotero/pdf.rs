@@ -417,10 +417,11 @@ mod tests {
             let root = tempfile::TempDir::new().unwrap();
             let pdf = root.path().join("bad.pdf");
             std::fs::write(&pdf, b"not a pdf").unwrap();
-            let mut security = SecurityConfig::default();
-            security.direct_file_paths = true;
-            security.allowed_read_dirs =
-                vec![root.path().canonicalize().unwrap()];
+            let security = SecurityConfig {
+                direct_file_paths: true,
+                allowed_read_dirs: vec![root.path().canonicalize().unwrap()],
+                ..SecurityConfig::default()
+            };
             let server = ZoteroMcpServer::new(AppState {
                 better_notes_url: "http://127.0.0.1:9/better-notes".to_owned(),
                 security,
@@ -448,10 +449,11 @@ mod tests {
             let outside = tempfile::TempDir::new().unwrap();
             let pdf = outside.path().join("bad.pdf");
             std::fs::write(&pdf, b"not a pdf").unwrap();
-            let mut security = SecurityConfig::default();
-            security.direct_file_paths = true;
-            security.allowed_read_dirs =
-                vec![allowed.path().canonicalize().unwrap()];
+            let security = SecurityConfig {
+                direct_file_paths: true,
+                allowed_read_dirs: vec![allowed.path().canonicalize().unwrap()],
+                ..SecurityConfig::default()
+            };
             let server = ZoteroMcpServer::new(AppState {
                 security,
                 ..AppState::from_env()
@@ -498,7 +500,7 @@ mod tests {
                     "filename": "bad.pdf",
                 },
             }]);
-            let zotero_base = zotero_pdf_server(children);
+            let zotero_base = zotero_pdf_server(&children);
             let server = ZoteroMcpServer::new(AppState {
                 zotero_api_url: zotero_base,
                 better_notes_url: "http://127.0.0.1:9/better-notes".to_owned(),
@@ -538,7 +540,7 @@ mod tests {
                     "path": pdf.display().to_string(),
                 },
             }]);
-            let zotero_base = zotero_pdf_server(children);
+            let zotero_base = zotero_pdf_server(&children);
             let bridge_base = bridge_pdf_root("attanger-dest", root.path());
             let server = ZoteroMcpServer::new(AppState {
                 zotero_api_url: zotero_base,
@@ -580,7 +582,7 @@ mod tests {
                     "path": pdf.display().to_string(),
                 },
             }]);
-            let zotero_base = zotero_pdf_server(children);
+            let zotero_base = zotero_pdf_server(&children);
             let bridge_base = bridge_pdf_root("attanger-dest", root.path());
             let server = ZoteroMcpServer::new(AppState {
                 zotero_api_url: zotero_base,
@@ -623,7 +625,7 @@ mod tests {
                     "path": "attachments:subdir/bad.pdf",
                 },
             }]);
-            let zotero_base = zotero_pdf_server(children);
+            let zotero_base = zotero_pdf_server(&children);
             let bridge_base =
                 bridge_pdf_root("zotero-linked-base", base.path());
             let server = ZoteroMcpServer::new(AppState {
@@ -682,10 +684,11 @@ mod tests {
             let root = tempfile::TempDir::new().unwrap();
             let pdf = root.path().join("outline.pdf");
             crate::pdf::write_pdf_with_outline(&pdf);
-            let mut security = SecurityConfig::default();
-            security.direct_file_paths = true;
-            security.allowed_read_dirs =
-                vec![root.path().canonicalize().unwrap()];
+            let security = SecurityConfig {
+                direct_file_paths: true,
+                allowed_read_dirs: vec![root.path().canonicalize().unwrap()],
+                ..SecurityConfig::default()
+            };
             let server = ZoteroMcpServer::new(AppState {
                 security,
                 ..AppState::from_env()
@@ -712,10 +715,11 @@ mod tests {
             let root = tempfile::TempDir::new().unwrap();
             let pdf = root.path().join("plain.pdf");
             crate::pdf::write_pdf_without_outline(&pdf);
-            let mut security = SecurityConfig::default();
-            security.direct_file_paths = true;
-            security.allowed_read_dirs =
-                vec![root.path().canonicalize().unwrap()];
+            let security = SecurityConfig {
+                direct_file_paths: true,
+                allowed_read_dirs: vec![root.path().canonicalize().unwrap()],
+                ..SecurityConfig::default()
+            };
             let server = ZoteroMcpServer::new(AppState {
                 security,
                 ..AppState::from_env()
@@ -761,7 +765,7 @@ mod tests {
                     "filename": "outline.pdf",
                 },
             }]);
-            let zotero_base = zotero_pdf_server(children);
+            let zotero_base = zotero_pdf_server(&children);
             let server = ZoteroMcpServer::new(AppState {
                 zotero_api_url: zotero_base,
                 better_notes_url: "http://127.0.0.1:9/better-notes".to_owned(),

@@ -260,16 +260,21 @@ mod tests {
                 "http://zotero.org/users/0/items/ABC12345"
             );
 
-            let recovered = ItemKey::try_from(&uri).unwrap();
-            assert_eq!(recovered, key);
+            let result = ItemKey::try_from(&uri);
+
+            assert_eq!(result.as_ref().ok(), Some(&key));
         }
 
         #[test]
         fn try_from_extracts_key_from_user_library_uri() {
             let uri =
                 RelationUri::from("http://zotero.org/users/0/items/ABC12345");
-            let key = ItemKey::try_from(&uri).unwrap();
-            assert_eq!(key, "ABC12345");
+            let result = ItemKey::try_from(&uri);
+
+            assert_eq!(
+                result.ok().as_ref().map(ItemKey::as_str),
+                Some("ABC12345")
+            );
         }
 
         #[test]
@@ -277,31 +282,57 @@ mod tests {
             let uri = RelationUri::from(
                 "http://zotero.org/groups/36222/items/E6IGUT5Z",
             );
-            let key = ItemKey::try_from(&uri).unwrap();
-            assert_eq!(key, "E6IGUT5Z");
+            let result = ItemKey::try_from(&uri);
+
+            assert_eq!(
+                result.ok().as_ref().map(ItemKey::as_str),
+                Some("E6IGUT5Z")
+            );
         }
 
         #[test]
         fn try_from_rejects_bare_item_key_string() {
             let uri = RelationUri::from("ITEM123");
-            assert!(ItemKey::try_from(&uri).is_err());
+            assert!(
+                ItemKey::try_from(&uri).is_err(),
+                "bare non-URI key must be rejected"
+            );
 
             let full_length_key = RelationUri::from("ABCDEFGH");
-            assert!(ItemKey::try_from(&full_length_key).is_err());
+            assert!(
+                ItemKey::try_from(&full_length_key).is_err(),
+                "bare eight-character key must be rejected"
+            );
         }
 
         #[test]
         fn try_from_rejects_malformed_uris() {
             let empty = RelationUri::from("");
-            assert!(ItemKey::try_from(&empty).is_err());
+            assert!(
+                ItemKey::try_from(&empty).is_err(),
+                "empty URI must be rejected"
+            );
 
             let no_items_segment =
                 RelationUri::from("http://zotero.org/users/0/ABC12345");
-            assert!(ItemKey::try_from(&no_items_segment).is_err());
+            assert!(
+                ItemKey::try_from(&no_items_segment).is_err(),
+                "URI without /items/ segment must be rejected"
+            );
 
             let bad_key_shape =
                 RelationUri::from("http://zotero.org/users/0/items/ABC");
-            assert!(ItemKey::try_from(&bad_key_shape).is_err());
+            assert!(
+                ItemKey::try_from(&bad_key_shape).is_err(),
+                "short trailing key must be rejected"
+            );
+
+            let no_trailing_key =
+                RelationUri::from("http://zotero.org/users/0/items/");
+            assert!(
+                ItemKey::try_from(&no_trailing_key).is_err(),
+                "URI without trailing key must be rejected"
+            );
         }
     }
 }

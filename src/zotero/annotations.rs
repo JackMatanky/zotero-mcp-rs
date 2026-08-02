@@ -196,6 +196,8 @@ mod tests {
     };
 
     mod formatting {
+        use pretty_assertions::assert_eq;
+
         use super::*;
         #[test]
         fn formats_annotations_section_with_highlights_and_notes() {
@@ -217,10 +219,14 @@ mod tests {
                 },
             };
 
-            let result = format_annotations_section(&vec![annotation]);
-            assert!(result.contains("## PDF Annotations"));
-            assert!(result.contains("> \"Important concept\" (p. 42)"));
-            assert!(result.contains("Comment: Check this out"));
+            let annotations = vec![annotation];
+            let result = format_annotations_section(&annotations);
+
+            assert_eq!(
+                result,
+                "## PDF Annotations\n\n> \"Important concept\" (p. \
+                 42)\nComment: Check this out\n\n"
+            );
         }
 
         #[test]
@@ -241,8 +247,8 @@ mod tests {
             };
 
             let result = format_notes_section(&note_item, &[]);
-            assert!(result.contains("## Note Content"));
-            assert!(result.contains("<p>Main note text</p>"));
+
+            assert_eq!(result, "## Note Content\n\n<p>Main note text</p>\n\n");
         }
 
         #[test]
@@ -275,10 +281,33 @@ mod tests {
                 },
             };
 
-            let result = format_notes_section(&main_item, &vec![child_note]);
-            assert!(result.contains("## Child Notes"));
-            assert!(result.contains("### Note 1"));
-            assert!(result.contains("<p>Child note text</p>"));
+            let child_notes = vec![child_note];
+            let result = format_notes_section(&main_item, &child_notes);
+
+            assert_eq!(
+                result,
+                "## Child Notes\n\n### Note 1\n\n<p>Child note text</p>\n\n"
+            );
+        }
+
+        #[test]
+        fn returns_empty_when_no_annotations_or_notes() {
+            let item = ZoteroItem {
+                key: ItemKey::from("ITEM0001"),
+                version: LibraryVersion(1),
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from("ITEM0001"),
+                    version: LibraryVersion(1),
+                    item_type: ItemType::JournalArticle,
+                    ..Default::default()
+                },
+            };
+
+            assert_eq!(format_annotations_section(&[]), "");
+            assert_eq!(format_notes_section(&item, &[]), "");
         }
     }
 }

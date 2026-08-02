@@ -365,10 +365,14 @@ mod tests {
                 for response in responses {
                     let (mut stream, _) =
                         listener.accept().expect("accept connection");
-                    let mut buf = [0_u8; 4096];
+                    let mut buf = vec![0_u8; 4096];
                     let n = stream.read(&mut buf).expect("read request");
-                    let _ = tx
-                        .send(String::from_utf8_lossy(&buf[..n]).into_owned());
+                    let _ = tx.send(
+                        String::from_utf8_lossy(
+                            buf.get(..n).unwrap_or_default(),
+                        )
+                        .into_owned(),
+                    );
                     let _ = stream.write_all(response.as_bytes());
                 }
             });
@@ -501,10 +505,13 @@ mod tests {
             assert_eq!(result.get(&ItemKey::from("MISSING")), Some(&None));
             let request = requests.recv().expect("captured request");
             let body = request_json(&request);
-            assert_eq!(body["method"], "item.citationkey");
             assert_eq!(
-                body["params"],
-                serde_json::json!([["ITEM1", "MISSING"]])
+                body.get("method"),
+                Some(&serde_json::json!("item.citationkey"))
+            );
+            assert_eq!(
+                body.get("params"),
+                Some(&serde_json::json!([["ITEM1", "MISSING"]]))
             );
         }
     }
@@ -565,10 +572,13 @@ mod tests {
             // Assert
             let request = requests.recv().expect("captured request");
             let body = request_json(&request);
-            assert_eq!(body["method"], "item.export");
             assert_eq!(
-                body["params"],
-                serde_json::json!([["citekey1"], "Better BibTeX"])
+                body.get("method"),
+                Some(&serde_json::json!("item.export"))
+            );
+            assert_eq!(
+                body.get("params"),
+                Some(&serde_json::json!([["citekey1"], "Better BibTeX"]))
             );
         }
     }
@@ -610,10 +620,13 @@ mod tests {
             // Assert
             let request = requests.recv().expect("captured request");
             let body = request_json(&request);
-            assert_eq!(body["method"], "item.bibliography");
             assert_eq!(
-                body["params"],
-                serde_json::json!([
+                body.get("method"),
+                Some(&serde_json::json!("item.bibliography"))
+            );
+            assert_eq!(
+                body.get("params"),
+                Some(&serde_json::json!([
                     ["citekey1"],
                     {
                         "contentType": "html",
@@ -621,7 +634,7 @@ mod tests {
                         "locale": "en-US",
                         "quickCopy": false
                     }
-                ])
+                ]))
             );
         }
     }
@@ -753,8 +766,14 @@ mod tests {
 
             let request = requests.recv().expect("captured request");
             let body = request_json(&request);
-            assert_eq!(body["method"], "autoexport.add");
-            assert_eq!(body["params"][2], output_str);
+            assert_eq!(
+                body.get("method"),
+                Some(&serde_json::json!("autoexport.add"))
+            );
+            assert_eq!(
+                body.get("params").and_then(|params| params.get(2)),
+                Some(&serde_json::json!(output_str))
+            );
         }
     }
 
@@ -819,9 +838,18 @@ mod tests {
 
             let request = requests.recv().expect("captured request");
             let body = request_json(&request);
-            assert_eq!(body["method"], "collection.scanAUX");
-            assert_eq!(body["params"][0], "/Library");
-            assert_eq!(body["params"][1], aux_str);
+            assert_eq!(
+                body.get("method"),
+                Some(&serde_json::json!("collection.scanAUX"))
+            );
+            assert_eq!(
+                body.get("params").and_then(|params| params.get(0)),
+                Some(&serde_json::json!("/Library"))
+            );
+            assert_eq!(
+                body.get("params").and_then(|params| params.get(1)),
+                Some(&serde_json::json!(aux_str))
+            );
         }
     }
 }

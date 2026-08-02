@@ -305,47 +305,20 @@ mod tests {
     use super::*;
 
     mod fixtures {
-        use std::{
-            io::{Read, Write},
-            net::TcpListener,
-        };
-
-        pub(super) fn http_response(status: &str, body: &str) -> String {
-            format!(
-                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
-                 application/json\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            )
-        }
-
-        pub(super) fn mock_server(responses: Vec<String>) -> String {
-            let listener =
-                TcpListener::bind("127.0.0.1:0").expect("bind listener");
-            let addr = listener.local_addr().expect("local addr");
-            std::thread::spawn(move || {
-                for response in responses {
-                    let (mut stream, _) =
-                        listener.accept().expect("accept connection");
-                    let mut buf = [0_u8; 1024];
-                    let _ = stream.read(&mut buf);
-                    let _ = stream.write_all(response.as_bytes());
-                }
-            });
-            format!("http://{addr}")
-        }
+        pub(super) use crate::zotero::test_http::{MockServer, http_response};
     }
 
     use fixtures::*;
 
     fn state_with(
-        crossref: String,
-        semantic_scholar: String,
-        open_library: String,
+        crossref: impl Into<String>,
+        semantic_scholar: impl Into<String>,
+        open_library: impl Into<String>,
     ) -> AppState {
         AppState {
-            crossref_url: crossref,
-            semantic_scholar_url: semantic_scholar,
-            open_library_url: open_library,
+            crossref_url: crossref.into(),
+            semantic_scholar_url: semantic_scholar.into(),
+            open_library_url: open_library.into(),
             ..AppState::from_env()
         }
     }
@@ -365,8 +338,11 @@ mod tests {
                 "URL": "https://doi.org/10.1/xyz",
                 "container-title": ["Journal of Things"]
             }});
-            let base =
-                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let server = MockServer::new(vec![http_response(
+                "200 OK",
+                &body.to_string(),
+            )]);
+            let base = server.url();
             let state = state_with(base, String::new(), String::new());
 
             let draft =
@@ -383,8 +359,35 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn returns_not_found_on_404() {
-            let base = mock_server(vec![http_response("404 Not Found", "{}")]);
+        async fn resolve_doi_uses_issued_year_when_published_is_missing() {
+            let body = json!({"message": {
+                "title": ["Issued Paper"],
+                "issued": {"date-parts": [[2020]]},
+                "DOI": "10.1/issued"
+            }});
+            let server = MockServer::new(vec![http_response(
+                "200 OK",
+                &body.to_string(),
+            )]);
+            let base = server.url();
+            let state = state_with(base, String::new(), String::new());
+
+            let draft =
+                resolve_metadata(&state, IdentifierKind::Doi, "10.1/issued")
+                    .await;
+
+            assert!(
+                draft.is_ok(),
+                "issued-only Crossref response should resolve: {draft:?}"
+            );
+            assert_eq!(draft.unwrap_or_default().date, "2020");
+        }
+
+        #[tokio::test]
+        async fn returns_not_found_when_crossref_returns_404() {
+            let server =
+                MockServer::new(vec![http_response("404 Not Found", "{}")]);
+            let base = server.url();
             let state = state_with(base, String::new(), String::new());
 
             let err =
@@ -396,10 +399,11 @@ mod tests {
 
         #[tokio::test]
         async fn resolve_doi_rejects_oversized_crossref_response() {
-            let base = mock_server(vec![http_response(
+            let server = MockServer::new(vec![http_response(
                 "200 OK",
                 r#"{"message":"too large"}"#,
             )]);
+            let base = server.url();
             let mut state = state_with(base, String::new(), String::new());
             state.security.max_http_body_bytes = 3;
 
@@ -430,8 +434,11 @@ mod tests {
                 "externalIds": {"DOI": null},
                 "venue": "NeurIPS"
             });
-            let base =
-                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let server = MockServer::new(vec![http_response(
+                "200 OK",
+                &body.to_string(),
+            )]);
+            let base = server.url();
             let state = state_with(String::new(), base, String::new());
 
             let draft =
@@ -444,8 +451,39 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn returns_not_found_on_404() {
-            let base = mock_server(vec![http_response("404 Not Found", "{}")]);
+        async fn resolve_arxiv_returns_journal_article_when_semantic_scholar_has_doi()
+         {
+            let body = json!({
+                "title": "Published Preprint",
+                "authors": [],
+                "year": 2022,
+                "externalIds": {"DOI": "10.1000/published"}
+            });
+            let server = MockServer::new(vec![http_response(
+                "200 OK",
+                &body.to_string(),
+            )]);
+            let base = server.url();
+            let state = state_with(String::new(), base, String::new());
+
+            let draft =
+                resolve_metadata(&state, IdentifierKind::Arxiv, "2201.00001")
+                    .await;
+
+            assert!(
+                draft.is_ok(),
+                "Semantic Scholar DOI response should resolve: {draft:?}"
+            );
+            let draft = draft.unwrap_or_default();
+            assert_eq!(draft.item_type, ItemType::JournalArticle);
+            assert_eq!(draft.doi, "10.1000/published");
+        }
+
+        #[tokio::test]
+        async fn returns_not_found_when_semantic_scholar_returns_404() {
+            let server =
+                MockServer::new(vec![http_response("404 Not Found", "{}")]);
+            let base = server.url();
             let state = state_with(String::new(), base, String::new());
 
             let err =
@@ -469,8 +507,11 @@ mod tests {
                 "publish_date": "2018",
                 "publishers": [{"name": "Addison-Wesley"}]
             }});
-            let base =
-                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let server = MockServer::new(vec![http_response(
+                "200 OK",
+                &body.to_string(),
+            )]);
+            let base = server.url();
             let state = state_with(String::new(), String::new(), base);
 
             let draft =
@@ -485,8 +526,11 @@ mod tests {
         #[tokio::test]
         async fn returns_not_found_when_isbn_is_missing_from_response() {
             let body = json!({});
-            let base =
-                mock_server(vec![http_response("200 OK", &body.to_string())]);
+            let server = MockServer::new(vec![http_response(
+                "200 OK",
+                &body.to_string(),
+            )]);
+            let base = server.url();
             let state = state_with(String::new(), String::new(), base);
 
             let err =
@@ -498,10 +542,11 @@ mod tests {
 
         #[tokio::test]
         async fn resolve_isbn_rejects_oversized_open_library_response() {
-            let base = mock_server(vec![http_response(
+            let server = MockServer::new(vec![http_response(
                 "200 OK",
                 r#"{"ISBN:9780134685991":"too large"}"#,
             )]);
+            let base = server.url();
             let mut state = state_with(String::new(), String::new(), base);
             state.security.max_http_body_bytes = 3;
 
@@ -516,6 +561,31 @@ mod tests {
                     if message.contains("metadata response")
             ));
         }
+    }
+
+    #[tokio::test]
+    async fn fetch_json_returns_local_api_for_non_404_error() {
+        let server = MockServer::new(vec![
+            http_response("503 Service Unavailable", ""),
+            http_response("503 Service Unavailable", ""),
+            http_response("503 Service Unavailable", ""),
+        ]);
+        let base = server.url();
+        let state = state_with(base, String::new(), String::new());
+        let url = format!("{base}/works/10.1/down");
+
+        let result = fetch_json(&state, &url).await;
+
+        assert!(
+            matches!(
+                result,
+                Err(ZoteroMcpError::LocalApi {
+                    status: 503,
+                    ..
+                })
+            ),
+            "503 metadata response should become LocalApi: {result:?}"
+        );
     }
 
     mod helpers {

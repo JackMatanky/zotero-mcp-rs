@@ -277,8 +277,10 @@ mod tests {
                         stream.read(&mut buf).expect("read request");
                     requests_tx
                         .send(
-                            String::from_utf8_lossy(&buf[..bytes_read])
-                                .into_owned(),
+                            String::from_utf8_lossy(
+                                buf.get(..bytes_read).unwrap_or_default(),
+                            )
+                            .into_owned(),
                         )
                         .expect("send request");
                     let _ = stream.write_all(response.as_bytes());
@@ -589,7 +591,8 @@ mod tests {
             // Assert
             assert!(relations.inbound.is_empty());
             assert_eq!(relations.outbound.len(), 1);
-            let link = &relations.outbound[0];
+            let link =
+                relations.outbound.first().expect("one outbound relation");
             assert_eq!(link.from_lib_id, 1);
             assert_eq!(link.from_key, "NOTE1");
             assert_eq!(link.to_lib_id, 2);

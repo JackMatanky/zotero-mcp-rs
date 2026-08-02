@@ -82,11 +82,11 @@ mod fixtures {
         headers: &[(&str, &str)],
         body: &str,
     ) -> String {
-        let hdrs = headers
-            .iter()
-            .map(|(k, v)| format!("{k}: {v}\r\n"))
-            .collect::<Vec<_>>()
-            .join("");
+        let mut hdrs = String::new();
+        for (name, value) in headers {
+            use std::fmt::Write as _;
+            let _ = write!(hdrs, "{name}: {value}\r\n");
+        }
         format!(
             "HTTP/1.1 {status}\r\n{hdrs}Content-Length: {}\r\nContent-Type: \
              application/json\r\nConnection: close\r\n\r\n{body}",
@@ -133,7 +133,7 @@ mod fixtures {
     }
 
     pub(in crate::mcp::zotero) fn zotero_pdf_server(
-        children: serde_json::Value,
+        children: &serde_json::Value,
     ) -> String {
         mock_server(vec![
             http_response("200 OK", &parent_journal_item().to_string()),
@@ -158,7 +158,7 @@ mod fixtures {
         res.content
             .first()
             .and_then(|c| c.as_text())
-            .map(|t| t.text.to_string())
+            .map(|t| t.text.clone())
             .unwrap_or_default()
     }
 }

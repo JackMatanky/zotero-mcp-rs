@@ -346,6 +346,27 @@ mod tests {
         }
     }
 
+    mod creator_type {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn creator_type_round_trips_author_editor_and_other() {
+            for (value, expected) in [
+                ("author", CreatorType::Author),
+                ("editor", CreatorType::Editor),
+                ("reviewer", CreatorType::Other("reviewer".to_owned())),
+            ] {
+                let creator_type = CreatorType::from(value.to_owned());
+                let serialized: String = creator_type.clone().into();
+
+                assert_eq!(creator_type, expected, "case {value}");
+                assert_eq!(serialized, value, "case {value}");
+            }
+        }
+    }
+
     mod tag_origin {
         use pretty_assertions::assert_eq;
 

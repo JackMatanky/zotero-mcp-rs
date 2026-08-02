@@ -444,16 +444,11 @@ mod tests {
             let resolved = find_pdf_path(&children, &[]);
 
             // Assert
-            assert!(resolved.is_some());
-            let res = resolved.unwrap();
-            match res {
-                ResolvedPdfPath::Trusted(path) => {
-                    assert_eq!(path, PathBuf::from("/tmp/paper.pdf"));
-                }
-                ResolvedPdfPath::NeedsRootCheck(path) => {
-                    panic!("imported attachment should be trusted: {path:?}");
-                }
-            }
+            assert!(matches!(
+                resolved,
+                Some(ResolvedPdfPath::Trusted(path))
+                    if path == std::path::Path::new("/tmp/paper.pdf")
+            ));
         }
     }
 

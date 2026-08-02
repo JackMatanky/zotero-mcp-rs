@@ -199,6 +199,25 @@ mod tests {
         }
 
         #[test]
+        fn sorts_resulting_tags_deterministically() {
+            let existing = vec![ZoteroTag {
+                tag: TagName::from("zeta"),
+                origin: TagOrigin::default(),
+            }];
+            let add = vec![TagName::from("alpha"), TagName::from("middle")];
+
+            let result = super::diff_tags(existing, &add, &[]);
+            let tags: Vec<_> = result
+                .iter()
+                .filter_map(|value| {
+                    value.get("tag").and_then(|tag| tag.as_str())
+                })
+                .collect();
+
+            assert_eq!(tags, vec!["alpha", "middle", "zeta"]);
+        }
+
+        #[test]
         fn deduplicates_added_tags_when_already_present() {
             let existing = vec![ZoteroTag {
                 tag: TagName::from("rust"),

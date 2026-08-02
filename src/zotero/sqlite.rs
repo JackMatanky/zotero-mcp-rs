@@ -472,9 +472,26 @@ fn read_string_pref(prefs: &Path, key: &str) -> Option<String> {
         if !line.starts_with(&needle) {
             return None;
         }
-        let rest = line.trim_start_matches(&needle);
-        let value = rest.strip_prefix('"')?.split('"').next()?;
-        Some(value.replace("\\\"", "\"").replace("\\\\", "\\"))
+        let rest = line.trim_start_matches(&needle).trim_start();
+        let mut value = String::new();
+        let mut escaped = false;
+        for ch in rest.strip_prefix('"')?.chars() {
+            if escaped {
+                value.push(match ch {
+                    '"' => '"',
+                    '\\' => '\\',
+                    other => other,
+                });
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                break;
+            } else {
+                value.push(ch);
+            }
+        }
+        Some(value)
     })
 }
 
@@ -505,12 +522,11 @@ mod tests {
         clippy::too_many_lines,
         reason = "seeds a realistic Zotero schema across many tables"
     )]
-    async fn seed_db(path: &Path) {
+    async fn seed_db(path: &Path) -> Result<(), sqlx::Error> {
         let opts = SqliteConnectOptions::from_str(&format!(
             "sqlite://{}",
             path.display()
-        ))
-        .unwrap()
+        ))?
         .create_if_missing(true);
         let pool = SqlitePool::connect_with(opts).await.unwrap();
 
@@ -519,190 +535,166 @@ mod tests {
              TEXT)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, \
              itemTypeID INTEGER, dateAdded TEXT, dateModified TEXT)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "CREATE TABLE fields (fieldID INTEGER PRIMARY KEY, fieldName TEXT)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID \
              INTEGER)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value \
              TEXT)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, firstName \
              TEXT, lastName TEXT, fieldMode INT)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "CREATE TABLE itemCreators (itemID INTEGER, creatorID INTEGER)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query("CREATE TABLE deletedItems (itemID INTEGER)")
             .execute(&pool)
-            .await
-            .unwrap();
+            .await?;
         sqlx::query(
             "CREATE TABLE fulltextWords (wordID INTEGER PRIMARY KEY, word \
              TEXT UNIQUE)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "CREATE TABLE fulltextItemWords (wordID INT, itemID INT, PRIMARY \
              KEY (wordID, itemID))",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "CREATE TABLE itemNotes (itemID INTEGER, parentItemID INTEGER, \
              note TEXT, title TEXT)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "CREATE TABLE itemAnnotations (itemID INTEGER, parentItemID \
              INTEGER, text TEXT, comment TEXT, type INTEGER, color TEXT, \
              pageLabel TEXT)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "CREATE TABLE itemAttachments (itemID INTEGER, parentItemID \
              INTEGER, path TEXT, contentType TEXT)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
 
         sqlx::query(
             "INSERT INTO fields (fieldID, fieldName) VALUES (1, 'title'), \
              (16, 'extra'), (7, 'DOI')",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO itemTypes (itemTypeID, typeName) VALUES (1, \
              'journalArticle'), (2, 'note'), (3, 'attachment')",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
              dateModified) VALUES (1, 'K00001', 1, '2024-01-01', '2024-02-01')",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO itemData (itemID, fieldID, valueID) VALUES (1, 1, \
              100), (1, 7, 101)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO itemDataValues (valueID, value) VALUES (100, 'Rust \
              in Action'), (101, '10.1000/rust')",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
              dateModified) VALUES (3, 'A00001', 3, '2024-01-02', '2024-02-02')",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO itemAttachments (itemID, parentItemID, path, \
              contentType) VALUES (3, 1, 'storage:K00001.pdf', \
              'application/pdf')",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO fulltextWords (wordID, word) VALUES (1, 'the'), (2, \
              'borrow'), (3, 'checker'), (4, 'ensures'), (5, 'memory'), (6, \
              'safety')",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO fulltextItemWords (wordID, itemID) VALUES (1, 3), \
              (2, 3), (3, 3), (4, 3), (5, 3), (6, 3)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO creators (creatorID, firstName, lastName, fieldMode) \
              VALUES (1, 'Jon', 'Gjengset', 0)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO itemCreators (itemID, creatorID) VALUES (1, 1)",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
              dateModified) VALUES (2, 'N00001', 2, '2024-03-01', '2024-03-01')",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
         sqlx::query(
             "INSERT INTO itemNotes (itemID, parentItemID, note, title) VALUES \
              (2, 1, '<p>Ownership summary</p>', 'summary')",
         )
         .execute(&pool)
-        .await
-        .unwrap();
+        .await?;
 
         pool.close().await;
+        Ok(())
     }
 
     #[tokio::test]
     async fn opens_read_only_immutable_database() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("zotero.sqlite");
-        seed_db(&db_path).await;
+        let seeded = seed_db(&db_path).await;
+        assert!(seeded.is_ok(), "seed database should be created: {seeded:?}");
 
         let db = LocalZoteroDb::open(&db_path).await.unwrap();
         let hits = db.search_fulltext("safety", 5).await.unwrap();
@@ -734,7 +726,8 @@ mod tests {
     async fn searches_fulltext_across_items() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("zotero.sqlite");
-        seed_db(&db_path).await;
+        let seeded = seed_db(&db_path).await;
+        assert!(seeded.is_ok(), "seed database should be created: {seeded:?}");
         let db = LocalZoteroDb::open(&db_path).await.unwrap();
 
         let hits = db.search_fulltext("borrow checker", 10).await.unwrap();
@@ -751,25 +744,33 @@ mod tests {
     async fn fulltext_search_matches_metadata_or_all_fulltext_tokens() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("zotero.sqlite");
-        seed_db(&db_path).await;
+        let seeded = seed_db(&db_path).await;
+        assert!(seeded.is_ok(), "seed database should be created: {seeded:?}");
         let db = LocalZoteroDb::open(&db_path).await.unwrap();
 
         let metadata_hits =
             db.search_fulltext("Rust in Action", 10).await.unwrap();
         assert_eq!(metadata_hits.len(), 1);
-        assert_eq!(metadata_hits[0].title.as_deref(), Some("Rust in Action"));
+        assert_eq!(
+            metadata_hits.first().and_then(|hit| hit.title.as_deref()),
+            Some("Rust in Action")
+        );
 
         let fulltext_hits =
             db.search_fulltext("borrow checker", 10).await.unwrap();
         assert_eq!(fulltext_hits.len(), 1);
-        assert_eq!(fulltext_hits[0].title.as_deref(), Some("Rust in Action"));
+        assert_eq!(
+            fulltext_hits.first().and_then(|hit| hit.title.as_deref()),
+            Some("Rust in Action")
+        );
     }
 
     #[tokio::test]
     async fn searches_notes_and_annotations() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("zotero.sqlite");
-        seed_db(&db_path).await;
+        let seeded = seed_db(&db_path).await;
+        assert!(seeded.is_ok(), "seed database should be created: {seeded:?}");
         let db = LocalZoteroDb::open(&db_path).await.unwrap();
 
         let hits = db.search_notes_annotations("ownership", 10).await.unwrap();
@@ -786,7 +787,8 @@ mod tests {
     async fn searches_notes_past_html_false_positives_before_limit() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("zotero.sqlite");
-        seed_db(&db_path).await;
+        let seeded = seed_db(&db_path).await;
+        assert!(seeded.is_ok(), "seed database should be created: {seeded:?}");
         let opts = SqliteConnectOptions::from_str(&format!(
             "sqlite://{}",
             db_path.display()
@@ -815,6 +817,42 @@ mod tests {
         let hits = db.search_notes_annotations("visible", 1).await.unwrap();
 
         assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].key.as_str(), "N00003");
+        assert_eq!(
+            hits.first().map(|hit| hit.key.as_str()).unwrap_or_default(),
+            "N00003"
+        );
+    }
+
+    #[test]
+    fn read_string_pref_unescapes_paths_and_quotes() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let prefs = dir.path().join("prefs.js");
+        std::fs::write(
+            &prefs,
+            r#"user_pref("extensions.zotero.dataDir", "/Users/jack/Zotero \"Library\"");"#,
+        )
+        .expect("write prefs");
+
+        let value = read_string_pref(&prefs, "extensions.zotero.dataDir");
+
+        assert_eq!(value.as_deref(), Some("/Users/jack/Zotero \"Library\""));
+    }
+
+    #[test]
+    fn db_in_dir_returns_zotero_sqlite_when_present() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = dir.path().join("zotero.sqlite");
+        std::fs::write(&db, "").expect("write sqlite placeholder");
+
+        let found = db_in_dir(dir.path());
+
+        assert_eq!(found.as_deref(), Some(db.as_path()));
+    }
+
+    #[test]
+    fn strip_html_removes_tags_but_keeps_visible_text() {
+        let stripped = strip_html("<p>Hello <strong>visible</strong></p>");
+
+        assert_eq!(stripped, "Hello visible");
     }
 }

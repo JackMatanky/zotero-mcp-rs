@@ -283,10 +283,11 @@ mod tests {
                 },
             };
 
-            let flags = coverage_flags(&item, &[attachment, note]);
-            assert!(flags.has_doi);
-            assert!(flags.has_pdf);
-            assert!(flags.has_notes);
+            let children = vec![attachment, note];
+            let flags = coverage_flags(&item, &children);
+            assert!(flags.has_doi, "expected DOI flag for nonblank DOI");
+            assert!(flags.has_pdf, "expected PDF flag for PDF attachment");
+            assert!(flags.has_notes, "expected notes flag for child note");
         }
 
         #[test]
@@ -314,11 +315,69 @@ mod tests {
         }
 
         #[test]
+        #[allow(clippy::float_cmp, reason = "exact zero percentages in test")]
+        fn classify_coverage_returns_zeroed_stats_for_empty_input() {
+            let coverage = classify_coverage(&[]);
+
+            assert_eq!(coverage.total_items, 0);
+            assert_eq!(coverage.with_pdf, 0);
+            assert_eq!(coverage.with_doi, 0);
+            assert_eq!(coverage.with_notes, 0);
+            assert_eq!(coverage.pdf_percentage, 0.0);
+            assert_eq!(coverage.doi_percentage, 0.0);
+            assert_eq!(coverage.notes_percentage, 0.0);
+        }
+
+        #[test]
+        fn coverage_flags_ignores_blank_doi_and_non_pdf_attachment() {
+            let item = item("ITEM0001", ItemType::JournalArticle, Some("  "));
+            let attachment = ZoteroItem {
+                key: ItemKey::from("ATTACH01"),
+                version: LibraryVersion(1),
+                library: serde_json::Value::Null,
+                links: serde_json::Value::Null,
+                meta: serde_json::Value::Null,
+                data: ZoteroItemData {
+                    key: ItemKey::from("ATTACH01"),
+                    version: LibraryVersion(1),
+                    item_type: ItemType::Attachment,
+                    content_type: Some("text/plain".to_owned()),
+                    ..Default::default()
+                },
+            };
+
+            let children = vec![attachment];
+            let flags = coverage_flags(&item, &children);
+
+            assert!(!flags.has_doi, "blank DOI must not count as coverage");
+            assert!(!flags.has_pdf, "non-PDF attachment must not count as PDF");
+            assert!(!flags.has_notes, "no note children were arranged");
+        }
+
+        #[test]
+        fn coverage_pagination_without_total_marks_full_page_as_more_and_short_page_as_done()
+         {
+            let full_page = coverage_pagination(20, 10, 10, None);
+            let short_page = coverage_pagination(20, 10, 3, None);
+
+            assert_eq!(full_page.total, 30);
+            assert!(
+                full_page.has_more,
+                "unknown total and full page implies more"
+            );
+            assert_eq!(short_page.total, 23);
+            assert!(
+                !short_page.has_more,
+                "unknown total and short page means pagination is done"
+            );
+        }
+
+        #[test]
         fn coverage_pagination_uses_server_total_for_has_more() {
             let pagination = coverage_pagination(0, 2, 2, Some(3));
 
             assert_eq!(pagination.total, 3);
-            assert!(pagination.has_more);
+            assert!(pagination.has_more, "known total exceeds returned page");
         }
 
         #[test]
@@ -330,7 +389,7 @@ mod tests {
 
         #[test]
         fn library_coverage_page_classifies_only_selected_items() {
-            let selected = [
+            let selected = vec![
                 item("ITEM0001", ItemType::JournalArticle, Some("10.1000/1")),
                 item("ITEM0002", ItemType::JournalArticle, None),
             ];
@@ -352,7 +411,10 @@ mod tests {
             assert_eq!(page.coverage.with_doi, 1);
             assert_eq!(page.coverage.with_notes, 1);
             assert_eq!(page.pagination.total, 3);
-            assert!(page.pagination.has_more);
+            assert!(
+                page.pagination.has_more,
+                "known total exceeds selected page"
+            );
         }
     }
 }

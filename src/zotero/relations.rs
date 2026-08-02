@@ -387,25 +387,19 @@ mod tests {
     }
 
     mod fixtures {
-        use std::{
-            io::{Read, Write},
-            net::{TcpListener, TcpStream},
-            sync::{Arc, Mutex},
-        };
-
         use crate::state::AppState;
-
-        /// Requests received by [`mock_server_recording`], in order.
-        pub(super) type RequestLog = Arc<Mutex<Vec<String>>>;
+        pub(super) use crate::zotero::test_http::{
+            MockServer, http_response, request_body,
+        };
 
         /// Builds an [`AppState`] fixture for testing with `zotero_api_url` and
         /// `write_enabled`.
         pub(super) fn test_state(
-            zotero_api_url: String,
+            zotero_api_url: impl AsRef<str>,
             write_enabled: bool,
         ) -> AppState {
             AppState {
-                zotero_api_url,
+                zotero_api_url: zotero_api_url.as_ref().to_owned(),
                 better_bibtex_url: String::new(),
                 better_notes_url: String::new(),
                 crossref_url: String::new(),
@@ -414,102 +408,6 @@ mod tests {
                 write_enabled,
                 ..AppState::from_env()
             }
-        }
-
-        /// Formats a minimal HTTP response string with `status` and `body`.
-        pub(super) fn http_response(status: &str, body: &str) -> String {
-            format!(
-                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
-                 application/json\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            )
-        }
-
-        /// Spawns a fixture HTTP server returning `responses` and returns its
-        /// base URL.
-        pub(super) fn mock_server(responses: Vec<String>) -> String {
-            mock_server_recording(responses).0
-        }
-
-        /// Spawns a fixture HTTP server returning `responses` in order while
-        /// recording each received request (head and body). Returns the base
-        /// URL and the shared request log.
-        pub(super) fn mock_server_recording(
-            responses: Vec<String>,
-        ) -> (String, RequestLog) {
-            let listener =
-                TcpListener::bind("127.0.0.1:0").expect("bind listener");
-            let addr = listener.local_addr().expect("local addr");
-            let recorded = Arc::new(Mutex::new(Vec::new()));
-            let thread_recorded = Arc::clone(&recorded);
-            std::thread::spawn(move || {
-                for response in responses {
-                    let (mut stream, _) =
-                        listener.accept().expect("accept connection");
-                    thread_recorded
-                        .lock()
-                        .expect("request log lock")
-                        .push(read_request(&mut stream));
-                    let _ = stream.write_all(response.as_bytes());
-                }
-            });
-            (format!("http://{addr}"), recorded)
-        }
-
-        /// Reads one HTTP request: the head plus any body announced by a
-        /// `Content-Length` header.
-        fn read_request(stream: &mut TcpStream) -> String {
-            let mut buf = [0_u8; 1024];
-            let mut data = Vec::new();
-            loop {
-                let n = stream.read(&mut buf).expect("read request bytes");
-                if n == 0 {
-                    break;
-                }
-                data.extend_from_slice(buf.get(..n).unwrap_or_default());
-                if request_complete(&data) {
-                    break;
-                }
-            }
-            String::from_utf8_lossy(&data).into_owned()
-        }
-
-        /// Returns true once the request head and any
-        /// `Content-Length`-announced body have been read.
-        fn request_complete(data: &[u8]) -> bool {
-            let Some((head_end, content_length)) = request_meta(data) else {
-                return false;
-            };
-            data.len() >= head_end.saturating_add(content_length)
-        }
-
-        /// Splits `data` at the head/body boundary, returning the offset just
-        /// past the blank line and the body length announced by
-        /// `Content-Length` (0 when absent).
-        fn request_meta(data: &[u8]) -> Option<(usize, usize)> {
-            let head_end = data
-                .windows(4)
-                .position(|w| w == b"\r\n\r\n")?
-                .saturating_add(4);
-            let head = String::from_utf8_lossy(
-                data.get(..head_end).unwrap_or_default(),
-            );
-            let content_length = head
-                .lines()
-                .find_map(|line| {
-                    let (name, value) = line.split_once(':')?;
-                    name.eq_ignore_ascii_case("content-length")
-                        .then(|| value.trim().parse::<usize>().ok())?
-                })
-                .unwrap_or(0);
-            Some((head_end, content_length))
-        }
-
-        /// Extracts the JSON body from a recorded raw HTTP request.
-        pub(super) fn request_body(raw: &str) -> serde_json::Value {
-            let body =
-                raw.split_once("\r\n\r\n").map(|(_, b)| b).unwrap_or_default();
-            serde_json::from_str(body).expect("request body is JSON")
         }
 
         /// Serializes a minimal [`ZoteroItem`]-shaped JSON response body for
@@ -536,7 +434,7 @@ mod tests {
         use pretty_assertions::assert_eq;
 
         use super::{
-            fixtures::{http_response, mock_server, test_state},
+            fixtures::{MockServer, http_response, test_state},
             *,
         };
         use crate::zotero::{ItemKey, ItemType};
@@ -569,11 +467,12 @@ mod tests {
                     "title": "Related Book",
                 },
             });
-            let base = mock_server(vec![
+            let server = MockServer::new(vec![
                 http_response("200 OK", &source.to_string()),
                 http_response("200 OK", &related_book.to_string()),
                 http_response("404 Not Found", ""),
             ]);
+            let base = server.url();
             let state = test_state(base, false);
 
             let related = ZoteroClient::new(&state)
@@ -604,12 +503,13 @@ mod tests {
             });
             // 500 is transient, so the retry policy sends the related-item GET
             // up to `RETRY_MAX_ATTEMPTS` times before surfacing the error.
-            let base = mock_server(vec![
+            let server = MockServer::new(vec![
                 http_response("200 OK", &source.to_string()),
                 http_response("500 Internal Server Error", ""),
                 http_response("500 Internal Server Error", ""),
                 http_response("500 Internal Server Error", ""),
             ]);
+            let base = server.url();
             let state = test_state(base, false);
 
             let err = ZoteroClient::new(&state)
@@ -631,8 +531,7 @@ mod tests {
     mod add_item_relation {
         use super::{
             fixtures::{
-                http_response, item_json, mock_server_recording, request_body,
-                test_state,
+                MockServer, http_response, item_json, request_body, test_state,
             },
             *,
         };
@@ -640,7 +539,7 @@ mod tests {
 
         #[tokio::test]
         async fn patches_both_items_with_each_others_uri() {
-            let (base, recorded) = mock_server_recording(vec![
+            let (server, recorded) = MockServer::recording(vec![
                 http_response(
                     "200 OK",
                     &item_json("ITEM0001", &serde_json::json!({})),
@@ -672,6 +571,7 @@ mod tests {
                     ),
                 ),
             ]);
+            let base = server.url();
             let state = test_state(base, true);
 
             let result = ZoteroClient::new(&state)
@@ -690,6 +590,8 @@ mod tests {
             assert!(requests[3].starts_with("PATCH /users/0/items/ITEM0002"));
 
             let body_a = request_body(&requests[2]);
+            assert!(body_a.is_ok(), "request body should be JSON: {body_a:?}");
+            let body_a = body_a.unwrap_or_default();
             assert_eq!(
                 body_a["relations"]["dc:relation"],
                 serde_json::json!(["http://zotero.org/users/0/items/ITEM0002"])
@@ -697,6 +599,8 @@ mod tests {
             assert_eq!(body_a["version"], 1);
 
             let body_b = request_body(&requests[3]);
+            assert!(body_b.is_ok(), "request body should be JSON: {body_b:?}");
+            let body_b = body_b.unwrap_or_default();
             assert_eq!(
                 body_b["relations"]["dc:relation"],
                 serde_json::json!(["http://zotero.org/users/0/items/ITEM0001"])
@@ -742,8 +646,7 @@ mod tests {
     mod remove_item_relation {
         use super::{
             fixtures::{
-                http_response, item_json, mock_server_recording, request_body,
-                test_state,
+                MockServer, http_response, item_json, request_body, test_state,
             },
             *,
         };
@@ -751,7 +654,7 @@ mod tests {
 
         #[tokio::test]
         async fn patches_both_items_removing_each_others_uri() {
-            let (base, recorded) = mock_server_recording(vec![
+            let (server, recorded) = MockServer::recording(vec![
                 http_response(
                     "200 OK",
                     &item_json(
@@ -793,6 +696,7 @@ mod tests {
                     ),
                 ),
             ]);
+            let base = server.url();
             let state = test_state(base, true);
 
             let result = ZoteroClient::new(&state)
@@ -809,6 +713,8 @@ mod tests {
             assert!(requests[3].starts_with("PATCH /users/0/items/ITEM0002"));
 
             let body_a = request_body(&requests[2]);
+            assert!(body_a.is_ok(), "request body should be JSON: {body_a:?}");
+            let body_a = body_a.unwrap_or_default();
             assert_eq!(
                 body_a["relations"]["dc:relation"],
                 serde_json::json!([])
@@ -816,6 +722,8 @@ mod tests {
             assert_eq!(body_a["version"], 1);
 
             let body_b = request_body(&requests[3]);
+            assert!(body_b.is_ok(), "request body should be JSON: {body_b:?}");
+            let body_b = body_b.unwrap_or_default();
             assert_eq!(
                 body_b["relations"]["dc:relation"],
                 serde_json::json!([])

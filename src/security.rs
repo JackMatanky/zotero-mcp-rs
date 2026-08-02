@@ -603,7 +603,7 @@ mod tests {
     fn input_rejected_message(err: ZoteroMcpError) -> String {
         match err {
             ZoteroMcpError::InputRejected(message) => message,
-            other => panic!("expected InputRejected, got {other:?}"),
+            other => format!("expected InputRejected, got {other:?}"),
         }
     }
 
@@ -721,8 +721,10 @@ mod tests {
     fn pdf_file_rejects_non_pdf_extension_and_oversized_files() {
         let txt = tempfile::Builder::new().suffix(".txt").tempfile().unwrap();
         fs::write(txt.path(), b"text").unwrap();
-        let mut config = SecurityConfig::default();
-        config.max_pdf_bytes = 3;
+        let config = SecurityConfig {
+            max_pdf_bytes: 3,
+            ..SecurityConfig::default()
+        };
 
         let extension_err = config.check_pdf_file(txt.path()).unwrap_err();
         assert!(input_rejected_message(extension_err).contains(".pdf"));
@@ -735,10 +737,12 @@ mod tests {
 
     #[test]
     fn size_helpers_reject_values_over_configured_max() {
-        let mut config = SecurityConfig::default();
-        config.max_markdown_bytes = 3;
-        config.max_html_bytes = 3;
-        config.max_template_name_bytes = 3;
+        let config = SecurityConfig {
+            max_markdown_bytes: 3,
+            max_html_bytes: 3,
+            max_template_name_bytes: 3,
+            ..SecurityConfig::default()
+        };
 
         assert!(
             input_rejected_message(

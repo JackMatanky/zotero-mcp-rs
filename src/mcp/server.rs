@@ -423,9 +423,9 @@ mod tests {
 
         fn discover_json(
             server: &ZoteroMcpServer,
-            args: DiscoverArgs,
+            args: &DiscoverArgs,
         ) -> serde_json::Value {
-            let res = server.zotero_discover_impl(&args);
+            let res = server.zotero_discover_impl(args);
             let text = res
                 .content
                 .first()
@@ -442,17 +442,20 @@ mod tests {
             state.sqlite_access = false;
             let server = ZoteroMcpServer::new(state);
 
-            let json = discover_json(&server, DiscoverArgs {
+            let json = discover_json(&server, &DiscoverArgs {
                 query: None,
                 domain: None,
                 include_disabled: None,
             });
-            let capabilities =
-                json["capabilities"].as_array().expect("capabilities array");
+            let capabilities = json
+                .get("capabilities")
+                .and_then(serde_json::Value::as_array)
+                .expect("capabilities array");
 
             assert!(!capabilities.iter().any(|capability| {
-                capability["requires"]
-                    .as_array()
+                capability
+                    .get("requires")
+                    .and_then(serde_json::Value::as_array)
                     .expect("requires")
                     .iter()
                     .any(|requirement| requirement == "ZOTERO_WRITE_ENABLED")
@@ -466,17 +469,20 @@ mod tests {
             state.sqlite_access = false;
             let server = ZoteroMcpServer::new(state);
 
-            let json = discover_json(&server, DiscoverArgs {
+            let json = discover_json(&server, &DiscoverArgs {
                 query: None,
                 domain: None,
                 include_disabled: Some(true),
             });
-            let capabilities =
-                json["capabilities"].as_array().expect("capabilities array");
+            let capabilities = json
+                .get("capabilities")
+                .and_then(serde_json::Value::as_array)
+                .expect("capabilities array");
 
             assert!(capabilities.iter().any(|capability| {
-                capability["requires"]
-                    .as_array()
+                capability
+                    .get("requires")
+                    .and_then(serde_json::Value::as_array)
                     .expect("requires")
                     .iter()
                     .any(|requirement| requirement == "ZOTERO_WRITE_ENABLED")

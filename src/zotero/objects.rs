@@ -188,7 +188,9 @@ mod tests {
                 }
             });
 
-            let item: ZoteroItem = serde_json::from_value(raw_json).unwrap();
+            let result = serde_json::from_value(raw_json);
+            assert!(result.is_ok(), "item JSON should deserialize: {result:?}");
+            let item: ZoteroItem = result.expect("asserted Ok above");
 
             assert_eq!(item.key, "ABC12345");
             assert_eq!(
@@ -206,8 +208,12 @@ mod tests {
                 "lastName": "Lovelace"
             });
 
-            let creator: ZoteroCreator =
-                serde_json::from_value(raw_json).unwrap();
+            let result = serde_json::from_value(raw_json);
+            assert!(
+                result.is_ok(),
+                "creator JSON should deserialize: {result:?}"
+            );
+            let creator: ZoteroCreator = result.expect("asserted Ok above");
 
             assert_eq!(creator.creator_type, Some(CreatorType::Author));
             assert_eq!(creator.first_name.as_deref(), Some("Ada"));
@@ -226,7 +232,9 @@ mod tests {
                 }
             });
 
-            let item: ZoteroItem = serde_json::from_value(raw_json).unwrap();
+            let result = serde_json::from_value(raw_json);
+            assert!(result.is_ok(), "item JSON should deserialize: {result:?}");
+            let item: ZoteroItem = result.expect("asserted Ok above");
 
             assert!(!item.data.deleted);
         }
@@ -240,12 +248,24 @@ mod tests {
                 "deleted": true
             });
 
-            let data: ZoteroItemData =
-                serde_json::from_value(raw_json).unwrap();
-            assert!(data.deleted);
+            let result = serde_json::from_value(raw_json);
+            assert!(
+                result.is_ok(),
+                "item data JSON should deserialize: {result:?}"
+            );
+            let data: ZoteroItemData = result.expect("asserted Ok above");
+            assert!(data.deleted, "deleted flag should deserialize as true");
 
-            let serialized = serde_json::to_string(&data).unwrap();
-            assert!(serialized.contains("\"deleted\":true"));
+            let serialized = serde_json::to_string(&data);
+            assert!(
+                serialized.is_ok(),
+                "item data should serialize: {serialized:?}"
+            );
+            let serialized = serialized.unwrap_or_default();
+            assert!(
+                serialized.contains("\"deleted\":true"),
+                "serialized data must contain deleted flag: {serialized}"
+            );
         }
 
         #[test]
@@ -257,10 +277,26 @@ mod tests {
                 "citationKey": "smith2020deep"
             });
 
-            let data: ZoteroItemData =
-                serde_json::from_value(raw_json).unwrap();
+            let result = serde_json::from_value(raw_json);
+            assert!(
+                result.is_ok(),
+                "item data JSON should deserialize: {result:?}"
+            );
+            let data: ZoteroItemData = result.expect("asserted Ok above");
             assert_eq!(data.citation_key.as_deref(), Some("smith2020deep"));
         }
+
+        #[test]
+        fn defaults_tag_origin_to_user_when_type_is_absent() {
+            let raw_json = serde_json::json!({"tag": "rust"});
+
+            let result = serde_json::from_value(raw_json);
+            assert!(result.is_ok(), "tag JSON should deserialize: {result:?}");
+            let tag: ZoteroTag = result.expect("asserted Ok above");
+
+            assert_eq!(tag.origin, TagOrigin::User);
+        }
+
         #[test]
         fn deserializes_collection_with_parent_collection_key() {
             let raw_json = serde_json::json!({
@@ -274,8 +310,12 @@ mod tests {
                 }
             });
 
-            let col: ZoteroCollection =
-                serde_json::from_value(raw_json).unwrap();
+            let result = serde_json::from_value(raw_json);
+            assert!(
+                result.is_ok(),
+                "collection JSON should deserialize: {result:?}"
+            );
+            let col: ZoteroCollection = result.expect("asserted Ok above");
             assert_eq!(col.key, "COL12345");
             assert_eq!(col.data.name, "Machine Learning");
             assert_eq!(
