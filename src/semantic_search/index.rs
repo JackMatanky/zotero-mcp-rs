@@ -66,7 +66,7 @@ pub(crate) async fn index_library(
             continue;
         }
         report.items_scanned = report.items_scanned.saturating_add(1);
-        current_keys.insert(item.key.to_string());
+        current_keys.insert(item.key.clone());
 
         let outcome = if !force && is_unchanged(index, item).await? {
             IndexOutcome::SkippedUnchanged
@@ -104,7 +104,7 @@ async fn is_unchanged(
     index: &SemanticIndex,
     item: &ZoteroItem,
 ) -> Result<bool, ZoteroMcpError> {
-    let stored = index.stored_date_modified(item.key.as_str()).await?;
+    let stored = index.stored_date_modified(&item.key).await?;
     Ok(stored.is_some()
         && stored.as_deref() == item.data.date_modified.as_deref())
 }
@@ -150,7 +150,7 @@ async fn index_one_item(
         report.chunks_written.saturating_add(new_chunks.len());
     index
         .upsert_item(
-            item.key.as_str(),
+            &item.key,
             item.data.title.as_deref(),
             item.data.date_modified.as_deref(),
             &new_chunks,

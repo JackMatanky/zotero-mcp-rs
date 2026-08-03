@@ -144,7 +144,10 @@ mod tests {
     use crate::{
         semantic_search::{EmbeddingProvider, SemanticIndex},
         state::AppState,
-        zotero::test_http::{MockServer, http_response},
+        zotero::{
+            ItemKey,
+            test_http::{MockServer, http_response},
+        },
     };
 
     /// Deterministic test [`EmbeddingProvider`]: every text embeds to the
@@ -231,9 +234,12 @@ mod tests {
         let db_path = dir.path().join("embeddings.sqlite");
         let index = SemanticIndex::open(&db_path).await.unwrap();
         index
-            .upsert_item("ITEM1", Some("Title"), Some("2024-01-01"), &[
-                new_chunk(0, "text", 1.0),
-            ])
+            .upsert_item(
+                &ItemKey::from("ITEM1"),
+                Some("Title"),
+                Some("2024-01-01"),
+                &[new_chunk(0, "text", 1.0)],
+            )
             .await
             .unwrap();
         let state = semantic_state(
@@ -259,7 +265,7 @@ mod tests {
         let index = SemanticIndex::open(&db_path).await.unwrap();
         index
             .upsert_item(
-                "ITEM1",
+                &ItemKey::from("ITEM1"),
                 Some("Matching Title"),
                 Some("2024-01-01"),
                 &[new_chunk(0, "relevant text", 1.0)],

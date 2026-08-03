@@ -11,6 +11,7 @@ use sqlx::{
 use crate::{
     errors::ZoteroMcpError,
     semantic_search::embedding::{decode_embedding, encode_embedding},
+    zotero::ItemKey,
 };
 
 /// One stored chunk, decoded, ready for a cosine scan.
@@ -113,11 +114,11 @@ impl SemanticIndex {
     /// - [`ZoteroMcpError::Sqlite`] on query failure
     pub(crate) async fn stored_date_modified(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<Option<String>, ZoteroMcpError> {
         let row =
             sqlx::query("SELECT date_modified FROM items WHERE item_key = ?")
-                .bind(item_key)
+                .bind(item_key.as_str())
                 .fetch_optional(&self.pool)
                 .await?;
         Ok(row.and_then(|r| {
@@ -136,7 +137,7 @@ impl SemanticIndex {
     /// - [`ZoteroMcpError::Sqlite`] on query or transaction failure
     pub(crate) async fn upsert_item(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
         title: Option<&str>,
         date_modified: Option<&str>,
         chunks: &[NewChunk],
@@ -150,14 +151,14 @@ impl SemanticIndex {
                 date_modified = excluded.date_modified,
                 indexed_at = excluded.indexed_at",
         )
-        .bind(item_key)
+        .bind(item_key.as_str())
         .bind(title)
         .bind(date_modified)
         .execute(&mut *tx)
         .await?;
         let item_pk: i64 =
             sqlx::query("SELECT item_pk FROM items WHERE item_key = ?")
-                .bind(item_key)
+                .bind(item_key.as_str())
                 .fetch_one(&mut *tx)
                 .await?
                 .try_get("item_pk")?;
@@ -189,10 +190,10 @@ impl SemanticIndex {
     /// - [`ZoteroMcpError::Sqlite`] on query failure
     pub(crate) async fn delete_item(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<(), ZoteroMcpError> {
         sqlx::query("DELETE FROM items WHERE item_key = ?")
-            .bind(item_key)
+            .bind(item_key.as_str())
             .execute(&self.pool)
             .await?;
         Ok(())
@@ -205,11 +206,13 @@ impl SemanticIndex {
     /// - [`ZoteroMcpError::Sqlite`] on query failure
     pub(crate) async fn all_item_keys(
         &self,
-    ) -> Result<Vec<String>, ZoteroMcpError> {
+    ) -> Result<Vec<ItemKey>, ZoteroMcpError> {
         let rows = sqlx::query("SELECT item_key FROM items")
             .fetch_all(&self.pool)
             .await?;
-        rows.into_iter().map(|r| Ok(r.try_get("item_key")?)).collect()
+        rows.into_iter()
+            .map(|r| Ok(ItemKey::from(r.try_get::<String, _>("item_key")?)))
+            .collect()
     }
 
     /// Loads every stored chunk, decoded and ready for a cosine scan.
@@ -287,10 +290,12 @@ mod tests {
             .await
             .unwrap();
         index
-            .upsert_item("ITEM1", Some("Title 1"), Some("2024-01-01"), &[
-                chunk(0, "first chunk", 0.5),
-                chunk(1, "second chunk", -0.5),
-            ])
+            .upsert_item(
+                &ItemKey::from("ITEM1"),
+                Some("Title 1"),
+                Some("2024-01-01"),
+                &[chunk(0, "first chunk", 0.5), chunk(1, "second chunk", -0.5)],
+            )
             .await
             .unwrap();
 
@@ -314,13 +319,13 @@ mod tests {
             .await
             .unwrap();
         index
-            .upsert_item("ITEM1", Some("Title"), Some("v1"), &[chunk(
-                0, "a", 1.0,
-            )])
+            .upsert_item(&ItemKey::from("ITEM1"), Some("Title"), Some("v1"), &[
+                chunk(0, "a", 1.0),
+            ])
             .await
             .unwrap();
         index
-            .upsert_item("ITEM1", Some("Title"), Some("v2"), &[
+            .upsert_item(&ItemKey::from("ITEM1"), Some("Title"), Some("v2"), &[
                 chunk(0, "b", 2.0),
                 chunk(1, "c", 3.0),
             ])
@@ -330,7 +335,7 @@ mod tests {
         let loaded = index.load_all_chunks().await.unwrap();
         assert_eq!(loaded.len(), 2);
         assert_eq!(
-            index.stored_date_modified("ITEM1").await.unwrap(),
+            index.stored_date_modified(&ItemKey::from("ITEM1")).await.unwrap(),
             Some("v2".to_owned())
         );
     }
@@ -342,19 +347,23 @@ mod tests {
             .await
             .unwrap();
         index
-            .upsert_item("ITEM1", None, None, &[chunk(0, "a", 1.0)])
+            .upsert_item(&ItemKey::from("ITEM1"), None, None, &[chunk(
+                0, "a", 1.0,
+            )])
             .await
             .unwrap();
         index
-            .upsert_item("ITEM2", None, None, &[chunk(0, "b", 2.0)])
+            .upsert_item(&ItemKey::from("ITEM2"), None, None, &[chunk(
+                0, "b", 2.0,
+            )])
             .await
             .unwrap();
 
-        index.delete_item("ITEM1").await.unwrap();
+        index.delete_item(&ItemKey::from("ITEM1")).await.unwrap();
 
-        assert_eq!(index.all_item_keys().await.unwrap(), vec![
-            "ITEM2".to_owned()
-        ]);
+        assert_eq!(index.all_item_keys().await.unwrap(), vec![ItemKey::from(
+            "ITEM2"
+        )]);
         let remaining = index.load_all_chunks().await.unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining.first().unwrap().item_key, "ITEM2");
@@ -367,7 +376,7 @@ mod tests {
             .await
             .unwrap();
         index
-            .upsert_item("ITEM1", None, None, &[
+            .upsert_item(&ItemKey::from("ITEM1"), None, None, &[
                 chunk(0, "a", 1.0),
                 chunk(1, "b", 2.0),
             ])
@@ -377,7 +386,7 @@ mod tests {
         assert_eq!(stats.indexed_items, 1);
         assert_eq!(stats.indexed_chunks, 2);
 
-        index.delete_item("ITEM1").await.unwrap();
+        index.delete_item(&ItemKey::from("ITEM1")).await.unwrap();
         let stats_after_delete = index.stats().await.unwrap();
         assert_eq!(stats_after_delete.indexed_items, 0);
         assert_eq!(stats_after_delete.indexed_chunks, 0);
