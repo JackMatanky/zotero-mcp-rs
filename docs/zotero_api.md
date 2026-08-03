@@ -11,7 +11,9 @@ This page documents read requests available in the [Zotero Web API](dev/web_api/
 
 The base URL for all API requests is
 
-    https://api.zotero.org
+```
+https://api.zotero.org
+```
 
 All requests must use HTTPS. (The local API uses `http://localhost:23119/api/` instead; see [Local API](dev/web_api/v3/local_api).)
 
@@ -250,11 +252,13 @@ Responses for multi-object read requests will include a custom HTTP header, `Tot
 
 When the total number of results matched by a read request is greater than the current limit, the API will include pagination links in the HTTP `Link` header. Possible values are `rel=first`, `rel=prev`, `rel=next`, and `rel=last`. For some requests, the header may also include a `rel=alternate` link for the relevant page on the Zotero website.
 
-    GET https://api.zotero.org/users/12345/items?limit=30
+```http
+GET https://api.zotero.org/users/12345/items?limit=30
 
-    Link: <https://api.zotero.org/users/12345/items?limit=30&start=30>; rel="next",
-     <https://api.zotero.org/users/12345/items?limit=30&start=5040>; rel="last",
-     <https://www.zotero.org/users/12345/items>; rel="alternate"
+Link: <https://api.zotero.org/users/12345/items?limit=30&start=30>; rel="next",
+ <https://api.zotero.org/users/12345/items?limit=30&start=5040>; rel="last",
+ <https://www.zotero.org/users/12345/items>; rel="alternate"
+```
 
 (Newlines are inserted here for clarity.)
 
@@ -333,7 +337,9 @@ The local API must be enabled in Zotero's preferences (Settings → Advanced →
 
 The base URL is
 
-    http://localhost:23119/api/
+```
+http://localhost:23119/api/
+```
 
 Most endpoints documented on the [Basics](dev/web_api/v3/basics), [Write Requests](dev/web_api/v3/write_requests) (Zotero 10+), [File Uploads](dev/web_api/v3/file_upload), and [Full-Text Content](dev/web_api/v3/fulltext_content) pages work identically when accessed under that prefix. The notable differences from the Web API are:
 
@@ -361,7 +367,9 @@ Responses include a `Zotero-Schema-Version` header reflecting the schema version
 
 In Zotero 10+, every local API response includes a `Zotero-Server-ID` header containing a string that identifies the Zotero instance being talked to:
 
-    Zotero-Server-ID: sPMHtLD6HHBd
+```
+Zotero-Server-ID: sPMHtLD6HHBd
+```
 
 The ID is stored in the Zotero database, so it follows the user's data rather than the installation, and it stays the same across restarts and upgrades. A different ID means a different database and therefore a different set of object versions and keys.
 
@@ -388,15 +396,19 @@ Group metadata is the exception: `<userOrGroupPrefix>/groups` and `/groups/<grou
 
 Local API keys (Zotero 10+) are unrelated to zotero.org API keys and can't be created in advance. A client asks for one at runtime:
 
-    POST /api/local/authorize
-    Content-Type: application/json
-    Zotero-Server-ID: <serverID>
+```http
+POST /api/local/authorize
+Content-Type: application/json
+Zotero-Server-ID: <serverID>
 
-    { "appName": "My Application" }
+{ "appName": "My Application" }
+```
 
 Zotero shows a dialog naming the application and asking the user to allow the change, with "Allow", "Always Allow", and "Deny" buttons. On approval, the response is
 
-    { "key": "<32-character key>", "remember": false }
+```json
+{ "key": "<32-character key>", "remember": false }
+```
 
 `remember` is `true` if the user chose "Always Allow", in which case the key can be reused indefinitely. Otherwise the key is single-use: the first write request that successfully validates it consumes it, and a subsequent write needs a new key. Clients should always be prepared to handle a `401` from a write request by authorizing again.
 
@@ -450,14 +462,16 @@ Note: the entire schema, including translations for all locales, can also be dow
 
 ### Getting All Item Types
 
-    GET /itemTypes
-    If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
+```http
+GET /itemTypes
+If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
 
-    [
-      { "itemType" : "book", "localized" : "Book" },
-      { "itemType" : "note", "localized" : "Note" },
-      (…)
-    ]
+[
+  { "itemType" : "book", "localized" : "Book" },
+  { "itemType" : "note", "localized" : "Note" },
+  (…)
+]
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -467,14 +481,16 @@ Note: the entire schema, including translations for all locales, can also be dow
 
 ### Getting All Item Fields
 
-    GET /itemFields
-    If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
+```http
+GET /itemFields
+If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
 
-    [
-      { "field" : "title", "localized" : "Title" },
-      { "field" : "url", "localized" : "URL" },
-      (…)
-    ]
+[
+  { "field" : "title", "localized" : "Title" },
+  { "field" : "url", "localized" : "URL" },
+  (…)
+]
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -486,14 +502,16 @@ Note: the entire schema, including translations for all locales, can also be dow
 
 Note: API consumers intending to write to the server should generally use [/items/new](#getting_a_template_for_a_new_item) combined with [/itemTypes](#getting_all_item_types) instead of this request.
 
-    GET /itemTypeFields?itemType=book
-    If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
+```http
+GET /itemTypeFields?itemType=book
+If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
 
-    [
-      { "field" : "title", "localized" : "Title" },
-      { "field" : "abstractNote", "localized" : "Abstract" },
-      (…)
-    ]
+[
+  { "field" : "title", "localized" : "Title" },
+  { "field" : "abstractNote", "localized" : "Abstract" },
+  (…)
+]
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -503,13 +521,15 @@ Note: API consumers intending to write to the server should generally use [/item
 
 ### Getting Valid Creator Types for an Item Type
 
-    GET /itemTypeCreatorTypes?itemType=book
+```http
+GET /itemTypeCreatorTypes?itemType=book
 
-    [
-      { "creatorType" : "author", "localized" : "Author" },
-      { "creatorType" : "editor", "localized" : "Editor" },
-      (…)
-    ]
+[
+  { "creatorType" : "author", "localized" : "Author" },
+  { "creatorType" : "editor", "localized" : "Editor" },
+  (…)
+]
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -519,14 +539,16 @@ Note: API consumers intending to write to the server should generally use [/item
 
 ### Getting Localized Creator Fields
 
-    GET /creatorFields
-    If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
+```http
+GET /creatorFields
+If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
 
-    [
-      { "field" : "firstName", "localized" : "First" },
-      { "field" : "lastName", "localized" : "Last" },
-      { "field" : "name", "localized" : "Name" }
-    ]
+[
+  { "field" : "firstName", "localized" : "First" },
+  { "field" : "lastName", "localized" : "Last" },
+  { "field" : "name", "localized" : "Name" }
+]
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -535,36 +557,38 @@ Note: API consumers intending to write to the server should generally use [/item
 
 ### Getting a Template for a New Item
 
-    GET /items/new?itemType=book
-    If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
+```http
+GET /items/new?itemType=book
+If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
 
+{
+  "itemType" : "book",
+  "title" : "",
+  "creators" : [
     {
-      "itemType" : "book",
-      "title" : "",
-      "creators" : [
-        {
-          "creatorType" : "author",
-          "firstName" : "",
-          "lastName" : ""
-        }
-      ],
-      "url" : "",
-      (...),
-      "tags" : [],
-      "collections" : [],
-      "relations" : {}
+      "creatorType" : "author",
+      "firstName" : "",
+      "lastName" : ""
     }
+  ],
+  "url" : "",
+  (...),
+  "tags" : [],
+  "collections" : [],
+  "relations" : {}
+}
 
-    GET /items/new?itemType=note
-    If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
+GET /items/new?itemType=note
+If-Modified-Since: Mon, 14 Mar 2011 22:30:17 GMT
 
-    {
-      "itemType" : "note",
-      "note" : "",
-      "tags" : [],
-      "collections" : [],
-      "relations" : {}
-    }
+{
+  "itemType" : "note",
+  "note" : "",
+  "tags" : [],
+  "collections" : [],
+  "relations" : {}
+}
+```
 
 TODO: attachment creation (see [File Uploads](dev/web_api/v3/file_upload))
 
@@ -586,40 +610,42 @@ In Zotero 10+, the [local API](dev/web_api/v3/local_api) supports the same write
 
 By default, objects returned from the API in `format=json` mode include a `data` property containing "editable JSON" — that is, all the object fields that can be modified and sent back to the server:
 
-    {
-      "key": "ABCD2345",
-      "version": 1,
-      "library": { ... },
-      "links": { ... },
-      "meta": { ... },
-      "data": {
-        "key": "ABCD2345",
-        "version": 1,
-        "itemType": "webpage",
-        "title": "Zotero Quick Start Guide",
-        "creators": [
-            {
-                "creatorType": "author",
-                "name": "Center for History and New Media"
-            }
-        ],
-        "abstractNote": "",
-        "websiteTitle": "Zotero",
-        "websiteType": "",
-        "date": "",
-        "shortTitle": "",
-        "url": "https://www.zotero.org/support/quick_start_guide",
-        "accessDate": "2014-06-12T21:28:55Z",
-        "language": "",
-        "rights": "",
-        "extra": "",
-        "dateAdded": "2014-06-12T21:28:55Z",
-        "dateModified": "2014-06-12T21:28:55Z",
-        "tags": [],
-        "collections": [],
-        "relations": {}
-      }
-    }
+```json
+{
+  "key": "ABCD2345",
+  "version": 1,
+  "library": { ... },
+  "links": { ... },
+  "meta": { ... },
+  "data": {
+    "key": "ABCD2345",
+    "version": 1,
+    "itemType": "webpage",
+    "title": "Zotero Quick Start Guide",
+    "creators": [
+        {
+            "creatorType": "author",
+            "name": "Center for History and New Media"
+        }
+    ],
+    "abstractNote": "",
+    "websiteTitle": "Zotero",
+    "websiteType": "",
+    "date": "",
+    "shortTitle": "",
+    "url": "https://www.zotero.org/support/quick_start_guide",
+    "accessDate": "2014-06-12T21:28:55Z",
+    "language": "",
+    "rights": "",
+    "extra": "",
+    "dateAdded": "2014-06-12T21:28:55Z",
+    "dateModified": "2014-06-12T21:28:55Z",
+    "tags": [],
+    "collections": [],
+    "relations": {}
+  }
+}
+```
 
 There are two ways to make changes to the provided JSON:
 
@@ -633,11 +659,13 @@ This approach reduces upload bandwidth by sending only the data that is actually
 
 For more casual access, the API supports standard REST behavior, allowing the entire downloaded JSON to be reuploaded. This allows edits to be performed without writing a single line of code:
 
-    $ URL="https://api.zotero.org/users/1234567/items"
-    $ API_KEY="P9NiFoyLeZu2bZNvvuQPDWsd"
-    $ curl -H "Zotero-API-Key: $API_KEY" $URL > items.json
-    $ vi items.json  # edit the item data
-    $ curl -H "Zotero-API-Key: $API_KEY" -d @items.json -v $URL
+```
+$ URL="https://api.zotero.org/users/1234567/items"
+$ API_KEY="P9NiFoyLeZu2bZNvvuQPDWsd"
+$ curl -H "Zotero-API-Key: $API_KEY" $URL > items.json
+$ vi items.json  # edit the item data
+$ curl -H "Zotero-API-Key: $API_KEY" -d @items.json -v $URL
+```
 
 In this example, a JSON array of items is being saved to a text file, modified in a text editor, and then POSTed back to the same URL.
 
@@ -645,11 +673,13 @@ This approach allows a complicated task such as batch editing to be performed us
 
 A similar process can be used with PUT for individual objects:
 
-    $ URL="https://api.zotero.org/users/1234567/items/ABCD2345"
-    $ API_KEY="P9NiFoyLeZu2bZNvvuQPDWsd"
-    $ curl -H "Zotero-API-Key: $API_KEY" $URL > item.json
-    $ vi items.json  # edit the item data
-    $ curl -H "Zotero-API-Key: $API_KEY" -X PUT -d @item.json -v $URL
+```
+$ URL="https://api.zotero.org/users/1234567/items/ABCD2345"
+$ API_KEY="P9NiFoyLeZu2bZNvvuQPDWsd"
+$ curl -H "Zotero-API-Key: $API_KEY" $URL > item.json
+$ vi items.json  # edit the item data
+$ curl -H "Zotero-API-Key: $API_KEY" -X PUT -d @item.json -v $URL
+```
 
 Note that when uploading full JSON, only the `data` property is processed. All other properties (`library`, `links`, `meta`, etc.) are ignored.
 
@@ -659,39 +689,41 @@ Note that when uploading full JSON, only the `data` property is processed. All o
 
 When creating a new item, first get empty JSON for the item type with an [item template request](dev/web_api/v3/types_and_fields#getting_a_template_for_a_new_item) (or use a cached version of the template). Then modify it and resubmit it to the server in an array:
 
-    POST <userOrGroupPrefix>/items
-    Content-Type: application/json
-    Zotero-Write-Token: <write token> or If-Unmodified-Since-Version: <last library version>
+```http
+POST <userOrGroupPrefix>/items
+Content-Type: application/json
+Zotero-Write-Token: <write token> or If-Unmodified-Since-Version: <last library version>
 
-    [
+[
+  {
+    "itemType" : "book",
+    "title" : "My Book",
+    "creators" : [
       {
-        "itemType" : "book",
-        "title" : "My Book",
-        "creators" : [
-          {
-            "creatorType":"author",
-            "firstName" : "Sam",
-            "lastName" : "McAuthor"
-          },
-          {
-            "creatorType":"editor",
-            "name" : "John T. Singlefield"
-          }
-        ],
-        "tags" : [
-          { "tag" : "awesome" },
-          { "tag" : "rad", "type" : 1 }
-        ],
-        "collections" : [
-          "BCDE3456", "CDEF4567"
-        ],
-        "relations" : {
-          "owl:sameAs" : "http://zotero.org/groups/1/items/JKLM6543",
-          "dc:relation" : "http://zotero.org/groups/1/items/PQRS6789",
-          "dc:replaces" : "http://zotero.org/users/1/items/BCDE5432"
-        }
+        "creatorType":"author",
+        "firstName" : "Sam",
+        "lastName" : "McAuthor"
+      },
+      {
+        "creatorType":"editor",
+        "name" : "John T. Singlefield"
       }
-    ]
+    ],
+    "tags" : [
+      { "tag" : "awesome" },
+      { "tag" : "rad", "type" : 1 }
+    ],
+    "collections" : [
+      "BCDE3456", "CDEF4567"
+    ],
+    "relations" : {
+      "owl:sameAs" : "http://zotero.org/groups/1/items/JKLM6543",
+      "dc:relation" : "http://zotero.org/groups/1/items/PQRS6789",
+      "dc:replaces" : "http://zotero.org/users/1/items/BCDE5432"
+    }
+  }
+]
+```
 
 All properties other than `itemType`, `tags`, `collections`, and `relations` are optional.
 
@@ -705,14 +737,16 @@ All properties other than `itemType`, `tags`, `collections`, and `relations` are
 
 `200 OK` response:
 
-    {
-      "success": {
-        "0": "<itemKey>"
-      },
-      "unchanged": {},
-      "failed": {},
-      }
-    }
+```json
+{
+  "success": {
+    "0": "<itemKey>"
+  },
+  "unchanged": {},
+  "failed": {},
+  }
+}
+```
 
 See [Creating Multiple Objects](#creating_multiple_objects) for more information on the response format.
 
@@ -724,7 +758,9 @@ See [Creating Multiple Objects](#creating_multiple_objects).
 
 To update an existing item, first retrieve the current version of the item:
 
-    GET <userOrGroupPrefix>/items/<itemKey>
+```http
+GET <userOrGroupPrefix>/items/<itemKey>
+```
 
 The editable data, similar to the item data shown above in [Creating an Item](#creating_an_item), will be found in the `data` property in the response.
 
@@ -734,38 +770,40 @@ The API supports two ways of modifying item data: by uploading full item data (`
 
 With `PUT`, you submit the item's complete editable JSON to the server, typically by modifying the downloaded editable JSON — that is, the contents of the `data` property — directly and resubmitting it:
 
-    PUT <userOrGroupPrefix>/items/<itemKey>
-    Content-Type: application/json
+```http
+PUT <userOrGroupPrefix>/items/<itemKey>
+Content-Type: application/json
 
+{
+  "key": "ABCD2345",
+  "version": 1,
+  "itemType" : "book",
+  "title" : "My Amazing Book",
+  "creators" : [
     {
-      "key": "ABCD2345",
-      "version": 1,
-      "itemType" : "book",
-      "title" : "My Amazing Book",
-      "creators" : [
-        {
-          "creatorType":"author",
-          "firstName" : "Sam",
-          "lastName" : "McAuthor"
-        },
-        {
-          "creatorType":"editor",
-          "name" : "Jenny L. Singlefield"
-        }
-      ],
-      "tags" : [
-        { "tag" : "awesome" },
-        { "tag" : "rad", "type" : 1 }
-      ],
-      "collections" : [
-        "BCDE3456", "CDEF4567"
-      ],
-      "relations" : {
-        "owl:sameAs" : "http://zotero.org/groups/1/items/JKLM6543",
-        "dc:relation" : "http://zotero.org/groups/1/items/PQRS6789",
-        "dc:replaces" : "http://zotero.org/users/1/items/BCDE5432"
-      }
+      "creatorType":"author",
+      "firstName" : "Sam",
+      "lastName" : "McAuthor"
+    },
+    {
+      "creatorType":"editor",
+      "name" : "Jenny L. Singlefield"
     }
+  ],
+  "tags" : [
+    { "tag" : "awesome" },
+    { "tag" : "rad", "type" : 1 }
+  ],
+  "collections" : [
+    "BCDE3456", "CDEF4567"
+  ],
+  "relations" : {
+    "owl:sameAs" : "http://zotero.org/groups/1/items/JKLM6543",
+    "dc:relation" : "http://zotero.org/groups/1/items/PQRS6789",
+    "dc:replaces" : "http://zotero.org/users/1/items/BCDE5432"
+  }
+}
+```
 
 All properties other than `itemType`, `tags`, `collections`, and `relations` are optional. Any existing fields not specified will be removed from the item. If `creators`, `tags`, `collections`, or `relations` are empty, any associated creators/tags/collections/relations will be removed from the item.
 
@@ -773,15 +811,17 @@ All properties other than `itemType`, `tags`, `collections`, and `relations` are
 
 With `PATCH`, you can submit just the properties that have actually changed, for a potentially much more efficient operation. Properties not included in the uploaded JSON are left untouched on the server. To clear a property, pass an empty string or an empty array as appropriate.
 
-    PATCH <userOrGroupPrefix>/items/<itemKey>
-    If-Unmodified-Since-Version: <last item version>
+```http
+PATCH <userOrGroupPrefix>/items/<itemKey>
+If-Unmodified-Since-Version: <last item version>
 
-    {
-      "date" : "2013"
-      "collections" : [
-        "BCDE3456", "CDEF4567"
-      ]
-    }
+{
+  "date" : "2013"
+  "collections" : [
+    "BCDE3456", "CDEF4567"
+  ]
+}
+```
 
 This would add a `date` field to the item and add it in the two specified collections if not already present. Array properties are interpreted as complete lists, so omitting a collection key would cause the item to be removed from that collection.
 
@@ -806,8 +846,10 @@ See [Updating Multiple Objects](#updating_multiple_objects).
 
 ### Deleting an Item
 
-    DELETE <userOrGroupPrefix>/items/<itemKey>
-    If-Unmodified-Since-Version: <last item version>
+```http
+DELETE <userOrGroupPrefix>/items/<itemKey>
+If-Unmodified-Since-Version: <last item version>
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -820,11 +862,13 @@ See [Updating Multiple Objects](#updating_multiple_objects).
 
 Up to 50 items can be deleted in a single request.
 
-    DELETE <userOrGroupPrefix>/items?itemKey=<key>,<key>,<key>
-    If-Unmodified-Since-Version: <last library version>
+```http
+DELETE <userOrGroupPrefix>/items?itemKey=<key>,<key>,<key>
+If-Unmodified-Since-Version: <last library version>
 
-    204 No Content
-    Last-Modified-Version: <library version>
+204 No Content
+Last-Modified-Version: <library version>
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -837,16 +881,18 @@ Up to 50 items can be deleted in a single request.
 
 ### Creating a Collection
 
-    POST <userOrGroupPrefix>/collections
-    Content-Type: application/json
-    Zotero-Write-Token: <write token> or If-Unmodified-Since-Version: <last library version>
+```http
+POST <userOrGroupPrefix>/collections
+Content-Type: application/json
+Zotero-Write-Token: <write token> or If-Unmodified-Since-Version: <last library version>
 
-    [
-      {
-        "name" : "My Collection",
-        "parentCollection" : "QRST9876"
-      }
-    ]
+[
+  {
+    "name" : "My Collection",
+    "parentCollection" : "QRST9876"
+  }
+]
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -856,19 +902,23 @@ Up to 50 items can be deleted in a single request.
 
 ### Updating an Existing Collection
 
-    GET <userOrGroupPrefix>/collections/<collectionKey>
+```http
+GET <userOrGroupPrefix>/collections/<collectionKey>
+```
 
 Editable JSON will be found in the `data` property.
 
-    PUT <userOrGroupPrefix>/collections/<collectionKey>
-    Content-Type: application/json
+```http
+PUT <userOrGroupPrefix>/collections/<collectionKey>
+Content-Type: application/json
 
-    {
-      "key" : "DM2F65CA",
-      "version" : 156,
-      "name" : "My Collection",
-      "parentCollection" : false
-    }
+{
+  "key" : "DM2F65CA",
+  "version" : 156,
+  "name" : "My Collection",
+  "parentCollection" : false
+}
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -882,8 +932,10 @@ Items can be added to or removed from collections via the `collections` property
 
 ### Deleting a Collection
 
-    DELETE <userOrGroupPrefix>/collections/<collectionKey>
-    If-Unmodified-Since-Version: <last collection version>
+```http
+DELETE <userOrGroupPrefix>/collections/<collectionKey>
+If-Unmodified-Since-Version: <last collection version>
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -895,11 +947,13 @@ Items can be added to or removed from collections via the `collections` property
 
 Up to 50 collections can be deleted in a single request.
 
-    DELETE <userOrGroupPrefix>/collections?collectionKey=<collectionKey>,<collectionKey>,<collectionKey>
-    If-Unmodified-Since-Version: <last library version>
+```http
+DELETE <userOrGroupPrefix>/collections?collectionKey=<collectionKey>,<collectionKey>,<collectionKey>
+If-Unmodified-Since-Version: <last library version>
 
-    204 No Content
-    Last-Modified-Version: <library version>
+204 No Content
+Last-Modified-Version: <library version>
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -911,27 +965,29 @@ Up to 50 collections can be deleted in a single request.
 
 ### Creating a Search
 
-    POST <userOrGroupPrefix>/searches
-    Content-Type: application/json
-    Zotero-Write-Token: <write token> or If-Unmodified-Since-Version: <last library version>
+```http
+POST <userOrGroupPrefix>/searches
+Content-Type: application/json
+Zotero-Write-Token: <write token> or If-Unmodified-Since-Version: <last library version>
 
-    [
+[
+  {
+    "name": "My Search",
+    "conditions": [
       {
-        "name": "My Search",
-        "conditions": [
-          {
-            "condition": "title",
-            "operator": "contains",
-            "value": "foo"
-          },
-          {
-            "condition": "date",
-            "operator": "isInTheLast",
-            "value": "7 days"
-          }
-        ]
+        "condition": "title",
+        "operator": "contains",
+        "value": "foo"
+      },
+      {
+        "condition": "date",
+        "operator": "isInTheLast",
+        "value": "7 days"
       }
     ]
+  }
+]
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -943,11 +999,13 @@ Up to 50 collections can be deleted in a single request.
 
 Up to 50 searches can be deleted in a single request.
 
-    DELETE <userOrGroupPrefix>/searches?searchKey=<searchKey>,<searchKey>,<searchKey>
-    If-Unmodified-Since-Version: <last library version>
+```http
+DELETE <userOrGroupPrefix>/searches?searchKey=<searchKey>,<searchKey>,<searchKey>
+If-Unmodified-Since-Version: <last library version>
 
-    204 No Content
-    Last-Modified-Version: <library version>
+204 No Content
+Last-Modified-Version: <library version>
+```
 
 | Common responses | |
 | :--- | :--- |
@@ -961,11 +1019,13 @@ Up to 50 searches can be deleted in a single request.
 
 Up to 50 tags can be deleted in a single request.
 
-    DELETE <userOrGroupPrefix>/tags?tag=<URL-encoded tag 1> || <URL-encoded tag 2> || <URL-encoded tag 3>
-    If-Unmodified-Since-Version: <last library version>
+```http
+DELETE <userOrGroupPrefix>/tags?tag=<URL-encoded tag 1> || <URL-encoded tag 2> || <URL-encoded tag 3>
+If-Unmodified-Since-Version: <last library version>
 
-    204 No Content
-    Last-Modified-Version: <library version>
+204 No Content
+Last-Modified-Version: <library version>
+```
 
 ## Multi-Object Requests
 
@@ -973,48 +1033,52 @@ Up to 50 tags can be deleted in a single request.
 
 Up to 50 collections, saved searches, or items can be created in a single request by including multiple objects in an array:
 
-    POST <userOrGroupPrefix>/collections
-    Content-Type: application/json
-    Zotero-Write-Token: <write token> or If-Unmodified-Since-Version: <last library version>
+```http
+POST <userOrGroupPrefix>/collections
+Content-Type: application/json
+Zotero-Write-Token: <write token> or If-Unmodified-Since-Version: <last library version>
 
-    [
-      {
-        "name" : "My Collection",
-        "parentCollection": "QRST9876"
-      },
-      {
-        "name": "My Other Collection"
-      }
-    ]
+[
+  {
+    "name" : "My Collection",
+    "parentCollection": "QRST9876"
+  },
+  {
+    "name": "My Other Collection"
+  }
+]
+```
 
 For [syncing](dev/web_api/v3/syncing) objects with predetermined keys, an [object key](#object_keys) can also be provided with new objects.
 
 `200` response:
 
-    Content-Type: application/json
-    Last-Modified-Version: <library version>
+```
+Content-Type: application/json
+Last-Modified-Version: <library version>
 
-    {
-      "successful": {
-        "0": "<saved object>",
-        "2": "<saved object>"
-      },
-      "unchanged": {
-        "4": "<objectKey>"
-      }
-      "failed": {
-        "1": {
-          "key": "<objectKey>",
-          "code": <HTTP response code>,
-          "message": "<error message>"
-        },
-        "3": {
-          "key": "<objectKey>",
-          "code": <HTTP response code>,
-          "message": "<error message>"
-        },
-      }
-    }
+{
+  "successful": {
+    "0": "<saved object>",
+    "2": "<saved object>"
+  },
+  "unchanged": {
+    "4": "<objectKey>"
+  }
+  "failed": {
+    "1": {
+      "key": "<objectKey>",
+      "code": <HTTP response code>,
+      "message": "<error message>"
+    },
+    "3": {
+      "key": "<objectKey>",
+      "code": <HTTP response code>,
+      "message": "<error message>"
+    },
+  }
+}
+```
 
 The keys of the `successful`, `unchanged`, and `failed` objects are the numeric indexes of the Zotero objects in the uploaded array. The `Last-Modified-Version` is the version that has been assigned to any Zotero objects in the `successful` object — that is, objects that were modified in this request.
 
@@ -1032,23 +1096,25 @@ Follow the instructions in [Creating Multiple Objects](#creating_multiple_object
 
 Items can also include `dateAdded` and `dateModified` properties containing timestamps in [ISO 8601 format](http://en.wikipedia.org/wiki/ISO_8601) (e.g., "2014-06-10T13:52:43Z"). If `dateAdded` is included with an existing item, it must match the existing `dateAdded` value or else the API will return a 400 error. If a new `dateModified` time is not included with an update to existing item, the item's `dateModified` value will be set to the current time. Editable JSON returned from the API includes `dateAdded` and `dateModified` in the correct format, so clients that are content with server-set modification times can simply ignore these properties.
 
-    POST <userOrGroupPrefix>/collections
-    Content-Type: application/json
+```http
+POST <userOrGroupPrefix>/collections
+Content-Type: application/json
 
-    [
-      {
-        "key": "BD85JEM4",
-        "version": 414,
-        "name": "My Collection",
-        "parentCollection": false
-      },
-      {
-        "key": "MNC5SAPD",
-        "version": 416
-        "name": "My Subcollection",
-        "parentCollection": "BD85JEM4"
-      }
-    ]
+[
+  {
+    "key": "BD85JEM4",
+    "version": 414,
+    "name": "My Collection",
+    "parentCollection": false
+  },
+  {
+    "key": "MNC5SAPD",
+    "version": 416
+    "name": "My Subcollection",
+    "parentCollection": "BD85JEM4"
+  }
+]
+```
 
 The response is the same as that in [Creating Multiple Objects](#creating_multiple_objects).
 
@@ -1062,7 +1128,9 @@ Local object keys should conform to the pattern `/[23456789ABCDEFGHIJKLMNPQRSTUV
 
 ## Zotero-Write-Token
 
-    Zotero-Write-Token: 19a4f01ad623aa7214f82347e3711f56
+```
+Zotero-Write-Token: 19a4f01ad623aa7214f82347e3711f56
+```
 
 `Zotero-Write-Token` is an optional HTTP header, containing a client-generated random 32-character identifier string, that can be included with unversioned write requests to prevent them from being processed more than once (e.g., if a user clicks a form submit button twice). The Zotero server caches write tokens for successful requests for 12 hours, and subsequent requests from the same API key using the same write token will be rejected with a `412 Precondition Failed` status code. If a request fails, the write token will not be stored.
 
@@ -1086,48 +1154,52 @@ In Zotero 10+, the [local API](dev/web_api/v3/local_api#file_uploads) supports t
 
 ### i. Get attachment item template
 
-    GET /items/new?itemType=attachment&linkMode={imported_file,imported_url,linked_file,linked_url}
+```http
+GET /items/new?itemType=attachment&linkMode={imported_file,imported_url,linked_file,linked_url}
 
-    {
-      "itemType": "attachment",
-      "linkMode": "imported_url",
-      "title": "",
-      "accessDate": "",
-      "url": "",
-      "note": "",
-      "tags": [],
-      "relations": {},
-      "contentType": "",
-      "charset": "",
-      "filename": "",
-      "md5": null,
-      "mtime": null
-    }
+{
+  "itemType": "attachment",
+  "linkMode": "imported_url",
+  "title": "",
+  "accessDate": "",
+  "url": "",
+  "note": "",
+  "tags": [],
+  "relations": {},
+  "contentType": "",
+  "charset": "",
+  "filename": "",
+  "md5": null,
+  "mtime": null
+}
+```
 
 ### ii. Create child attachment item
 
-    POST /users/<userID>/items
-    Content-Type: application/json
-    Zotero-Write-Token: <token>
+```http
+POST /users/<userID>/items
+Content-Type: application/json
+Zotero-Write-Token: <token>
 
-    [
-      {
-        "itemType": "attachment",
-        "parentItem": "ABCD2345",
-        "linkMode": "imported_url",
-        "title": "My Document",
-        "accessDate": "2012-03-14T17:45:54Z",
-        "url": "http://example.com/doc.pdf",
-        "note": "",
-        "tags": [],
-        "relations": {},
-        "contentType": "application/pdf",
-        "charset": "",
-        "filename": "doc.pdf",
-        "md5": null,
-        "mtime": null
-      }
-    ]
+[
+  {
+    "itemType": "attachment",
+    "parentItem": "ABCD2345",
+    "linkMode": "imported_url",
+    "title": "My Document",
+    "accessDate": "2012-03-14T17:45:54Z",
+    "url": "http://example.com/doc.pdf",
+    "note": "",
+    "tags": [],
+    "relations": {},
+    "contentType": "application/pdf",
+    "charset": "",
+    "filename": "doc.pdf",
+    "md5": null,
+    "mtime": null
+  }
+]
+```
 
 `md5` and `mtime` can be edited directly in personal libraries for WebDAV-based file syncing. They should not be edited directly when using Zotero File Storage, which provides an atomic method (detailed below) for setting the properties along with the corresponding file.
 
@@ -1137,33 +1209,37 @@ Top-level attachments can be created by excluding the `parentItem` property or s
 
 ### i. Retrieve the attachment information
 
-    GET /users/<userID>/items/<itemKey>
+```http
+GET /users/<userID>/items/<itemKey>
 
-    {
-      "key": "ABCD2345",
-      "version": 124,
-      "library": { ... },
-      ...
-      "data": {
-        "key": "ABCD2345",
-        "version": 124,
-        "itemType": "attachment",
-        "linkMode": "imported_file",
-        "title": "My Document",
-        "note": "",
-        "tags": [],
-        "relations": {},
-        "contentType": "text/plain",
-        "charset": "utf-8",
-        "filename": "doc.txt",
-        "md5": "4fa38e3f2c360ca181e633d02bab91f5",
-        "mtime": "1331171741767"
-      }
-    }
+{
+  "key": "ABCD2345",
+  "version": 124,
+  "library": { ... },
+  ...
+  "data": {
+    "key": "ABCD2345",
+    "version": 124,
+    "itemType": "attachment",
+    "linkMode": "imported_file",
+    "title": "My Document",
+    "note": "",
+    "tags": [],
+    "relations": {},
+    "contentType": "text/plain",
+    "charset": "utf-8",
+    "filename": "doc.txt",
+    "md5": "4fa38e3f2c360ca181e633d02bab91f5",
+    "mtime": "1331171741767"
+  }
+}
+```
 
 ### ii. Download the existing file
 
-    GET /users/<userID>/items/<itemKey>/file
+```http
+GET /users/<userID>/items/<itemKey>/file
+```
 
 Check the `ETag` header of the response to make sure it matches the attachment item's `md5` value. If it doesn't, check the attachment item again. If the attachment item still has a different hash, the latest version of the file may be available only via WebDAV, not via Zotero File Storage, and it is up to the client how to proceed.
 
@@ -1175,11 +1251,13 @@ Note that to perform a faster partial upload using a binary diff, you must save 
 
 ## 2) Get upload authorization
 
-    POST /users/<userID>/items/<itemKey>/file
-    Content-Type: application/x-www-form-urlencoded
-    If-None-Match: *
+```http
+POST /users/<userID>/items/<itemKey>/file
+Content-Type: application/x-www-form-urlencoded
+If-None-Match: *
 
-    md5=<hash>&filename=<filename>&filesize=<bytes>&mtime=<milliseconds>
+md5=<hash>&filename=<filename>&filesize=<bytes>&mtime=<milliseconds>
+```
 
 For existing attachments, use `If-Match: <hash>` in place of `If-None-Match: *`, where <hash> is the previous MD5 hash of the file (as provided in the `ETag` header when downloading it).
 
@@ -1187,17 +1265,21 @@ Note that `mtime` must be provided in milliseconds, not seconds.
 
 A successful `200` response returns one of two possible JSON objects:
 
-    {
-      "url": ...,
-      "contentType": ...,
-      "prefix": ...,
-      "suffix": ...,
-      "uploadKey": ...
-    }
+```json
+{
+  "url": ...,
+  "contentType": ...,
+  "prefix": ...,
+  "suffix": ...,
+  "uploadKey": ...
+}
+```
 
 or
 
-    { "exists": 1 }
+```json
+{ "exists": 1 }
+```
 
 In the latter case, the file already exists on the server and was successfully associated with the specified item. No further action is necessary.
 
@@ -1225,11 +1307,13 @@ Concatenate `prefix`, the file contents, and `suffix` and POST to `url` with the
 
 ### ii. Register upload
 
-    POST /users/<userID>/items/<itemKey>/file
-    Content-Type: application/x-www-form-urlencoded
-    If-None-Match: *
+```http
+POST /users/<userID>/items/<itemKey>/file
+Content-Type: application/x-www-form-urlencoded
+If-None-Match: *
 
-    upload=<uploadKey>
+upload=<uploadKey>
+```
 
 For existing attachments, use `If-Match: <hash>`, where <hash> is the previous MD5 hash of the file, provided as the `md5` property in the attachment item.
 
@@ -1242,10 +1326,12 @@ After the upload has been registered, the attachment item will reflect the new m
 
 ## 3b) Partial upload
 
-    PATCH /users/<userID>/items/<itemKey>/file?algorithm={xdelta,vcdiff,bsdiff}&upload=<uploadKey>
-    If-Match: <previous-value-of-md5-property>
+```http
+PATCH /users/<userID>/items/<itemKey>/file?algorithm={xdelta,vcdiff,bsdiff}&upload=<uploadKey>
+If-Match: <previous-value-of-md5-property>
 
-    <Binary diff of old and new versions>
+<Binary diff of old and new versions>
+```
 
 For best results, we recommend using Xdelta version 3 with the "`-9 -S djw`" flags. bsdiff takes significantly longer to generate diffs. 'vcdiff' is an alias for 'xdelta', as Xdelta3 can process diffs in VCDIFF format.
 
@@ -1268,16 +1354,18 @@ These methods are also available in the [local API](dev/web_api/v3/local_api#ful
 
 ### Getting new full-text content
 
-    GET <userOrGroupPrefix>/fulltext?since=<version>
+```http
+GET <userOrGroupPrefix>/fulltext?since=<version>
 
-    Content-Type: application/json
-    Last-Modified-Version: <library version>
+Content-Type: application/json
+Last-Modified-Version: <library version>
 
-    {
-        "<itemKey>": <version>,
-        "<itemKey>": <version>,
-        "<itemKey>": <version>
-    }
+{
+    "<itemKey>": <version>,
+    "<itemKey>": <version>,
+    "<itemKey>": <version>
+}
+```
 
 For each item with a full-text content version greater than stored locally, get the item's full-text content, as described below.
 
@@ -1288,18 +1376,22 @@ For each item with a full-text content version greater than stored locally, get 
 
 ### Getting an item's full-text content
 
-    GET <userOrGroupPrefix>/items/<itemKey>/fulltext
+```http
+GET <userOrGroupPrefix>/items/<itemKey>/fulltext
+```
 
 `<itemKey>` should correspond to an existing attachment item.
 
-    Content-Type: application/json
-    Last-Modified-Version: <version of item's full-text content>
+```
+Content-Type: application/json
+Last-Modified-Version: <version of item's full-text content>
 
-    {
-        "content": "This is full-text content.",
-        "indexedPages": 50,
-        "totalPages": 50
-    }
+{
+    "content": "This is full-text content.",
+    "indexedPages": 50,
+    "totalPages": 50
+}
+```
 
 `indexedChars` and `totalChars` are used for text documents, while `indexedPages` and `totalPages` are used for PDFs.
 
@@ -1310,14 +1402,16 @@ For each item with a full-text content version greater than stored locally, get 
 
 ### Setting an item's full-text content
 
-    PUT <userOrGroupPrefix>/items/<itemKey>/fulltext
-    Content-Type: application/json
+```http
+PUT <userOrGroupPrefix>/items/<itemKey>/fulltext
+Content-Type: application/json
 
-    {
-        "content": "This is full-text content.",
-        "indexedChars": 26,
-        "totalChars": 26
-    }
+{
+    "content": "This is full-text content.",
+    "indexedChars": 26,
+    "totalChars": 26
+}
+```
 
 `<itemKey>` should correspond to an existing attachment item.
 
@@ -1396,11 +1490,13 @@ The `since` query parameter can be used to retrieve only objects modified since 
 
 `format=versions` is similar to `format=keys`, but instead of returning a newline-delimited list of object keys, it returns a JSON object with object versions keyed by object keys:
 
-    {
-      "<itemKey>": <version>,
-      "<itemKey>": <version>,
-      "<itemKey>": <version>
-    }
+```json
+{
+  "<itemKey>": <version>,
+  "<itemKey>": <version>,
+  "<itemKey>": <version>
+}
+```
 
 Like `format=keys`, `format=versions` is not limited by a maximum number of results and returns all matching objects by default.
 
@@ -1416,30 +1512,34 @@ The following steps are for complete syncing of Zotero libraries, such as to ena
 
 ### 1) Verify key access
 
-    GET /keys/current
+```http
+GET /keys/current
+```
 
 `200` Response:
 
-    {
-      {
-        "userID": 12345
-        "username": "Z User"
-        "access": {
-            "user": {
+```json
+{
+  {
+    "userID": 12345
+    "username": "Z User"
+    "access": {
+        "user": {
+            "library": true
+            "files": true
+            "notes": true
+            "write": true
+        }
+        "groups": {
+            "all": {
                 "library": true
-                "files": true
-                "notes": true
                 "write": true
-            }
-            "groups": {
-                "all": {
-                    "library": true
-                    "write": true
-                }
             }
         }
     }
-    }
+}
+}
+```
 
 `/keys/current` returns information on the API key provided in the `Zotero-API-Key` header. Use this response to verify that the key has the expected access to the library you're trying to access. If necessary, show a warning that the user no longer has sufficient access and offer to remove a local library or reset local changes.
 
@@ -1449,24 +1549,30 @@ Group metadata includes group titles and descriptions as well as member/role/per
 
 First, retrieve a list of the user's groups, with a version indicating the current state of each group's metadata:
 
-    GET /users/<userID>/groups?format=versions
+```http
+GET /users/<userID>/groups?format=versions
+```
 
 `200` Response:
 
-    {
-      "<groupID>": "<version>",
-      "<groupID>": "<version>",
-      "<groupID>": "<version>"
-    }
+```json
+{
+  "<groupID>": "<version>",
+  "<groupID>": "<version>",
+  "<groupID>": "<version>"
+}
+```
 
 Delete any local groups not in the list, which either were deleted or are currently inaccessible. (The user may have been removed from a group, or the current API key may no longer have access.) If data has been modified locally in any groups that are no longer available, offer the user the ability to cancel and transfer modified data elsewhere before continuing.
 
 For each group that doesn't exist locally or that has a different version number, retrieve the group metadata:
 
-    GET /groups/<groupID>
+```http
+GET /groups/<groupID>
 
-    Last-Modified-Version: <version>
-    JSON response with metadata
+Last-Modified-Version: <version>
+JSON response with metadata
+```
 
 Update the local group metadata and version number.
 
@@ -1480,10 +1586,12 @@ Perform the following steps for each library:
 
 Retrieve the versions of all objects changed since the last check for that object type, using the appropriate request for each object type:
 
-    GET <userOrGroupPrefix>/collections?since=<version>&format=versions
-    GET <userOrGroupPrefix>/searches?since=<version>&format=versions
-    GET <userOrGroupPrefix>/items/top?since=<version>&format=versions&includeTrashed=1
-    GET <userOrGroupPrefix>/items?since=<version>&format=versions&includeTrashed=1
+```http
+GET <userOrGroupPrefix>/collections?since=<version>&format=versions
+GET <userOrGroupPrefix>/searches?since=<version>&format=versions
+GET <userOrGroupPrefix>/items/top?since=<version>&format=versions&includeTrashed=1
+GET <userOrGroupPrefix>/items?since=<version>&format=versions&includeTrashed=1
+```
 
 `<version>` is the final `Last-Modified-Version` returned from the API for the last successfully completed sync process, or `0` when syncing a library for the first time.
 
@@ -1493,49 +1601,55 @@ The first request — e.g., for collection versions — can also include an `If
 
 `200` response:
 
-    Last-Modified-Version: <version>
+```
+Last-Modified-Version: <version>
 
-    [
-        "<objectKey>": <version>,
-        "<objectKey>": <version>
-        "<objectKey>": <version>,
-    ]
+[
+    "<objectKey>": <version>,
+    "<objectKey>": <version>
+    "<objectKey>": <version>,
+]
+```
 
 For each returned object, compare the version to the local version of the object. If the remote version doesn't match, queue the object for download. Generally all returned objects should have newer version numbers, but there are some situations, such as full syncs (i.e., `since=0`) or interrupted syncs, where clients may retrieve versions for objects that are already up-to-date locally. The version will also match for top-level items on the second, non-`/top` `items` request, since top-level items will have already been processed.
 
 Retrieve the queued objects, as well as any [flagged](#Handling save errors) as having previously failed to save, by key, up to 50 at a time, using the appropriate request for each object type:
 
-    GET <userOrGroupPrefix>/collections?collectionKey=<key>,<key>,<key>,<key>
-    GET <userOrGroupPrefix>/searches?searchKey=<key>,<key>,<key>,<key>
-    GET <userOrGroupPrefix>/items?itemKey=<key>,<key>,<key>,<key>&includeTrashed=1
+```http
+GET <userOrGroupPrefix>/collections?collectionKey=<key>,<key>,<key>,<key>
+GET <userOrGroupPrefix>/searches?searchKey=<key>,<key>,<key>,<key>
+GET <userOrGroupPrefix>/items?itemKey=<key>,<key>,<key>,<key>&includeTrashed=1
+```
 
 Item responses include creators, tags, collection associations, and relations.
 
 Process the remote changes:
 
-    for each updated object:
-      if object doesn't exist locally:
-         create local object with version = Last-Modified-Version and set synced = true
-         continue
+```
+for each updated object:
+  if object doesn't exist locally:
+     create local object with version = Last-Modified-Version and set synced = true
+     continue
 
-      if object hasn't been modified locally (synced == true):
-          overwrite with synced = true and version = Last-Modified-Version
+  if object hasn't been modified locally (synced == true):
+      overwrite with synced = true and version = Last-Modified-Version
+
+  else:
+    perform conflict resolution
+      if object hasn't changed:
+        set synced = true and version = Last-Modified-Version
+
+      else if changes can be automatically merged:
+        apply changes from each side and set synced = true and version = Last-Modified-Version
 
       else:
-        perform conflict resolution
-          if object hasn't changed:
-            set synced = true and version = Last-Modified-Version
+        prompt user to choose a side or merge conflicts
+          if user chooses remote copy:
+            overwrite with synced = true and version = Last-Modified-Version
 
-          else if changes can be automatically merged:
-            apply changes from each side and set synced = true and version = Last-Modified-Version
-
-          else:
-            prompt user to choose a side or merge conflicts
-              if user chooses remote copy:
-                overwrite with synced = true and version = Last-Modified-Version
-
-              else if user chooses local copy:
-                synced = false and set a flag to restart the sync when finished
+          else if user chooses local copy:
+            synced = false and set a flag to restart the sync when finished
+```
 
 
 ##### Conflict resolution
@@ -1559,46 +1673,52 @@ When processing a set of objects, it may be helpful to maintain a process queue 
 
 #### ii. Get deleted data
 
-    GET <userOrGroupPrefix>/deleted?since=<version>
+```http
+GET <userOrGroupPrefix>/deleted?since=<version>
+```
 
 `<version>` is, as above, the `Last-Modified-Version` returned from the API during the last successful sync run.
 
 Response:
 
-    Content-Type: application/json
-    Last-Modified-Version: <version>
+```
+Content-Type: application/json
+Last-Modified-Version: <version>
 
-    {
-      "collections": [
-        "<collectionKey>"
-      ],
-      "searches": [
-        "<searchKey>"
-      ],
-      "items": [
-        "<itemKey>",
-        "<itemKey>"
-      ],
-      "tags": [
-        "<tagName>",
-        "<tagName>"
-      ]
-    }
+{
+  "collections": [
+    "<collectionKey>"
+  ],
+  "searches": [
+    "<searchKey>"
+  ],
+  "items": [
+    "<itemKey>",
+    "<itemKey>"
+  ],
+  "tags": [
+    "<tagName>",
+    "<tagName>"
+  ]
+}
+```
 
 Process the remote deletions:
 
-    for each deleted object in ['collections', 'searches', 'items']:
-      if local object doesn't exist:
-        continue
+```
+for each deleted object in ['collections', 'searches', 'items']:
+  if local object doesn't exist:
+    continue
 
-      if object hasn't been modified locally (synced == true):
-        delete local object, skipping delete log
+  if object hasn't been modified locally (synced == true):
+    delete local object, skipping delete log
 
-      else:
-        perform conflict resolution
-          if user chooses deletion, delete local object, skipping delete log
+  else:
+    perform conflict resolution
+      if user chooses deletion, delete local object, skipping delete log
 
-          if user chooses local modification, keep object and set synced = true and version = Last-Modified-Version
+      if user chooses local modification, keep object and set synced = true and version = Last-Modified-Version
+```
 
 The Zotero client automatically resolves conflicts for objects other than items without prompting the user, erring on the side of restoring deleted data.
 
@@ -1626,13 +1746,17 @@ See [Deleting Multiple Collections](dev/web_api/v3/write_requests#deleting_multi
 
 Example request:
 
-    DELETE <userOrGroupPrefix>/collections?collectionKey=<key>,<key>,<key>
-    If-Unmodified-Since-Version: <version>
+```http
+DELETE <userOrGroupPrefix>/collections?collectionKey=<key>,<key>,<key>
+If-Unmodified-Since-Version: <version>
+```
 
 Response:
 
-    204 No Content
-    Last-Modified-Version: <version>
+```
+204 No Content
+Last-Modified-Version: <version>
+```
 
 On a `204` response, store the returned `Last-Modified-Version` as the current library version to be passed with the next write request.
 
@@ -1674,75 +1798,83 @@ To avoid missed updates, clients should connect to the streaming API and then, o
 
 ### Create an empty WebSocket stream
 
-    var ws = new WebSocket('wss://stream.zotero.org');
+```
+var ws = new WebSocket('wss://stream.zotero.org');
+```
 
 Server response:
 
-    {"event": "connected", "retry": 10000}
+```json
+{"event": "connected", "retry": 10000}
+```
 
 ### Add subscriptions to the event stream
 
 Client message:
 
-    {
-        "action": "createSubscriptions",
-        "subscriptions": [
-            {
-                "apiKey": "abcdefghijklmn1234567890",
-                "topics": [
-                    "/users/123456",
-                    "/groups/234567",
-                    "/groups/345678"
-                ]
-            },
-            {
-                "apiKey": "bcdefghijklmn12345678901"
-            },
-            {
-                "topics": [
-                    "/groups/456789",
-                    "/groups/567890"
-                ]
-            }
-        ]
-    }
+```json
+{
+    "action": "createSubscriptions",
+    "subscriptions": [
+        {
+            "apiKey": "abcdefghijklmn1234567890",
+            "topics": [
+                "/users/123456",
+                "/groups/234567",
+                "/groups/345678"
+            ]
+        },
+        {
+            "apiKey": "bcdefghijklmn12345678901"
+        },
+        {
+            "topics": [
+                "/groups/456789",
+                "/groups/567890"
+            ]
+        }
+    ]
+}
+```
 
 Server Response:
 
-    {
-        "event": "subscriptionsCreated",
-        "subscriptions": [
-            {
-                "apiKey": "abcdefghijklmn1234567890",
-                "topics": [
-                    "/users/123456",
-                    "/groups/234567"
-                ]
-            },
-            {
-                "apiKey": "bcdefghijklmn2345678901",
-                "topics": [
-                    "/users/345678"
-                ]
-            },
-            {
-                "topics": [
-                    "/groups/456789"
-                ]
-            }
-        ],
-        "errors": [
-            {
-                "apiKey": "abcdefghijklmn1234567890",
-                "topic": "/groups/345678",
-                "error": "Topic is not valid for provided API key"
-            },
-            {
-                "topic": "/groups/567890",
-                "error": "Topic is not accessible without an API key"
-            }
-        ]
-    }
+```json
+{
+    "event": "subscriptionsCreated",
+    "subscriptions": [
+        {
+            "apiKey": "abcdefghijklmn1234567890",
+            "topics": [
+                "/users/123456",
+                "/groups/234567"
+            ]
+        },
+        {
+            "apiKey": "bcdefghijklmn2345678901",
+            "topics": [
+                "/users/345678"
+            ]
+        },
+        {
+            "topics": [
+                "/groups/456789"
+            ]
+        }
+    ],
+    "errors": [
+        {
+            "apiKey": "abcdefghijklmn1234567890",
+            "topic": "/groups/345678",
+            "error": "Topic is not valid for provided API key"
+        },
+        {
+            "topic": "/groups/567890",
+            "error": "Topic is not accessible without an API key"
+        }
+    ]
+}
+```
 
 All topic subscriptions — new and existing — for the specified API keys are included in the response. Subscriptions for previously added API keys not in the current request are not included. Subscriptions for public topics can be made without specifying an API key, and the newly added topics will be grouped together in the response.
 
@@ -1759,30 +1891,36 @@ Topic subscriptions cannot be removed via `createSubscriptions`. If subscription
 
 ### Receive events on the existing event stream
 
-    {"event": "topicUpdated", "topic": "/users/123456", "version": 678}
+```json
+{"event": "topicUpdated", "topic": "/users/123456", "version": 678}
 
-    {"event": "topicAdded", "apiKey": "abcdefghijklmn1234567890", "topic": "/groups/345678"}
+{"event": "topicAdded", "apiKey": "abcdefghijklmn1234567890", "topic": "/groups/345678"}
 
-    {"event": "topicRemoved", "apiKey": "abcdefghijklmn1234567890", "topic": "/groups/234567"}
+{"event": "topicRemoved", "apiKey": "abcdefghijklmn1234567890", "topic": "/groups/234567"}
+```
 
 ### Delete all subscriptions for a given API key
 
 Client message:
 
-    {
-        "action": "deleteSubscriptions",
-        "subscriptions": [
-            {
-                "apiKey": "abcdefghijklmn1234567890"
-            }
-        ]
-    }
+```json
+{
+    "action": "deleteSubscriptions",
+    "subscriptions": [
+        {
+            "apiKey": "abcdefghijklmn1234567890"
+        }
+    ]
+}
+```
 
 Server response:
 
-    {
-        "event": "subscriptionsDeleted"
-    }
+```json
+{
+    "event": "subscriptionsDeleted"
+}
+```
 
 #### Errors
 
@@ -1794,21 +1932,25 @@ Server response:
 
 Client message:
 
-    {
-        "action": "deleteSubscriptions",
-        "subscriptions": [
-            {
-                "apiKey": "abcdefghijklmn1234567890",
-                "topic": "/users/123456"
-            }
-        ]
-    }
+```json
+{
+    "action": "deleteSubscriptions",
+    "subscriptions": [
+        {
+            "apiKey": "abcdefghijklmn1234567890",
+            "topic": "/users/123456"
+        }
+    ]
+}
+```
 
 Server response:
 
-    {
-        "event": "subscriptionsDeleted"
-    }
+```json
+{
+    "event": "subscriptionsDeleted"
+}
+```
 
 If a topic is manually removed from a key that is automatically tracking topics, the resulting list of topics will be fixed and the key will no longer receive `topicAdded` events. It may still receive `topicRemoved` events if the key loses access to topics.
 
@@ -1822,20 +1964,24 @@ If a topic is manually removed from a key that is automatically tracking topics,
 
 Client message:
 
-    {
-        "action": "deleteSubscriptions",
-        "subscriptions": [
-            {
-                "topic": "/users/123456"
-            }
-        ]
-    }
+```json
+{
+    "action": "deleteSubscriptions",
+    "subscriptions": [
+        {
+            "topic": "/users/123456"
+        }
+    ]
+}
+```
 
 Server response:
 
-    {
-        "event": "subscriptionsDeleted"
-    }
+```json
+{
+    "event": "subscriptionsDeleted"
+}
+```
 
 #### Errors
 
