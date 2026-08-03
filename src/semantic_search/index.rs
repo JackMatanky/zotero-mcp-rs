@@ -177,16 +177,35 @@ async fn assemble_item_text(
             parts.push(abstract_note.clone());
         }
     }
-    let children =
-        client.get_item_children(&item.key).await.unwrap_or_default();
+    let children = match client.get_item_children(&item.key).await {
+        Ok(children) => children,
+        Err(err) => {
+            tracing::warn!(
+                key = item.key.as_str(),
+                error = %err,
+                "failed to fetch item children during semantic indexing; \
+                 indexing without attachment fulltext"
+            );
+            Vec::new()
+        }
+    };
     for child in &children {
         if child.data.item_type != ItemType::Attachment {
             continue;
         }
-        if let Ok(text) = client.get_item_fulltext(&child.key).await {
-            if !text.trim().is_empty() {
+        match client.get_item_fulltext(&child.key).await {
+            Ok(text) if !text.trim().is_empty() => {
                 parts.push(text);
                 break;
+            }
+            Ok(_) => {}
+            Err(err) => {
+                tracing::warn!(
+                    key = child.key.as_str(),
+                    error = %err,
+                    "failed to fetch attachment fulltext during semantic \
+                     indexing"
+                );
             }
         }
     }
@@ -369,6 +388,36 @@ mod tests {
 
         assert_eq!(report.items_skipped_empty, 1);
         assert_eq!(report.items_indexed, 0);
+    }
+
+    #[tokio::test]
+    async fn indexes_item_when_children_fetch_fails() {
+        let items = format!(
+            "[{}]",
+            item_json(
+                "ITEM1",
+                "A Paper",
+                "An abstract about testing.",
+                "2024-01-01"
+            )
+        );
+        let server = MockServer::new(vec![
+            http_response("200 OK", &items),
+            http_response("500 Internal Server Error", ""),
+        ]);
+        let state = test_state(server.url().to_owned());
+        let client = ZoteroClient::new(&state);
+        let dir = tempfile::tempdir().unwrap();
+        let index = SemanticIndex::open(&dir.path().join("embeddings.sqlite"))
+            .await
+            .unwrap();
+        let provider: Arc<dyn EmbeddingProvider> = Arc::new(FakeProvider);
+
+        let report =
+            index_library(&client, &index, &provider, false).await.unwrap();
+
+        assert_eq!(report.items_indexed, 1);
+        assert_eq!(report.items_skipped_empty, 0);
     }
 
     #[test]
