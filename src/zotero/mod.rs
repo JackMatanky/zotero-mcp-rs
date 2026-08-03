@@ -237,3 +237,183 @@ pub(crate) mod test_http {
         }
     }
 }
+
+#[cfg(test)]
+pub(crate) mod test_sqlite {
+    use std::{path::Path, str::FromStr};
+
+    use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
+
+    /// Seeds a minimal-but-realistic Zotero schema covering the fulltext,
+    /// note, and annotation search paths used by `LocalZoteroDb`.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "seeds a realistic Zotero schema across many tables"
+    )]
+    pub(crate) async fn seed_zotero_db(path: &Path) -> Result<(), sqlx::Error> {
+        let opts = SqliteConnectOptions::from_str(&format!(
+            "sqlite://{}",
+            path.display()
+        ))?
+        .create_if_missing(true);
+        let pool = SqlitePool::connect_with(opts).await?;
+
+        sqlx::query(
+            "CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName \
+             TEXT)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, \
+             itemTypeID INTEGER, dateAdded TEXT, dateModified TEXT)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE fields (fieldID INTEGER PRIMARY KEY, fieldName TEXT)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID \
+             INTEGER)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value \
+             TEXT)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, firstName \
+             TEXT, lastName TEXT, fieldMode INT)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE itemCreators (itemID INTEGER, creatorID INTEGER)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query("CREATE TABLE deletedItems (itemID INTEGER)")
+            .execute(&pool)
+            .await?;
+        sqlx::query(
+            "CREATE TABLE fulltextWords (wordID INTEGER PRIMARY KEY, word \
+             TEXT UNIQUE)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE fulltextItemWords (wordID INT, itemID INT, PRIMARY \
+             KEY (wordID, itemID))",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE itemNotes (itemID INTEGER, parentItemID INTEGER, \
+             note TEXT, title TEXT)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE itemAnnotations (itemID INTEGER, parentItemID \
+             INTEGER, text TEXT, comment TEXT, type INTEGER, color TEXT, \
+             pageLabel TEXT)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE itemAttachments (itemID INTEGER, parentItemID \
+             INTEGER, path TEXT, contentType TEXT)",
+        )
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO fields (fieldID, fieldName) VALUES (1, 'title'), \
+             (16, 'extra'), (7, 'DOI')",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO itemTypes (itemTypeID, typeName) VALUES (1, \
+             'journalArticle'), (2, 'note'), (3, 'attachment')",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
+             dateModified) VALUES (1, 'K00001', 1, '2024-01-01', '2024-02-01')",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO itemData (itemID, fieldID, valueID) VALUES (1, 1, \
+             100), (1, 7, 101)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO itemDataValues (valueID, value) VALUES (100, 'Rust \
+             in Action'), (101, '10.1000/rust')",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
+             dateModified) VALUES (3, 'A00001', 3, '2024-01-02', '2024-02-02')",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO itemAttachments (itemID, parentItemID, path, \
+             contentType) VALUES (3, 1, 'storage:K00001.pdf', \
+             'application/pdf')",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO fulltextWords (wordID, word) VALUES (1, 'the'), (2, \
+             'borrow'), (3, 'checker'), (4, 'ensures'), (5, 'memory'), (6, \
+             'safety')",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO fulltextItemWords (wordID, itemID) VALUES (1, 3), \
+             (2, 3), (3, 3), (4, 3), (5, 3), (6, 3)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO creators (creatorID, firstName, lastName, fieldMode) \
+             VALUES (1, 'Jon', 'Gjengset', 0)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO itemCreators (itemID, creatorID) VALUES (1, 1)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO items (itemID, key, itemTypeID, dateAdded, \
+             dateModified) VALUES (2, 'N00001', 2, '2024-03-01', '2024-03-01')",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO itemNotes (itemID, parentItemID, note, title) VALUES \
+             (2, 1, '<p>Ownership summary</p>', 'summary')",
+        )
+        .execute(&pool)
+        .await?;
+
+        pool.close().await;
+        Ok(())
+    }
+}
