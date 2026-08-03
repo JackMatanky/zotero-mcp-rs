@@ -311,6 +311,7 @@ mod tests {
         let second = loaded.get(1).unwrap();
         assert_eq!(second.chunk_text, "second chunk");
         assert_eq!(second.embedding, Embedding::from(vec![-0.5, -0.5, -0.5]));
+        index.pool.close().await;
     }
 
     #[tokio::test]
@@ -339,6 +340,7 @@ mod tests {
             index.stored_date_modified(&ItemKey::from("ITEM1")).await.unwrap(),
             Some("v2".to_owned())
         );
+        index.pool.close().await;
     }
 
     #[tokio::test]
@@ -368,6 +370,7 @@ mod tests {
         let remaining = index.load_all_chunks().await.unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining.first().unwrap().item_key, "ITEM2");
+        index.pool.close().await;
     }
 
     #[tokio::test]
@@ -391,6 +394,7 @@ mod tests {
         let stats_after_delete = index.stats().await.unwrap();
         assert_eq!(stats_after_delete.indexed_items, 0);
         assert_eq!(stats_after_delete.indexed_chunks, 0);
+        index.pool.close().await;
     }
 
     #[tokio::test]
@@ -406,5 +410,6 @@ mod tests {
             .unwrap();
         assert_eq!(index.stats().await.unwrap().indexed_items, 1);
         assert!(db_path.exists(), "db must be created at the exact path");
+        index.pool.close().await;
     }
 }
