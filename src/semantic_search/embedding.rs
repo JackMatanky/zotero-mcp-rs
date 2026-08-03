@@ -1,5 +1,6 @@
-//! Local ONNX embedding generation via `fastembed`, plus the BLOB codec and
-//! cosine similarity used by `store.rs` and `search.rs`.
+//! The [`Embedding`] newtype (L2 normalization, dot-product scoring, and the
+//! BLOB codec used by `store.rs`/`search.rs`) plus local ONNX embedding
+//! generation via `fastembed`.
 
 use std::{path::Path, sync::Mutex};
 
