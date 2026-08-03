@@ -12,12 +12,13 @@ use crate::{
         embedding::{cosine_similarity, normalize},
         store::StoredChunk,
     },
+    zotero::ItemKey,
 };
 
 /// One semantic search result: the best-matching chunk for its item.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct SemanticSearchHit {
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
     pub(crate) title: Option<String>,
     pub(crate) similarity: f32,
     pub(crate) chunk_index: i64,
@@ -55,15 +56,16 @@ pub(crate) async fn search_library(
     .map_err(|e| ZoteroMcpError::Embedding(e.to_string()))??;
     normalize(&mut query_vector);
 
-    let mut best_per_item: HashMap<&str, SemanticSearchHit> = HashMap::new();
+    let mut best_per_item: HashMap<&ItemKey, SemanticSearchHit> =
+        HashMap::new();
     for chunk in all_chunks {
         let score = cosine_similarity(&query_vector, &chunk.embedding);
         if score < min_similarity {
             continue;
         }
-        let entry = best_per_item.get(chunk.item_key.as_str());
+        let entry = best_per_item.get(&chunk.item_key);
         if entry.is_none_or(|existing| score > existing.similarity) {
-            best_per_item.insert(chunk.item_key.as_str(), SemanticSearchHit {
+            best_per_item.insert(&chunk.item_key, SemanticSearchHit {
                 item_key: chunk.item_key.clone(),
                 title: chunk.title.clone(),
                 similarity: score,
@@ -107,7 +109,7 @@ mod tests {
         embedding: Vec<f32>,
     ) -> StoredChunk {
         StoredChunk {
-            item_key: item_key.to_owned(),
+            item_key: ItemKey::from(item_key),
             title: Some(format!("Title {item_key}")),
             chunk_index,
             chunk_text: format!("chunk {chunk_index} of {item_key}"),

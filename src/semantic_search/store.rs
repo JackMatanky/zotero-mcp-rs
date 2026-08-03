@@ -17,7 +17,7 @@ use crate::{
 /// One stored chunk, decoded, ready for a cosine scan.
 #[derive(Clone, Debug)]
 pub(crate) struct StoredChunk {
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
     pub(crate) title: Option<String>,
     pub(crate) chunk_index: i64,
     pub(crate) chunk_text: String,
@@ -235,7 +235,7 @@ impl SemanticIndex {
         for row in rows {
             let embedding_bytes: Vec<u8> = row.try_get("embedding")?;
             chunks.push(StoredChunk {
-                item_key: row.try_get("item_key")?,
+                item_key: ItemKey::from(row.try_get::<String, _>("item_key")?),
                 title: row.try_get("title")?,
                 chunk_index: row.try_get("chunk_index")?,
                 chunk_text: row.try_get("chunk_text")?,
