@@ -11,6 +11,10 @@ categories = ["command-line-utilities"]
 
 [dependencies]
 async-trait = "0.1"
+fastembed = { version = "5.17.4", default-features = false, features = [
+  "hf-hub-native-tls",
+  "ort-load-dynamic",
+] }
 lopdf = { version = "0.34", default-features = false, features = ["nom_parser"] }
 pdf-extract = "0.7"
 reqwest = { version = "0.12", features = ["json"] }

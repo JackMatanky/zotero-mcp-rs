@@ -14,6 +14,8 @@
 //! - `connector_tools`: High-level `search` and `fetch` compatibility tools.
 //! - `pdf`: PDF path resolution and security policy enforcement.
 //! - `resources`: Resource and prompt definitions (`zotero://...`).
+//! - `semantic_search`: Local embedding index/search
+//!   (`zotero_semantic_search`).
 //! - `server`: Main server struct definition and tool routing logic.
 //! - `zotero`: Core Zotero Local API tools (read, write, collections, tags,
 //!   annotations).
@@ -24,6 +26,7 @@ mod catalog;
 mod connector_tools;
 mod pdf;
 mod resources;
+mod semantic_search;
 mod server;
 mod zotero;
 

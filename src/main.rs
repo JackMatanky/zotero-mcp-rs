@@ -12,6 +12,7 @@ mod errors;
 mod mcp;
 mod pdf;
 mod security;
+mod semantic_search;
 mod state;
 mod zotero;
 

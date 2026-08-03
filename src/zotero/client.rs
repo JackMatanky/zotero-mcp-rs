@@ -37,6 +37,11 @@ impl<'a> ZoteroClient<'a> {
         }
     }
 
+    /// Returns the configured base URL for the Zotero Local HTTP API.
+    pub(crate) fn base_url(&self) -> &str {
+        &self.state.zotero_api_url
+    }
+
     /// Probes the Zotero Local API for availability.
     ///
     /// Issues a lightweight `items?limit=1` request. Connection and HTTP status
@@ -137,7 +142,7 @@ impl<'a> ZoteroClient<'a> {
     /// [`LocalApi`]: ZoteroMcpError::LocalApi
     /// [`Network`]: ZoteroMcpError::Network
     /// [`Json`]: ZoteroMcpError::Json
-    pub(super) async fn get_all_json<T: DeserializeOwned>(
+    pub(crate) async fn get_all_json<T: DeserializeOwned>(
         &self,
         url: &str,
         page_size: usize,

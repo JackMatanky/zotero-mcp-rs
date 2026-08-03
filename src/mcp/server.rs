@@ -24,7 +24,8 @@ const SERVER_INSTRUCTIONS: &str =
      gates, and examples. Use zotero://... resources for read-only object \
      retrieval, including zotero://items/{item_key}. search and fetch are \
      connector compatibility tools. Write tools require \
-     ZOTERO_WRITE_ENABLED=1. SQLite tools require ZOTERO_SQLITE_ACCESS=1.";
+     ZOTERO_WRITE_ENABLED=1. SQLite tools require ZOTERO_SQLITE_ACCESS=1. \
+     Semantic search tools require ZOTERO_SEMANTIC_SEARCH=1.";
 
 /// Holds shared [`AppState`] and implements [`ServerHandler`].
 pub(crate) struct ZoteroMcpServer {
@@ -57,6 +58,7 @@ impl ZoteroMcpServer {
         router.merge(Self::status_router());
         router.merge(Self::search_router());
         router.merge(Self::sqlite_router());
+        router.merge(Self::semantic_search_router());
         router.merge(Self::pdf_router());
         router.merge(Self::notes_router());
         router.merge(Self::collections_router());

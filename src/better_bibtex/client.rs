@@ -306,10 +306,14 @@ mod tests {
         use std::{
             io::{Read, Write},
             net::TcpListener,
-            sync::mpsc::{self, Receiver},
+            sync::{
+                Arc,
+                mpsc::{self, Receiver},
+            },
         };
 
         use reqwest::Client;
+        use tokio::sync::OnceCell;
 
         use crate::{security::SecurityConfig, state::AppState};
 
@@ -331,6 +335,10 @@ mod tests {
                 sqlite_access: false,
                 zotero_db_path: None,
                 local_zotero_db: AppState::local_zotero_db_cache(),
+                semantic_search_enabled: false,
+                semantic_db_path: None,
+                semantic_index: Arc::new(OnceCell::new()),
+                embedding_provider: Arc::new(OnceCell::new()),
                 security: SecurityConfig::default(),
             }
         }

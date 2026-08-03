@@ -23,10 +23,26 @@ gitleaks = "latest"
 "cargo:https://github.com/snowmead/rust-docs-mcp" = { version = "branch:main", crate = "rust-docs-mcp" }
 "cargo:adrs" = { version = "latest", install_env = { RUSTUP_TOOLCHAIN = "nightly" } }
 
+[tools."http:onnxruntime"]
+version = "1.28.0"
+bin = "lib/libonnxruntime.dylib"
+
+[tools."http:onnxruntime".platforms.macos-arm64]
+url = "https://github.com/microsoft/onnxruntime/releases/download/v{{version}}/onnxruntime-osx-arm64-{{version}}.tgz"
+
+[tools."http:onnxruntime".platforms.linux-x64]
+url = "https://github.com/microsoft/onnxruntime/releases/download/v{{version}}/onnxruntime-linux-x64-{{version}}.tgz"
+bin = "lib/libonnxruntime.so"
+
+[tools."http:onnxruntime".platforms.linux-arm64]
+url = "https://github.com/microsoft/onnxruntime/releases/download/v{{version}}/onnxruntime-linux-aarch64-{{version}}.tgz"
+bin = "lib/libonnxruntime.so"
+
 [env]
 HK_MISE = "1"
 RUST_BACKTRACE = "1"
 ADR_DIRECTORY = "docs/adr/"
+ORT_DYLIB_PATH = "{{env.HOME}}/.local/share/mise/installs/http-onnxruntime/1.28.0/lib/libonnxruntime.dylib"
 
 [tasks.check]
 description = "Fast compilation check"

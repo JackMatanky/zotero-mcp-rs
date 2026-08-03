@@ -19,6 +19,10 @@ use tokio::sync::OnceCell;
 use crate::{
     errors::ZoteroMcpError,
     security::SecurityConfig,
+    semantic_search::{
+        EmbeddingProvider, FastEmbedProvider, SemanticIndex, resolve_db_path,
+        resolve_model_cache_dir,
+    },
     zotero::{LocalZoteroDb, find_zotero_db},
 };
 
@@ -39,6 +43,11 @@ pub(crate) struct CachedLocalZoteroDb {
 }
 
 #[derive(Clone, Debug)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "three independent env-var permission gates \
+              (write/sqlite/semantic), not combinatorial UI state"
+)]
 pub(crate) struct AppState {
     /// Shared [`Client`] connection pool.
     pub(crate) client: Client,
@@ -67,6 +76,15 @@ pub(crate) struct AppState {
     /// Cached read-only local database handle shared across `SQLite` tool
     /// calls.
     pub(crate) local_zotero_db: Arc<OnceCell<CachedLocalZoteroDb>>,
+    /// Whether local semantic-search indexing/querying is allowed. Defaults
+    /// to false; enable by setting `ZOTERO_SEMANTIC_SEARCH`.
+    pub(crate) semantic_search_enabled: bool,
+    /// Optional direct path to the semantic search `SQLite` index file.
+    pub(crate) semantic_db_path: Option<PathBuf>,
+    /// Cached semantic index handle, opened lazily on first use.
+    pub(crate) semantic_index: Arc<OnceCell<SemanticIndex>>,
+    /// Cached embedding provider, loaded lazily on first use.
+    pub(crate) embedding_provider: Arc<OnceCell<Arc<dyn EmbeddingProvider>>>,
 }
 
 impl AppState {
@@ -81,6 +99,10 @@ impl AppState {
     /// case-insensitive) likewise gates direct reads of the local Zotero
     /// `SQLite` database, defaulting to disabled. `ZOTERO_DB_PATH` optionally
     /// points directly to `zotero.sqlite` when `SQLite` access is enabled.
+    /// `ZOTERO_SEMANTIC_SEARCH` (`"1"` or `"true"`, case-insensitive)
+    /// likewise gates local semantic-search indexing/querying, defaulting to
+    /// disabled. `ZOTERO_SEMANTIC_DB_PATH` optionally points directly to the
+    /// semantic search index `SQLite` file when enabled.
     /// Returns the constructed [`AppState`].
     pub(crate) fn from_env() -> Self {
         let client = Client::builder()
@@ -115,6 +137,11 @@ impl AppState {
             .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
         let zotero_db_path = env::var_os("ZOTERO_DB_PATH").map(PathBuf::from);
 
+        let semantic_search_enabled = env::var("ZOTERO_SEMANTIC_SEARCH")
+            .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+        let semantic_db_path =
+            env::var_os("ZOTERO_SEMANTIC_DB_PATH").map(PathBuf::from);
+
         Self {
             client,
             zotero_api_url,
@@ -128,6 +155,10 @@ impl AppState {
             sqlite_access,
             zotero_db_path,
             local_zotero_db: Self::local_zotero_db_cache(),
+            semantic_search_enabled,
+            semantic_db_path,
+            semantic_index: Arc::new(OnceCell::new()),
+            embedding_provider: Arc::new(OnceCell::new()),
         }
     }
 
@@ -218,6 +249,82 @@ impl AppState {
                     .to_owned(),
             ))
         }
+    }
+
+    /// Checks whether local semantic search (indexing and querying) is
+    /// permitted.
+    ///
+    /// # Errors
+    ///
+    /// - [`PermissionDenied`] if `semantic_search_enabled` is `false` (default)
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    pub(crate) fn check_semantic_search_enabled(
+        &self,
+    ) -> Result<(), ZoteroMcpError> {
+        if self.semantic_search_enabled {
+            Ok(())
+        } else {
+            Err(ZoteroMcpError::PermissionDenied(
+                "Semantic search is disabled: set ZOTERO_SEMANTIC_SEARCH=1 to \
+                 enable local embedding indexing and search"
+                    .to_owned(),
+            ))
+        }
+    }
+
+    /// Returns the cached semantic search index, opening (and creating, if
+    /// missing) it on first use.
+    ///
+    /// # Errors
+    ///
+    /// - [`PermissionDenied`] if semantic search is disabled
+    /// - [`LocalDb`] / [`Io`] / [`Sqlite`] if the index cannot be opened
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`LocalDb`]: ZoteroMcpError::LocalDb
+    /// [`Io`]: ZoteroMcpError::Io
+    /// [`Sqlite`]: ZoteroMcpError::Sqlite
+    pub(crate) async fn semantic_index(
+        &self,
+    ) -> Result<&SemanticIndex, ZoteroMcpError> {
+        self.check_semantic_search_enabled()?;
+        let db_path = resolve_db_path(self.semantic_db_path.as_deref())?;
+        self.semantic_index
+            .get_or_try_init(|| SemanticIndex::open(&db_path))
+            .await
+    }
+
+    /// Returns the cached embedding provider, loading the local ONNX model
+    /// on first use.
+    ///
+    /// # Errors
+    ///
+    /// - [`PermissionDenied`] if semantic search is disabled
+    /// - [`LocalDb`] if the data directory cannot be resolved
+    /// - [`Embedding`] if the model fails to load
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`LocalDb`]: ZoteroMcpError::LocalDb
+    /// [`Embedding`]: ZoteroMcpError::Embedding
+    pub(crate) async fn embedding_provider(
+        &self,
+    ) -> Result<Arc<dyn EmbeddingProvider>, ZoteroMcpError> {
+        self.check_semantic_search_enabled()?;
+        let db_path = resolve_db_path(self.semantic_db_path.as_deref())?;
+        let cache_dir = resolve_model_cache_dir(&db_path);
+        let provider = self
+            .embedding_provider
+            .get_or_try_init(|| async {
+                tokio::task::spawn_blocking(move || {
+                    FastEmbedProvider::load(&cache_dir)
+                        .map(|p| -> Arc<dyn EmbeddingProvider> { Arc::new(p) })
+                })
+                .await
+                .map_err(|e| ZoteroMcpError::Embedding(e.to_string()))?
+            })
+            .await?;
+        Ok(Arc::clone(provider))
     }
 
     /// Checks if direct file path access is enabled by security policy.
@@ -422,9 +529,11 @@ mod tests {
         use std::{
             io::{Read, Write},
             net::TcpListener,
+            sync::Arc,
         };
 
         use reqwest::Client;
+        use tokio::sync::OnceCell;
 
         use super::AppState;
         use crate::security::SecurityConfig;
@@ -444,6 +553,10 @@ mod tests {
                 sqlite_access: false,
                 zotero_db_path: None,
                 local_zotero_db: AppState::local_zotero_db_cache(),
+                semantic_search_enabled: false,
+                semantic_db_path: None,
+                semantic_index: Arc::new(OnceCell::new()),
+                embedding_provider: Arc::new(OnceCell::new()),
                 security: SecurityConfig::default(),
             }
         }

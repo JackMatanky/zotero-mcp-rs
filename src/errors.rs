@@ -36,6 +36,11 @@ pub(crate) enum ZoteroMcpError {
     #[error("PDF extraction error: {0}")]
     PdfExtract(String),
 
+    /// Local embedding generation failed (model load, inference, or a
+    /// poisoned model mutex).
+    #[error("Embedding error: {0}")]
+    Embedding(String),
+
     /// Input/output failure from [`std::io`].
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

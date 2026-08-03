@@ -37,6 +37,7 @@ pub(crate) enum PrimitiveDomain {
     Search,
     Notes,
     Sqlite,
+    Semantic,
     Prompts,
 }
 
@@ -46,6 +47,8 @@ pub(crate) enum EnvGate {
     WriteEnabled,
     #[serde(rename = "ZOTERO_SQLITE_ACCESS")]
     SqliteAccess,
+    #[serde(rename = "ZOTERO_SEMANTIC_SEARCH")]
+    SemanticSearchEnabled,
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -160,6 +163,17 @@ static PRIMITIVES: &[PrimitiveInfo] = &[
                       actions fulltext notes_annotations zotero_sqlite_access",
     },
     PrimitiveInfo {
+        name: "zotero_semantic_search",
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Semantic,
+        requires: &[EnvGate::SemanticSearchEnabled],
+        summary: "Grouped semantic search actions: search, index, status",
+        example: Some(r#"{"action":"search","query":"attention mechanisms"}"#),
+        search_text: "zotero_semantic_search semantic vector embedding \
+                      grouped actions search index status \
+                      zotero_semantic_search_enabled",
+    },
+    PrimitiveInfo {
         name: "zotero_literature_review",
         kind: PrimitiveKind::Prompt,
         domain: PrimitiveDomain::Prompts,
@@ -192,6 +206,9 @@ pub(crate) fn is_tool_visible(state: &AppState, name: &str) -> bool {
     }
     if name == "zotero_sqlite_search" {
         return state.sqlite_access;
+    }
+    if name == "zotero_semantic_search" {
+        return state.semantic_search_enabled;
     }
     matches!(
         name,
