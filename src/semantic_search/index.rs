@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Result of the `index` action of `zotero_semantic_search`.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub(crate) struct IndexReport {
     pub(crate) items_scanned: usize,
     pub(crate) items_indexed: usize,
@@ -50,14 +50,7 @@ pub(crate) async fn index_library(
 ) -> Result<IndexReport, ZoteroMcpError> {
     let all_items: Vec<ZoteroItem> = client.get_all_items().await?;
 
-    let mut report = IndexReport {
-        items_scanned: 0,
-        items_indexed: 0,
-        items_skipped_unchanged: 0,
-        items_skipped_empty: 0,
-        items_deleted: 0,
-        chunks_written: 0,
-    };
+    let mut report = IndexReport::default();
     let mut current_keys = std::collections::HashSet::new();
 
     for item in &all_items {
@@ -359,5 +352,16 @@ mod tests {
 
         assert_eq!(report.items_skipped_empty, 1);
         assert_eq!(report.items_indexed, 0);
+    }
+
+    #[test]
+    fn index_report_defaults_to_all_zeroes() {
+        let report = IndexReport::default();
+        assert_eq!(report.items_scanned, 0);
+        assert_eq!(report.items_indexed, 0);
+        assert_eq!(report.items_skipped_unchanged, 0);
+        assert_eq!(report.items_skipped_empty, 0);
+        assert_eq!(report.items_deleted, 0);
+        assert_eq!(report.chunks_written, 0);
     }
 }
