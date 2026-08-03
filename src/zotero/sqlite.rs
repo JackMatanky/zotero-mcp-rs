@@ -17,12 +17,14 @@
 use std::{
     env,
     path::{Path, PathBuf},
-    str::FromStr,
     time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
-use sqlx::{AssertSqlSafe, Row, SqlitePool, sqlite::SqliteConnectOptions};
+use sqlx::{
+    AssertSqlSafe, Row, SqlitePool,
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+};
 
 use crate::{errors::ZoteroMcpError, zotero::ItemKey};
 
@@ -94,14 +96,15 @@ impl LocalZoteroDb {
     /// - [`ZoteroMcpError::Sqlite`] if `path` cannot be opened read-only
     /// - [`ZoteroMcpError::LocalDb`] if the database is not a Zotero database
     pub(crate) async fn open(path: &Path) -> Result<Self, ZoteroMcpError> {
-        let opts = SqliteConnectOptions::from_str(&format!(
-            "sqlite://{}",
-            path.display()
-        ))?
-        .read_only(true)
-        .immutable(true)
-        .busy_timeout(Duration::from_secs(2));
-        let pool = SqlitePool::connect_with(opts).await?;
+        let opts = SqliteConnectOptions::new()
+            .filename(path)
+            .read_only(true)
+            .immutable(true)
+            .busy_timeout(Duration::from_secs(2));
+        let pool = SqlitePoolOptions::new()
+            .max_connections(4)
+            .connect_with(opts)
+            .await?;
         let db = Self {
             pool,
         };
@@ -512,7 +515,7 @@ fn strip_html(html: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{path::Path, str::FromStr};
 
     use pretty_assertions::assert_eq;
 
@@ -854,5 +857,33 @@ mod tests {
         let stripped = strip_html("<p>Hello <strong>visible</strong></p>");
 
         assert_eq!(stripped, "Hello visible");
+    }
+
+    #[tokio::test]
+    async fn opens_database_at_paths_with_url_special_characters() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("zotero #1?.sqlite");
+        let opts = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true);
+        let pool = SqlitePool::connect_with(opts).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, \
+             itemTypeID INTEGER)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO items (itemID, key, itemTypeID) VALUES (1, 'K00001', \
+             1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+
+        let db = LocalZoteroDb::open(&db_path).await.unwrap();
+        assert!(db.probe_schema().await.is_ok());
     }
 }
