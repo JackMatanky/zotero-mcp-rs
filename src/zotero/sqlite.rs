@@ -149,8 +149,7 @@ impl LocalZoteroDb {
         limit: usize,
     ) -> Result<Vec<FulltextHit>, ZoteroMcpError> {
         let query_lc = query.to_lowercase();
-        let query_tokens: Vec<String> =
-            query_lc.split_whitespace().map(str::to_owned).collect();
+        let query_tokens = tokenize_query(query);
         let result_cap =
             limit.saturating_mul(5).max(limit).min(FULLTEXT_SCAN_CAP);
         let mut token_placeholders = "?,".repeat(query_tokens.len());
@@ -496,6 +495,19 @@ fn read_string_pref(prefs: &Path, key: &str) -> Option<String> {
         }
         Some(value)
     })
+}
+
+/// Splits a search query into lowercased, punctuation-stripped, de-duplicated
+/// tokens for matching against Zotero's stored fulltext words.
+fn tokenize_query(query: &str) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    query
+        .to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .filter(|t| seen.insert(t.to_owned()))
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Strips HTML tags from Zotero note HTML.
@@ -857,6 +869,25 @@ mod tests {
         let stripped = strip_html("<p>Hello <strong>visible</strong></p>");
 
         assert_eq!(stripped, "Hello visible");
+    }
+
+    #[test]
+    fn tokenize_query_splits_on_punctuation_lowercases_and_dedupes() {
+        let tokens = tokenize_query("Borrow, checker. CHECKER");
+        assert_eq!(tokens, vec!["borrow", "checker"]);
+    }
+
+    #[tokio::test]
+    async fn fulltext_search_matches_despite_punctuation_in_query() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("zotero.sqlite");
+        let seeded = seed_db(&db_path).await;
+        assert!(seeded.is_ok(), "seed database should be created: {seeded:?}");
+        let db = LocalZoteroDb::open(&db_path).await.unwrap();
+
+        let hits = db.search_fulltext("borrow checker,", 10).await.unwrap();
+        assert_eq!(hits.len(), 1);
+        assert!(hits.first().unwrap().snippet.contains("borrow checker"));
     }
 
     #[tokio::test]
