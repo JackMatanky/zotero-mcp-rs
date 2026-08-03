@@ -29,5 +29,6 @@ __MACOSX/
 *digest.txt
 docs/refs/digests/
 
-# git worktrees
-.worktrees/
+# -------------------------- Claude --------------------------- #
+.claude/
+CLAUDE.md
