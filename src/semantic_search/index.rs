@@ -15,10 +15,6 @@ use crate::{
     zotero::{ItemType, ZoteroClient, ZoteroItem},
 };
 
-/// Page size for the whole-library item scan (matches the `page_size` used
-/// elsewhere for `get_all_json`-style whole-library reads).
-const SCAN_PAGE_SIZE: usize = 100;
-
 /// Result of the `index` action of `zotero_semantic_search`.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct IndexReport {
@@ -52,9 +48,7 @@ pub(crate) async fn index_library(
     provider: &Arc<dyn EmbeddingProvider>,
     force: bool,
 ) -> Result<IndexReport, ZoteroMcpError> {
-    let url = format!("{}/users/0/items", client.base_url());
-    let all_items: Vec<ZoteroItem> =
-        client.get_all_json(&url, SCAN_PAGE_SIZE).await?;
+    let all_items: Vec<ZoteroItem> = client.get_all_items().await?;
 
     let mut report = IndexReport {
         items_scanned: 0,

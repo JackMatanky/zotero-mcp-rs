@@ -37,11 +37,6 @@ impl<'a> ZoteroClient<'a> {
         }
     }
 
-    /// Returns the configured base URL for the Zotero Local HTTP API.
-    pub(crate) fn base_url(&self) -> &str {
-        &self.state.zotero_api_url
-    }
-
     /// Probes the Zotero Local API for availability.
     ///
     /// Issues a lightweight `items?limit=1` request. Connection and HTTP status

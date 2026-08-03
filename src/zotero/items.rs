@@ -56,7 +56,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Network`] if the request fails at the transport
     ///   level
     /// - [`ZoteroMcpError::Json`] if a response cannot be decoded
-    pub(super) async fn get_all_items(
+    pub(crate) async fn get_all_items(
         &self,
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
         let url = format!(
