@@ -91,6 +91,11 @@ pub(crate) struct NoteAnnotationHit {
 impl LocalZoteroDb {
     /// Opens `path` with `SQLite` `immutable=1` and read-only semantics.
     ///
+    /// `immutable=1` skips file locking but also ignores the `-wal`/`-shm`
+    /// files, so reads can lag behind a running Zotero's WAL writes until a
+    /// checkpoint lands in the main file. This mirrors the zotero-digest
+    /// approach to avoid `SQLITE_BUSY` against the live database.
+    ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::Sqlite`] if `path` cannot be opened read-only
@@ -150,8 +155,7 @@ impl LocalZoteroDb {
     ) -> Result<Vec<FulltextHit>, ZoteroMcpError> {
         let query_lc = query.to_lowercase();
         let query_tokens = tokenize_query(query);
-        let result_cap =
-            limit.saturating_mul(5).max(limit).min(FULLTEXT_SCAN_CAP);
+        let result_cap = limit.saturating_mul(5).min(FULLTEXT_SCAN_CAP);
         let mut token_placeholders = "?,".repeat(query_tokens.len());
         token_placeholders.pop();
         let word_hits_join = if query_tokens.is_empty() {
