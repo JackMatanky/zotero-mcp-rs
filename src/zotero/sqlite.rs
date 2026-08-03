@@ -22,7 +22,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use sqlx::{Row, SqlitePool, sqlite::SqliteConnectOptions};
+use sqlx::{AssertSqlSafe, Row, SqlitePool, sqlite::SqliteConnectOptions};
 
 use crate::{errors::ZoteroMcpError, zotero::ItemKey};
 
@@ -251,7 +251,7 @@ impl LocalZoteroDb {
             LIMIT ?
             "
         );
-        let mut query_builder = sqlx::query(&sql);
+        let mut query_builder = sqlx::query(AssertSqlSafe(sql.as_str()));
         for token in &query_tokens {
             query_builder = query_builder.bind(token);
         }

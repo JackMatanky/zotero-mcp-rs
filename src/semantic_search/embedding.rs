@@ -127,22 +127,14 @@ impl TryFrom<&[u8]> for Embedding {
     ///
     /// - [`ZoteroMcpError::Embedding`] if `bytes.len()` is not a multiple of 4
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let mut chunks = bytes.chunks_exact(4);
-        let mut values = Vec::with_capacity(chunks.len());
-        for chunk in &mut chunks {
-            let array: [u8; 4] = chunk.try_into().map_err(|_| {
-                ZoteroMcpError::Embedding(
-                    "corrupt embedding blob: chunk is not 4 bytes".to_owned(),
-                )
-            })?;
-            values.push(f32::from_le_bytes(array));
-        }
-        if !chunks.remainder().is_empty() {
+        let (chunks, remainder) = bytes.as_chunks::<4>();
+        if !remainder.is_empty() {
             return Err(ZoteroMcpError::Embedding(
                 "corrupt embedding blob: length is not a multiple of 4"
                     .to_owned(),
             ));
         }
+        let values = chunks.iter().map(|c| f32::from_le_bytes(*c)).collect();
         Ok(Self(values))
     }
 }
