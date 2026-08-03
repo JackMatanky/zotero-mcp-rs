@@ -68,6 +68,10 @@ alias = "t"
 description = "Run all tests including doc-tests"
 run = "cargo test --all-features"
 
+[tasks."test-ort-smoke"]
+description = "Real ONNX inference smoke test: downloads the BGE-small model (~130MB from Hugging Face) on first run and runs genuine embedding inference. Not part of default test runs (test/test-all skip #[ignore]'d tests)."
+run = "cargo test --test ort_smoke -- --ignored --nocapture"
+
 [tasks.lint]
 description = "Run all hk linters"
 run = "hk check"
@@ -80,9 +84,13 @@ run = "hk fix"
 description = "Format all Rust code (nightly)"
 run = "cargo fmt --all"
 
+[tasks."fmt-check"]
+description = "Check formatting without modifying files (CI-safe; use this instead of `fmt` when you only want a pass/fail signal)"
+run = "cargo fmt --all -- --check"
+
 [tasks.clippy]
-description = "Run clippy with deny warnings"
-run = "cargo clippy --workspace -- -D warnings"
+description = "Run clippy across all targets & features with warnings denied - this is the project's actual lint bar; `--workspace` alone misses tests/ (e.g. tests/ort_smoke.rs)"
+run = "cargo clippy --workspace --all-targets --all-features -- -D warnings"
 
 [tasks.doc]
 description = "Build documentation"
@@ -92,9 +100,13 @@ run = "cargo doc --no-deps"
 description = "Run cargo deny audit"
 run = "cargo deny check"
 
+[tasks.verify]
+description = "Full pre-commit verification: fmt-check + clippy (all targets/features, deny warnings) + full test suite incl. doctests. Run this before yielding non-trivial changes instead of chaining raw cargo commands."
+depends = ["fmt-check", "clippy", "test-all"]
+
 [tasks.ci]
-description = "Full CI pipeline"
-depends = ["check", "clippy", "test", "audit"]
+description = "Full CI pipeline (verify + supply-chain audit)"
+depends = ["verify", "audit"]
 
 [tasks.coverage]
 description = "Code coverage with tarpaulin"
