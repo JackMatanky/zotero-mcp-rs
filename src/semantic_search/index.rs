@@ -9,7 +9,6 @@ use crate::{
     semantic_search::{
         EmbeddingProvider, MAX_CHUNK_CHARS, MAX_INDEXABLE_CHARS,
         chunking::chunk_text,
-        embedding::normalize,
         store::{NewChunk, SemanticIndex},
     },
     zotero::{ItemType, ZoteroClient, ZoteroItem},
@@ -134,7 +133,7 @@ async fn index_one_item(
     }
     let mut vectors = provider.embed(&pieces)?;
     for vector in &mut vectors {
-        normalize(vector);
+        vector.normalize();
     }
     let new_chunks: Vec<NewChunk> = pieces
         .into_iter()
@@ -200,6 +199,7 @@ mod tests {
 
     use super::*;
     use crate::{
+        semantic_search::Embedding,
         state::AppState,
         zotero::test_http::{MockServer, http_response},
     };
@@ -215,8 +215,11 @@ mod tests {
         fn embed(
             &self,
             texts: &[String],
-        ) -> Result<Vec<Vec<f32>>, ZoteroMcpError> {
-            Ok(texts.iter().map(|_| vec![1.0, 0.0, 0.0, 0.0]).collect())
+        ) -> Result<Vec<Embedding>, ZoteroMcpError> {
+            Ok(texts
+                .iter()
+                .map(|_| Embedding::from(vec![1.0, 0.0, 0.0, 0.0]))
+                .collect())
         }
     }
 

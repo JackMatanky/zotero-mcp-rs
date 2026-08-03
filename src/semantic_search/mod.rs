@@ -12,7 +12,7 @@ mod store;
 
 use std::{env, path::PathBuf};
 
-pub(crate) use embedding::FastEmbedProvider;
+pub(crate) use embedding::{Embedding, FastEmbedProvider};
 pub(crate) use index::index_library;
 pub(crate) use search::search_library;
 #[cfg(test)]
@@ -47,7 +47,8 @@ pub(crate) trait EmbeddingProvider:
     /// # Errors
     ///
     /// Returns [`ZoteroMcpError::Embedding`] if inference fails.
-    fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, ZoteroMcpError>;
+    fn embed(&self, texts: &[String])
+    -> Result<Vec<Embedding>, ZoteroMcpError>;
 }
 
 /// Resolves the `SQLite` index file path: `override_path` if given, else

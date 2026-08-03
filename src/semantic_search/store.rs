@@ -9,9 +9,7 @@ use sqlx::{
 };
 
 use crate::{
-    errors::ZoteroMcpError,
-    semantic_search::embedding::{decode_embedding, encode_embedding},
-    zotero::ItemKey,
+    errors::ZoteroMcpError, semantic_search::Embedding, zotero::ItemKey,
 };
 
 /// One stored chunk, decoded, ready for a cosine scan.
@@ -21,14 +19,14 @@ pub(crate) struct StoredChunk {
     pub(crate) title: Option<String>,
     pub(crate) chunk_index: i64,
     pub(crate) chunk_text: String,
-    pub(crate) embedding: Vec<f32>,
+    pub(crate) embedding: Embedding,
 }
 
 /// A chunk to insert, with its already-normalized embedding.
 pub(crate) struct NewChunk {
     pub(crate) chunk_index: i64,
     pub(crate) chunk_text: String,
-    pub(crate) embedding: Vec<f32>,
+    pub(crate) embedding: Embedding,
 }
 
 /// Aggregate stats for the `status` action of `zotero_semantic_search`.
@@ -175,7 +173,7 @@ impl SemanticIndex {
             .bind(item_pk)
             .bind(chunk.chunk_index)
             .bind(&chunk.chunk_text)
-            .bind(encode_embedding(&chunk.embedding))
+            .bind(chunk.embedding.encode())
             .execute(&mut *tx)
             .await?;
         }
@@ -239,7 +237,7 @@ impl SemanticIndex {
                 title: row.try_get("title")?,
                 chunk_index: row.try_get("chunk_index")?,
                 chunk_text: row.try_get("chunk_text")?,
-                embedding: decode_embedding(&embedding_bytes)?,
+                embedding: Embedding::try_from(embedding_bytes.as_slice())?,
             });
         }
         Ok(chunks)
@@ -279,7 +277,7 @@ mod tests {
         NewChunk {
             chunk_index: idx,
             chunk_text: text.to_owned(),
-            embedding: vec![value, value, value],
+            embedding: Embedding::from(vec![value, value, value]),
         }
     }
 
@@ -306,10 +304,10 @@ mod tests {
         assert_eq!(first.item_key, "ITEM1");
         assert_eq!(first.title, Some("Title 1".to_owned()));
         assert_eq!(first.chunk_text, "first chunk");
-        assert_eq!(first.embedding, vec![0.5, 0.5, 0.5]);
+        assert_eq!(first.embedding, Embedding::from(vec![0.5, 0.5, 0.5]));
         let second = loaded.get(1).unwrap();
         assert_eq!(second.chunk_text, "second chunk");
-        assert_eq!(second.embedding, vec![-0.5, -0.5, -0.5]);
+        assert_eq!(second.embedding, Embedding::from(vec![-0.5, -0.5, -0.5]));
     }
 
     #[tokio::test]

@@ -7,11 +7,7 @@ use serde::Serialize;
 
 use crate::{
     errors::ZoteroMcpError,
-    semantic_search::{
-        EmbeddingProvider,
-        embedding::{cosine_similarity, normalize},
-        store::StoredChunk,
-    },
+    semantic_search::{EmbeddingProvider, store::StoredChunk},
     zotero::ItemKey,
 };
 
@@ -42,7 +38,7 @@ pub(crate) async fn search_library(
 ) -> Result<Vec<SemanticSearchHit>, ZoteroMcpError> {
     let provider = Arc::clone(provider);
     let query_owned = query.to_owned();
-    let mut query_vector = tokio::task::spawn_blocking(move || {
+    let mut query_embedding = tokio::task::spawn_blocking(move || {
         provider.embed(&[query_owned]).and_then(|mut v| {
             v.pop().ok_or_else(|| {
                 ZoteroMcpError::Embedding(
@@ -54,12 +50,12 @@ pub(crate) async fn search_library(
     })
     .await
     .map_err(|e| ZoteroMcpError::Embedding(e.to_string()))??;
-    normalize(&mut query_vector);
+    query_embedding.normalize();
 
     let mut best_per_item: HashMap<&ItemKey, SemanticSearchHit> =
         HashMap::new();
     for chunk in all_chunks {
-        let score = cosine_similarity(&query_vector, &chunk.embedding);
+        let score = query_embedding.dot(&chunk.embedding);
         if score < min_similarity {
             continue;
         }
@@ -86,6 +82,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::semantic_search::Embedding;
 
     /// Deterministic test [`EmbeddingProvider`]: every text embeds to the
     /// fixed vector supplied at construction, so tests fully control scores.
@@ -98,8 +95,11 @@ mod tests {
         fn embed(
             &self,
             texts: &[String],
-        ) -> Result<Vec<Vec<f32>>, ZoteroMcpError> {
-            Ok(texts.iter().map(|_| self.vector.clone()).collect())
+        ) -> Result<Vec<Embedding>, ZoteroMcpError> {
+            Ok(texts
+                .iter()
+                .map(|_| Embedding::from(self.vector.clone()))
+                .collect())
         }
     }
 
@@ -113,7 +113,7 @@ mod tests {
             title: Some(format!("Title {item_key}")),
             chunk_index,
             chunk_text: format!("chunk {chunk_index} of {item_key}"),
-            embedding,
+            embedding: Embedding::from(embedding),
         }
     }
 

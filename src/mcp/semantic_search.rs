@@ -142,7 +142,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        semantic_search::{EmbeddingProvider, SemanticIndex},
+        semantic_search::{Embedding, EmbeddingProvider, SemanticIndex},
         state::AppState,
         zotero::{
             ItemKey,
@@ -161,8 +161,11 @@ mod tests {
         fn embed(
             &self,
             texts: &[String],
-        ) -> Result<Vec<Vec<f32>>, crate::errors::ZoteroMcpError> {
-            Ok(texts.iter().map(|_| self.vector.clone()).collect())
+        ) -> Result<Vec<Embedding>, crate::errors::ZoteroMcpError> {
+            Ok(texts
+                .iter()
+                .map(|_| Embedding::from(self.vector.clone()))
+                .collect())
         }
     }
 
@@ -174,7 +177,7 @@ mod tests {
         crate::semantic_search::NewChunk {
             chunk_index,
             chunk_text: text.to_owned(),
-            embedding: vec![value],
+            embedding: Embedding::from(vec![value]),
         }
     }
 
