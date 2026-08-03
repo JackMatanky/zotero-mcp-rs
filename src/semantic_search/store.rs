@@ -1,7 +1,7 @@
 //! Owns the writable side-car `SQLite` database (`embeddings.sqlite`) storing
 //! chunk text and embedding BLOBs, independent of Zotero's own database.
 
-use std::{path::Path, str::FromStr, time::Duration};
+use std::{path::Path, time::Duration};
 
 use sqlx::{
     Row, SqlitePool,
@@ -56,14 +56,12 @@ impl SemanticIndex {
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        let opts = SqliteConnectOptions::from_str(&format!(
-            "sqlite://{}",
-            db_path.display()
-        ))?
-        .create_if_missing(true)
-        .journal_mode(SqliteJournalMode::Wal)
-        .foreign_keys(true)
-        .busy_timeout(Duration::from_secs(5));
+        let opts = SqliteConnectOptions::new()
+            .filename(db_path)
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal)
+            .foreign_keys(true)
+            .busy_timeout(Duration::from_secs(5));
         let pool = SqlitePool::connect_with(opts).await?;
         let store = Self {
             pool,
@@ -388,5 +386,20 @@ mod tests {
         let stats_after_delete = index.stats().await.unwrap();
         assert_eq!(stats_after_delete.indexed_items, 0);
         assert_eq!(stats_after_delete.indexed_chunks, 0);
+    }
+
+    #[tokio::test]
+    async fn open_handles_paths_with_question_mark() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("my index ?1/embeddings.sqlite");
+        let index = SemanticIndex::open(&db_path).await.unwrap();
+        index
+            .upsert_item(&ItemKey::from("ITEM1"), None, None, &[chunk(
+                0, "a", 1.0,
+            )])
+            .await
+            .unwrap();
+        assert_eq!(index.stats().await.unwrap().indexed_items, 1);
+        assert!(db_path.exists(), "db must be created at the exact path");
     }
 }
