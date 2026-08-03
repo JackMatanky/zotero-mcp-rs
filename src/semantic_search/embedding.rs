@@ -28,12 +28,6 @@ pub(crate) struct FastEmbedProvider {
     model: Mutex<TextEmbedding>,
 }
 
-impl std::fmt::Debug for FastEmbedProvider {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FastEmbedProvider").finish_non_exhaustive()
-    }
-}
-
 impl FastEmbedProvider {
     /// Loads (downloading on first use into `cache_dir` if not already
     /// present) the fixed embedding model.
@@ -50,6 +44,12 @@ impl FastEmbedProvider {
         Ok(Self {
             model: Mutex::new(model),
         })
+    }
+}
+
+impl std::fmt::Debug for FastEmbedProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FastEmbedProvider").finish_non_exhaustive()
     }
 }
 
