@@ -120,9 +120,11 @@ impl SemanticIndex {
                 .bind(item_key.as_str())
                 .fetch_optional(&self.pool)
                 .await?;
-        Ok(row.and_then(|r| {
-            r.try_get::<Option<String>, _>("date_modified").ok().flatten()
-        }))
+        let date_modified = match row {
+            Some(r) => r.try_get::<Option<String>, _>("date_modified")?,
+            None => None,
+        };
+        Ok(date_modified)
     }
 
     /// Replaces all chunks for `item_key` with `chunks` in one transaction:
