@@ -1,7 +1,7 @@
 //! Owns the writable side-car `SQLite` database (`embeddings.sqlite`) storing
 //! chunk text and embedding BLOBs, independent of Zotero's own database.
 
-use std::{path::Path, str::FromStr, time::Duration};
+use std::{path::Path, time::Duration};
 
 use sqlx::{
     Row, SqlitePool,
@@ -9,25 +9,24 @@ use sqlx::{
 };
 
 use crate::{
-    errors::ZoteroMcpError,
-    semantic_search::embedding::{decode_embedding, encode_embedding},
+    errors::ZoteroMcpError, semantic_search::Embedding, zotero::ItemKey,
 };
 
 /// One stored chunk, decoded, ready for a cosine scan.
 #[derive(Clone, Debug)]
 pub(crate) struct StoredChunk {
-    pub(crate) item_key: String,
+    pub(crate) item_key: ItemKey,
     pub(crate) title: Option<String>,
     pub(crate) chunk_index: i64,
     pub(crate) chunk_text: String,
-    pub(crate) embedding: Vec<f32>,
+    pub(crate) embedding: Embedding,
 }
 
 /// A chunk to insert, with its already-normalized embedding.
 pub(crate) struct NewChunk {
     pub(crate) chunk_index: i64,
     pub(crate) chunk_text: String,
-    pub(crate) embedding: Vec<f32>,
+    pub(crate) embedding: Embedding,
 }
 
 /// Aggregate stats for the `status` action of `zotero_semantic_search`.
@@ -57,14 +56,12 @@ impl SemanticIndex {
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        let opts = SqliteConnectOptions::from_str(&format!(
-            "sqlite://{}",
-            db_path.display()
-        ))?
-        .create_if_missing(true)
-        .journal_mode(SqliteJournalMode::Wal)
-        .foreign_keys(true)
-        .busy_timeout(Duration::from_secs(5));
+        let opts = SqliteConnectOptions::new()
+            .filename(db_path)
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal)
+            .foreign_keys(true)
+            .busy_timeout(Duration::from_secs(5));
         let pool = SqlitePool::connect_with(opts).await?;
         let store = Self {
             pool,
@@ -113,11 +110,11 @@ impl SemanticIndex {
     /// - [`ZoteroMcpError::Sqlite`] on query failure
     pub(crate) async fn stored_date_modified(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<Option<String>, ZoteroMcpError> {
         let row =
             sqlx::query("SELECT date_modified FROM items WHERE item_key = ?")
-                .bind(item_key)
+                .bind(item_key.as_str())
                 .fetch_optional(&self.pool)
                 .await?;
         Ok(row.and_then(|r| {
@@ -136,7 +133,7 @@ impl SemanticIndex {
     /// - [`ZoteroMcpError::Sqlite`] on query or transaction failure
     pub(crate) async fn upsert_item(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
         title: Option<&str>,
         date_modified: Option<&str>,
         chunks: &[NewChunk],
@@ -150,14 +147,14 @@ impl SemanticIndex {
                 date_modified = excluded.date_modified,
                 indexed_at = excluded.indexed_at",
         )
-        .bind(item_key)
+        .bind(item_key.as_str())
         .bind(title)
         .bind(date_modified)
         .execute(&mut *tx)
         .await?;
         let item_pk: i64 =
             sqlx::query("SELECT item_pk FROM items WHERE item_key = ?")
-                .bind(item_key)
+                .bind(item_key.as_str())
                 .fetch_one(&mut *tx)
                 .await?
                 .try_get("item_pk")?;
@@ -174,7 +171,7 @@ impl SemanticIndex {
             .bind(item_pk)
             .bind(chunk.chunk_index)
             .bind(&chunk.chunk_text)
-            .bind(encode_embedding(&chunk.embedding))
+            .bind(chunk.embedding.encode())
             .execute(&mut *tx)
             .await?;
         }
@@ -189,10 +186,10 @@ impl SemanticIndex {
     /// - [`ZoteroMcpError::Sqlite`] on query failure
     pub(crate) async fn delete_item(
         &self,
-        item_key: &str,
+        item_key: &ItemKey,
     ) -> Result<(), ZoteroMcpError> {
         sqlx::query("DELETE FROM items WHERE item_key = ?")
-            .bind(item_key)
+            .bind(item_key.as_str())
             .execute(&self.pool)
             .await?;
         Ok(())
@@ -205,11 +202,13 @@ impl SemanticIndex {
     /// - [`ZoteroMcpError::Sqlite`] on query failure
     pub(crate) async fn all_item_keys(
         &self,
-    ) -> Result<Vec<String>, ZoteroMcpError> {
+    ) -> Result<Vec<ItemKey>, ZoteroMcpError> {
         let rows = sqlx::query("SELECT item_key FROM items")
             .fetch_all(&self.pool)
             .await?;
-        rows.into_iter().map(|r| Ok(r.try_get("item_key")?)).collect()
+        rows.into_iter()
+            .map(|r| Ok(ItemKey::from(r.try_get::<String, _>("item_key")?)))
+            .collect()
     }
 
     /// Loads every stored chunk, decoded and ready for a cosine scan.
@@ -232,11 +231,11 @@ impl SemanticIndex {
         for row in rows {
             let embedding_bytes: Vec<u8> = row.try_get("embedding")?;
             chunks.push(StoredChunk {
-                item_key: row.try_get("item_key")?,
+                item_key: ItemKey::from(row.try_get::<String, _>("item_key")?),
                 title: row.try_get("title")?,
                 chunk_index: row.try_get("chunk_index")?,
                 chunk_text: row.try_get("chunk_text")?,
-                embedding: decode_embedding(&embedding_bytes)?,
+                embedding: Embedding::try_from(embedding_bytes.as_slice())?,
             });
         }
         Ok(chunks)
@@ -276,7 +275,7 @@ mod tests {
         NewChunk {
             chunk_index: idx,
             chunk_text: text.to_owned(),
-            embedding: vec![value, value, value],
+            embedding: Embedding::from(vec![value, value, value]),
         }
     }
 
@@ -287,10 +286,12 @@ mod tests {
             .await
             .unwrap();
         index
-            .upsert_item("ITEM1", Some("Title 1"), Some("2024-01-01"), &[
-                chunk(0, "first chunk", 0.5),
-                chunk(1, "second chunk", -0.5),
-            ])
+            .upsert_item(
+                &ItemKey::from("ITEM1"),
+                Some("Title 1"),
+                Some("2024-01-01"),
+                &[chunk(0, "first chunk", 0.5), chunk(1, "second chunk", -0.5)],
+            )
             .await
             .unwrap();
 
@@ -301,10 +302,10 @@ mod tests {
         assert_eq!(first.item_key, "ITEM1");
         assert_eq!(first.title, Some("Title 1".to_owned()));
         assert_eq!(first.chunk_text, "first chunk");
-        assert_eq!(first.embedding, vec![0.5, 0.5, 0.5]);
+        assert_eq!(first.embedding, Embedding::from(vec![0.5, 0.5, 0.5]));
         let second = loaded.get(1).unwrap();
         assert_eq!(second.chunk_text, "second chunk");
-        assert_eq!(second.embedding, vec![-0.5, -0.5, -0.5]);
+        assert_eq!(second.embedding, Embedding::from(vec![-0.5, -0.5, -0.5]));
     }
 
     #[tokio::test]
@@ -314,13 +315,13 @@ mod tests {
             .await
             .unwrap();
         index
-            .upsert_item("ITEM1", Some("Title"), Some("v1"), &[chunk(
-                0, "a", 1.0,
-            )])
+            .upsert_item(&ItemKey::from("ITEM1"), Some("Title"), Some("v1"), &[
+                chunk(0, "a", 1.0),
+            ])
             .await
             .unwrap();
         index
-            .upsert_item("ITEM1", Some("Title"), Some("v2"), &[
+            .upsert_item(&ItemKey::from("ITEM1"), Some("Title"), Some("v2"), &[
                 chunk(0, "b", 2.0),
                 chunk(1, "c", 3.0),
             ])
@@ -330,7 +331,7 @@ mod tests {
         let loaded = index.load_all_chunks().await.unwrap();
         assert_eq!(loaded.len(), 2);
         assert_eq!(
-            index.stored_date_modified("ITEM1").await.unwrap(),
+            index.stored_date_modified(&ItemKey::from("ITEM1")).await.unwrap(),
             Some("v2".to_owned())
         );
     }
@@ -342,19 +343,23 @@ mod tests {
             .await
             .unwrap();
         index
-            .upsert_item("ITEM1", None, None, &[chunk(0, "a", 1.0)])
+            .upsert_item(&ItemKey::from("ITEM1"), None, None, &[chunk(
+                0, "a", 1.0,
+            )])
             .await
             .unwrap();
         index
-            .upsert_item("ITEM2", None, None, &[chunk(0, "b", 2.0)])
+            .upsert_item(&ItemKey::from("ITEM2"), None, None, &[chunk(
+                0, "b", 2.0,
+            )])
             .await
             .unwrap();
 
-        index.delete_item("ITEM1").await.unwrap();
+        index.delete_item(&ItemKey::from("ITEM1")).await.unwrap();
 
-        assert_eq!(index.all_item_keys().await.unwrap(), vec![
-            "ITEM2".to_owned()
-        ]);
+        assert_eq!(index.all_item_keys().await.unwrap(), vec![ItemKey::from(
+            "ITEM2"
+        )]);
         let remaining = index.load_all_chunks().await.unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining.first().unwrap().item_key, "ITEM2");
@@ -367,7 +372,7 @@ mod tests {
             .await
             .unwrap();
         index
-            .upsert_item("ITEM1", None, None, &[
+            .upsert_item(&ItemKey::from("ITEM1"), None, None, &[
                 chunk(0, "a", 1.0),
                 chunk(1, "b", 2.0),
             ])
@@ -377,9 +382,24 @@ mod tests {
         assert_eq!(stats.indexed_items, 1);
         assert_eq!(stats.indexed_chunks, 2);
 
-        index.delete_item("ITEM1").await.unwrap();
+        index.delete_item(&ItemKey::from("ITEM1")).await.unwrap();
         let stats_after_delete = index.stats().await.unwrap();
         assert_eq!(stats_after_delete.indexed_items, 0);
         assert_eq!(stats_after_delete.indexed_chunks, 0);
+    }
+
+    #[tokio::test]
+    async fn open_handles_paths_with_question_mark() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("my index ?1/embeddings.sqlite");
+        let index = SemanticIndex::open(&db_path).await.unwrap();
+        index
+            .upsert_item(&ItemKey::from("ITEM1"), None, None, &[chunk(
+                0, "a", 1.0,
+            )])
+            .await
+            .unwrap();
+        assert_eq!(index.stats().await.unwrap().indexed_items, 1);
+        assert!(db_path.exists(), "db must be created at the exact path");
     }
 }

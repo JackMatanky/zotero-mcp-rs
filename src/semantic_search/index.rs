@@ -9,18 +9,21 @@ use crate::{
     semantic_search::{
         EmbeddingProvider, MAX_CHUNK_CHARS, MAX_INDEXABLE_CHARS,
         chunking::chunk_text,
-        embedding::normalize,
         store::{NewChunk, SemanticIndex},
     },
     zotero::{ItemType, ZoteroClient, ZoteroItem},
 };
 
-/// Page size for the whole-library item scan (matches the `page_size` used
-/// elsewhere for `get_all_json`-style whole-library reads).
-const SCAN_PAGE_SIZE: usize = 100;
+/// Per-item outcome of the library scan, used to bump exactly one
+/// `IndexReport` counter per item.
+enum IndexOutcome {
+    Indexed,
+    SkippedUnchanged,
+    SkippedEmpty,
+}
 
 /// Result of the `index` action of `zotero_semantic_search`.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub(crate) struct IndexReport {
     pub(crate) items_scanned: usize,
     pub(crate) items_indexed: usize,
@@ -52,36 +55,35 @@ pub(crate) async fn index_library(
     provider: &Arc<dyn EmbeddingProvider>,
     force: bool,
 ) -> Result<IndexReport, ZoteroMcpError> {
-    let url = format!("{}/users/0/items", client.base_url());
-    let all_items: Vec<ZoteroItem> =
-        client.get_all_json(&url, SCAN_PAGE_SIZE).await?;
+    let all_items: Vec<ZoteroItem> = client.get_all_items().await?;
 
-    let mut report = IndexReport {
-        items_scanned: 0,
-        items_indexed: 0,
-        items_skipped_unchanged: 0,
-        items_skipped_empty: 0,
-        items_deleted: 0,
-        chunks_written: 0,
-    };
+    let mut report = IndexReport::default();
     let mut current_keys = std::collections::HashSet::new();
 
     for item in &all_items {
-        if item.data.deleted || !is_indexable_item(&item.data.item_type) {
+        if item.data.deleted || !item.data.item_type.is_indexable() {
             continue;
         }
         report.items_scanned = report.items_scanned.saturating_add(1);
-        current_keys.insert(item.key.to_string());
+        current_keys.insert(item.key.clone());
 
-        if !force && is_unchanged(index, item).await? {
-            report.items_skipped_unchanged =
-                report.items_skipped_unchanged.saturating_add(1);
-            continue;
-        }
-
-        if !index_one_item(client, index, provider, item, &mut report).await? {
-            report.items_skipped_empty =
-                report.items_skipped_empty.saturating_add(1);
+        let outcome = if !force && is_unchanged(index, item).await? {
+            IndexOutcome::SkippedUnchanged
+        } else {
+            index_one_item(client, index, provider, item, &mut report).await?
+        };
+        match outcome {
+            IndexOutcome::Indexed => {
+                report.items_indexed = report.items_indexed.saturating_add(1);
+            }
+            IndexOutcome::SkippedUnchanged => {
+                report.items_skipped_unchanged =
+                    report.items_skipped_unchanged.saturating_add(1);
+            }
+            IndexOutcome::SkippedEmpty => {
+                report.items_skipped_empty =
+                    report.items_skipped_empty.saturating_add(1);
+            }
         }
     }
 
@@ -101,21 +103,20 @@ async fn is_unchanged(
     index: &SemanticIndex,
     item: &ZoteroItem,
 ) -> Result<bool, ZoteroMcpError> {
-    let stored = index.stored_date_modified(item.key.as_str()).await?;
+    let stored = index.stored_date_modified(&item.key).await?;
     Ok(stored.is_some()
         && stored.as_deref() == item.data.date_modified.as_deref())
 }
 
-/// Assembles, chunks, embeds, and stores one item's text. Returns `true` if
-/// the item was indexed, `false` if it had no indexable text (empty, counted
-/// by the caller as `items_skipped_empty`).
+/// Assembles, chunks, embeds, and stores one item's text, returning the
+/// [`IndexOutcome`] so the caller bumps exactly one counter.
 async fn index_one_item(
     client: &ZoteroClient<'_>,
     index: &SemanticIndex,
     provider: &Arc<dyn EmbeddingProvider>,
     item: &ZoteroItem,
     report: &mut IndexReport,
-) -> Result<bool, ZoteroMcpError> {
+) -> Result<IndexOutcome, ZoteroMcpError> {
     let text = assemble_item_text(client, item).await?;
     let text = if text.chars().count() > MAX_INDEXABLE_CHARS {
         text.chars().take(MAX_INDEXABLE_CHARS).collect()
@@ -123,16 +124,16 @@ async fn index_one_item(
         text
     };
     if text.trim().is_empty() {
-        return Ok(false);
+        return Ok(IndexOutcome::SkippedEmpty);
     }
 
     let pieces = chunk_text(&text, MAX_CHUNK_CHARS);
     if pieces.is_empty() {
-        return Ok(false);
+        return Ok(IndexOutcome::SkippedEmpty);
     }
     let mut vectors = provider.embed(&pieces)?;
     for vector in &mut vectors {
-        normalize(vector);
+        vector.normalize();
     }
     let new_chunks: Vec<NewChunk> = pieces
         .into_iter()
@@ -148,25 +149,13 @@ async fn index_one_item(
         report.chunks_written.saturating_add(new_chunks.len());
     index
         .upsert_item(
-            item.key.as_str(),
+            &item.key,
             item.data.title.as_deref(),
             item.data.date_modified.as_deref(),
             &new_chunks,
         )
         .await?;
-    report.items_indexed = report.items_indexed.saturating_add(1);
-    Ok(true)
-}
-
-/// Returns `true` for item types eligible for indexing: everything except
-/// attachments, notes, and annotations (matches
-/// `crate::zotero::search::is_searchable_item`'s filter, duplicated here
-/// since that function is private to `zotero/search.rs`).
-fn is_indexable_item(item_type: &ItemType) -> bool {
-    !matches!(
-        item_type,
-        ItemType::Attachment | ItemType::Note | ItemType::Annotation
-    )
+    Ok(IndexOutcome::Indexed)
 }
 
 /// Assembles the text to index for `item`: title, then abstract, then the
@@ -188,16 +177,35 @@ async fn assemble_item_text(
             parts.push(abstract_note.clone());
         }
     }
-    let children =
-        client.get_item_children(&item.key).await.unwrap_or_default();
+    let children = match client.get_item_children(&item.key).await {
+        Ok(children) => children,
+        Err(err) => {
+            tracing::warn!(
+                key = item.key.as_str(),
+                error = %err,
+                "failed to fetch item children during semantic indexing; \
+                 indexing without attachment fulltext"
+            );
+            Vec::new()
+        }
+    };
     for child in &children {
         if child.data.item_type != ItemType::Attachment {
             continue;
         }
-        if let Ok(text) = client.get_item_fulltext(&child.key).await {
-            if !text.trim().is_empty() {
+        match client.get_item_fulltext(&child.key).await {
+            Ok(text) if !text.trim().is_empty() => {
                 parts.push(text);
                 break;
+            }
+            Ok(_) => {}
+            Err(err) => {
+                tracing::warn!(
+                    key = child.key.as_str(),
+                    error = %err,
+                    "failed to fetch attachment fulltext during semantic \
+                     indexing"
+                );
             }
         }
     }
@@ -210,6 +218,7 @@ mod tests {
 
     use super::*;
     use crate::{
+        semantic_search::Embedding,
         state::AppState,
         zotero::test_http::{MockServer, http_response},
     };
@@ -225,8 +234,11 @@ mod tests {
         fn embed(
             &self,
             texts: &[String],
-        ) -> Result<Vec<Vec<f32>>, ZoteroMcpError> {
-            Ok(texts.iter().map(|_| vec![1.0, 0.0, 0.0, 0.0]).collect())
+        ) -> Result<Vec<Embedding>, ZoteroMcpError> {
+            Ok(texts
+                .iter()
+                .map(|_| Embedding::from(vec![1.0, 0.0, 0.0, 0.0]))
+                .collect())
         }
     }
 
@@ -376,5 +388,46 @@ mod tests {
 
         assert_eq!(report.items_skipped_empty, 1);
         assert_eq!(report.items_indexed, 0);
+    }
+
+    #[tokio::test]
+    async fn indexes_item_when_children_fetch_fails() {
+        let items = format!(
+            "[{}]",
+            item_json(
+                "ITEM1",
+                "A Paper",
+                "An abstract about testing.",
+                "2024-01-01"
+            )
+        );
+        let server = MockServer::new(vec![
+            http_response("200 OK", &items),
+            http_response("500 Internal Server Error", ""),
+        ]);
+        let state = test_state(server.url().to_owned());
+        let client = ZoteroClient::new(&state);
+        let dir = tempfile::tempdir().unwrap();
+        let index = SemanticIndex::open(&dir.path().join("embeddings.sqlite"))
+            .await
+            .unwrap();
+        let provider: Arc<dyn EmbeddingProvider> = Arc::new(FakeProvider);
+
+        let report =
+            index_library(&client, &index, &provider, false).await.unwrap();
+
+        assert_eq!(report.items_indexed, 1);
+        assert_eq!(report.items_skipped_empty, 0);
+    }
+
+    #[test]
+    fn index_report_defaults_to_all_zeroes() {
+        let report = IndexReport::default();
+        assert_eq!(report.items_scanned, 0);
+        assert_eq!(report.items_indexed, 0);
+        assert_eq!(report.items_skipped_unchanged, 0);
+        assert_eq!(report.items_skipped_empty, 0);
+        assert_eq!(report.items_deleted, 0);
+        assert_eq!(report.chunks_written, 0);
     }
 }
