@@ -15,6 +15,14 @@ use crate::{
     zotero::{ItemType, ZoteroClient, ZoteroItem},
 };
 
+/// Per-item outcome of the library scan, used to bump exactly one
+/// `IndexReport` counter per item.
+enum IndexOutcome {
+    Indexed,
+    SkippedUnchanged,
+    SkippedEmpty,
+}
+
 /// Result of the `index` action of `zotero_semantic_search`.
 #[derive(Clone, Debug, Default, Serialize)]
 pub(crate) struct IndexReport {
@@ -60,15 +68,23 @@ pub(crate) async fn index_library(
         report.items_scanned = report.items_scanned.saturating_add(1);
         current_keys.insert(item.key.to_string());
 
-        if !force && is_unchanged(index, item).await? {
-            report.items_skipped_unchanged =
-                report.items_skipped_unchanged.saturating_add(1);
-            continue;
-        }
-
-        if !index_one_item(client, index, provider, item, &mut report).await? {
-            report.items_skipped_empty =
-                report.items_skipped_empty.saturating_add(1);
+        let outcome = if !force && is_unchanged(index, item).await? {
+            IndexOutcome::SkippedUnchanged
+        } else {
+            index_one_item(client, index, provider, item, &mut report).await?
+        };
+        match outcome {
+            IndexOutcome::Indexed => {
+                report.items_indexed = report.items_indexed.saturating_add(1);
+            }
+            IndexOutcome::SkippedUnchanged => {
+                report.items_skipped_unchanged =
+                    report.items_skipped_unchanged.saturating_add(1);
+            }
+            IndexOutcome::SkippedEmpty => {
+                report.items_skipped_empty =
+                    report.items_skipped_empty.saturating_add(1);
+            }
         }
     }
 
@@ -93,16 +109,15 @@ async fn is_unchanged(
         && stored.as_deref() == item.data.date_modified.as_deref())
 }
 
-/// Assembles, chunks, embeds, and stores one item's text. Returns `true` if
-/// the item was indexed, `false` if it had no indexable text (empty, counted
-/// by the caller as `items_skipped_empty`).
+/// Assembles, chunks, embeds, and stores one item's text, returning the
+/// [`IndexOutcome`] so the caller bumps exactly one counter.
 async fn index_one_item(
     client: &ZoteroClient<'_>,
     index: &SemanticIndex,
     provider: &Arc<dyn EmbeddingProvider>,
     item: &ZoteroItem,
     report: &mut IndexReport,
-) -> Result<bool, ZoteroMcpError> {
+) -> Result<IndexOutcome, ZoteroMcpError> {
     let text = assemble_item_text(client, item).await?;
     let text = if text.chars().count() > MAX_INDEXABLE_CHARS {
         text.chars().take(MAX_INDEXABLE_CHARS).collect()
@@ -110,12 +125,12 @@ async fn index_one_item(
         text
     };
     if text.trim().is_empty() {
-        return Ok(false);
+        return Ok(IndexOutcome::SkippedEmpty);
     }
 
     let pieces = chunk_text(&text, MAX_CHUNK_CHARS);
     if pieces.is_empty() {
-        return Ok(false);
+        return Ok(IndexOutcome::SkippedEmpty);
     }
     let mut vectors = provider.embed(&pieces)?;
     for vector in &mut vectors {
@@ -141,8 +156,7 @@ async fn index_one_item(
             &new_chunks,
         )
         .await?;
-    report.items_indexed = report.items_indexed.saturating_add(1);
-    Ok(true)
+    Ok(IndexOutcome::Indexed)
 }
 
 /// Assembles the text to index for `item`: title, then abstract, then the
