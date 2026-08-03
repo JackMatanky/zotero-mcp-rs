@@ -17,31 +17,31 @@ use crate::{
     zotero::{ItemKey, TrashAction, ZoteroClient},
 };
 
-/// Arguments for `zotero_get_recent`.
+/// Arguments for the `recent` action of `zotero_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetRecentArgs {
     /// Maximum number of items to return (default: 10, max: 100).
     limit: Option<usize>,
 }
-/// Arguments for `zotero_get_item`.
+/// Arguments for the `get` action of `zotero_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemArgs {
     /// Zotero item key ([`ItemKey`]).
     item_key: ItemKey,
 }
-/// Arguments for `zotero_get_unfiled_items`.
+/// Arguments for the `unfiled` action of `zotero_collections`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetUnfiledItemsArgs {
     /// Maximum number of items to return (default: 50).
     limit: Option<usize>,
 }
-/// Arguments for `zotero_get_item_children`.
+/// Arguments for the `children` action of `zotero_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemChildrenArgs {
     /// Zotero item key ([`ItemKey`]).
     item_key: ItemKey,
 }
-/// Arguments for `zotero_update_item`.
+/// Arguments for the `update` action of `zotero_items_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct UpdateItemArgs {
     /// Zotero item key ([`ItemKey`]).
@@ -49,13 +49,13 @@ pub(crate) struct UpdateItemArgs {
     /// JSON object containing fields to update.
     fields: serde_json::Value,
 }
-/// Arguments for `zotero_delete_item`.
+/// Arguments for the `delete` action of `zotero_items_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteItemArgs {
     /// Key of the item ([`ItemKey`]) to permanently delete.
     item_key: ItemKey,
 }
-/// Arguments for `zotero_trash_item` and `zotero_restore_item`.
+/// Arguments for the `trash` and `restore` actions of `zotero_items_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct TrashItemArgs {
     /// Key of the item ([`ItemKey`]) to move to or restore from trash.

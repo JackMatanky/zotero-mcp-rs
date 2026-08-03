@@ -26,7 +26,7 @@ pub(in crate::mcp::zotero) enum MetadataFormat {
     /// Return item metadata as Better `BibTeX`.
     Bibtex,
 }
-/// Arguments for `zotero_get_item_metadata`.
+/// Arguments for the `metadata` action of `zotero_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemMetadataArgs {
     /// Zotero item key ([`ItemKey`]).
@@ -44,7 +44,7 @@ impl GetItemMetadataArgs {
     }
 }
 
-/// Arguments for `zotero_add_by_identifier`.
+/// Arguments for the `add_by_identifier` action of `zotero_items_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AddByIdentifierArgs {
     /// Kind of identifier ([`IdentifierKind`](crate::zotero::IdentifierKind)).

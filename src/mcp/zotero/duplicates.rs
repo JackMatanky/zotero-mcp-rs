@@ -10,7 +10,7 @@ use crate::{
     zotero::{CollectionKey, ZoteroClient},
 };
 
-/// Arguments for `zotero_find_duplicates`.
+/// Arguments for the `duplicates` action of `zotero_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FindDuplicatesArgs {
     /// Optional collection key ([`CollectionKey`]) to scope duplicate search.

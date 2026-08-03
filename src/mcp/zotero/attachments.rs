@@ -10,7 +10,7 @@ use crate::{
     zotero::{ItemKey, ZoteroClient},
 };
 
-/// Arguments for `zotero_attach_file`.
+/// Arguments for the `attach_file` action of `zotero_items_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AttachFileArgs {
     /// Key of the parent item ([`ItemKey`]).

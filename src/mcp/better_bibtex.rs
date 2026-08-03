@@ -31,21 +31,21 @@ use crate::{
 
 // --- Argument Schemas ---
 
-/// Arguments for the `better_bibtex_get_citekeys` tool.
+/// Arguments for the `citekeys` action of `better_bibtex`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetCitekeysArgs {
     /// Zotero item keys ([`ItemKey`]) to look up.
     pub(crate) item_keys: Vec<ItemKey>,
 }
 
-/// Arguments for the `better_bibtex_regenerate_citekeys` tool.
+/// Arguments for the `regenerate` action of `better_bibtex`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RegenerateKeysArgs {
     /// Better `BibTeX` citation keys ([`CitationKey`]) to regenerate.
     pub(crate) citekeys: Vec<CitationKey>,
 }
 
-/// Arguments for the `better_bibtex_export_items` tool.
+/// Arguments for the `export` action of `better_bibtex`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ExportItemsArgs {
     /// Better `BibTeX` citation keys ([`CitationKey`]) to export.
@@ -54,7 +54,7 @@ pub(crate) struct ExportItemsArgs {
     pub(crate) translator: TranslatorName,
 }
 
-/// Arguments for the `better_bibtex_format_bibliography` tool.
+/// Arguments for the `bibliography` action of `better_bibtex`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BibliographyArgs {
     /// Citation keys ([`CitationKey`]) to format.
@@ -64,7 +64,7 @@ pub(crate) struct BibliographyArgs {
     pub(crate) format: Option<BibliographyFormat>,
 }
 
-/// Arguments for the `better_bibtex_scan_aux` tool.
+/// Arguments for the `scan_aux` action of `better_bibtex`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ScanAuxArgs {
     /// Better `BibTeX` collection path ([`CollectionPath`]) to import
@@ -74,14 +74,14 @@ pub(crate) struct ScanAuxArgs {
     pub(crate) aux_path: AuxFilePath,
 }
 
-/// Arguments for the `better_bibtex_pandoc_filter` tool.
+/// Arguments for the `pandoc_filter` action of `better_bibtex`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct PandocFilterArgs {
     /// Citation keys ([`CitationKey`]) to filter.
     pub(crate) citekeys: Vec<CitationKey>,
 }
 
-/// Arguments for the `better_bibtex_search` tool.
+/// Arguments for the `search` action of `better_bibtex`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BetterBibtexSearchArgs {
     /// Better `BibTeX` quick-search query ([`SearchQuery`]).

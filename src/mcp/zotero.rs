@@ -4,20 +4,21 @@
 //! - `status`: `zotero_status`
 //! - `items`: `zotero_items` / `zotero_items_write` core item lifecycle plus
 //!   compatibility dispatch
-//! - `metadata`: `zotero_get_item_metadata` and `zotero_add_by_identifier`
+//! - `metadata`: `metadata` / `add_by_identifier` actions of `zotero_items` /
+//!   `zotero_items_write`
 //! - `collections`: `zotero_collections` / `zotero_collections_write`
 //! - `notes`: `zotero_notes` / `zotero_notes_write` note list/create plus
 //!   compatibility dispatch
-//! - `annotations`: `zotero_synthesize_annotations` and
-//!   `zotero_create_annotation`
-//! - `attachments`: `zotero_attach_file`
-//! - `fulltext`: `zotero_get_item_fulltext`
+//! - `annotations`: `synthesize` action of `zotero_notes` and `annotation`
+//!   action of `zotero_notes_write`
+//! - `attachments`: `attach_file` action of `zotero_items_write`
+//! - `fulltext`: `fulltext` action of `zotero_items`
 //! - `tags`: `zotero_tags` / `zotero_tags_write`
 //! - `relations`: `zotero_relations` / `zotero_relations_write`
 //! - `search`: `zotero_search` item/tag/citation-key/advanced search plus
 //!   compatibility dispatch
-//! - `duplicates`: `zotero_find_duplicates`
-//! - `coverage`: `zotero_library_coverage`
+//! - `duplicates`: `duplicates` action of `zotero_search`
+//! - `coverage`: `coverage` action of `zotero_search`
 //! - `sqlite`: `zotero_sqlite_search`
 //! - `pdf`: `zotero_pdf`
 

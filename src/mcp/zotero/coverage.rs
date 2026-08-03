@@ -10,7 +10,7 @@ use crate::{
     zotero::{CollectionKey, ZoteroClient},
 };
 
-/// Arguments for `zotero_library_coverage`.
+/// Arguments for the `coverage` action of `zotero_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct LibraryCoverageArgs {
     /// Optional collection key ([`CollectionKey`]) to scope coverage analysis.

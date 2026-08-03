@@ -10,7 +10,7 @@ use crate::{
     zotero::{ItemKey, ZoteroClient},
 };
 
-/// Arguments for `zotero_get_item_fulltext`.
+/// Arguments for the `fulltext` action of `zotero_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemFulltextArgs {
     /// Zotero item key ([`ItemKey`]).

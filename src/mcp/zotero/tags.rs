@@ -16,14 +16,15 @@ use crate::{
     zotero::{ItemKey, TagName, ZoteroClient},
 };
 
-/// Arguments for `zotero_list_tags`.
+/// Arguments for the `list` action of `zotero_tags`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ListTagsArgs {
     /// Maximum number of tags to return (default: 100).
     limit: Option<usize>,
 }
 
-/// Arguments for `zotero_search_by_tag`.
+/// Arguments for the `search` action of `zotero_tags` and the `tag` action
+/// of `zotero_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchByTagArgs {
     /// Tag name ([`TagName`]) to search for.
@@ -32,7 +33,7 @@ pub(crate) struct SearchByTagArgs {
     limit: Option<usize>,
 }
 
-/// Arguments for `zotero_batch_update_tags`.
+/// Arguments for the `batch_update` action of `zotero_tags_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct BatchUpdateTagsArgs {
     /// List of item keys ([`ItemKey`]).
@@ -43,7 +44,7 @@ pub(crate) struct BatchUpdateTagsArgs {
     remove_tags: Option<Vec<TagName>>,
 }
 
-/// Arguments for `zotero_rename_tag`.
+/// Arguments for the `rename` action of `zotero_tags_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RenameTagArgs {
     /// Existing tag name ([`TagName`]).
@@ -52,7 +53,7 @@ pub(crate) struct RenameTagArgs {
     new_tag: TagName,
 }
 
-/// Arguments for `zotero_delete_tags`.
+/// Arguments for the `delete` action of `zotero_tags_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteTagsArgs {
     /// Tag names ([`TagName`]) to delete from the library (up to 50).

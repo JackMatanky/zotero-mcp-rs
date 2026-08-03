@@ -20,19 +20,19 @@ use crate::{
     },
 };
 
-/// Arguments for `zotero_get_collection_items`.
+/// Arguments for the `items` action of `zotero_collections`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetCollectionItemsArgs {
     /// Zotero collection key ([`CollectionKey`]).
     collection_key: CollectionKey,
 }
-/// Arguments for `zotero_search_collections`.
+/// Arguments for the `search` action of `zotero_collections`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchCollectionsArgs {
     /// Search query matching collection names.
     query: String,
 }
-/// Arguments for `zotero_create_collection`.
+/// Arguments for the `create` action of `zotero_collections_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateCollectionArgs {
     /// Name of the collection to create.
@@ -40,7 +40,7 @@ pub(crate) struct CreateCollectionArgs {
     /// Optional parent collection key ([`CollectionKey`]).
     parent_key: Option<CollectionKey>,
 }
-/// Arguments for `zotero_manage_collections`.
+/// Arguments for the `manage` action of `zotero_collections_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ManageCollectionsArgs {
     /// Zotero collection key ([`CollectionKey`]).
@@ -50,7 +50,7 @@ pub(crate) struct ManageCollectionsArgs {
     /// Set to `true` to remove items instead of adding them.
     remove: Option<bool>,
 }
-/// Arguments for `zotero_update_collection`.
+/// Arguments for the `update` action of `zotero_collections_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct UpdateCollectionArgs {
     /// Zotero collection key ([`CollectionKey`]).
@@ -61,7 +61,7 @@ pub(crate) struct UpdateCollectionArgs {
     /// empty string to move the collection to the top level.
     parent_key: Option<CollectionParent>,
 }
-/// Arguments for `zotero_delete_collection`.
+/// Arguments for the `delete` action of `zotero_collections_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DeleteCollectionArgs {
     /// Key of the collection ([`CollectionKey`]) to permanently delete.

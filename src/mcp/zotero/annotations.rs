@@ -13,13 +13,13 @@ use crate::{
     },
 };
 
-/// Arguments for `zotero_synthesize_annotations`.
+/// Arguments for the `synthesize` action of `zotero_notes`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SynthesizeAnnotationsArgs {
     /// Zotero item key ([`ItemKey`]).
     item_key: ItemKey,
 }
-/// Arguments for `zotero_create_annotation`.
+/// Arguments for the `annotation` action of `zotero_notes_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateAnnotationArgs {
     /// Key of the parent PDF attachment ([`ItemKey`]).

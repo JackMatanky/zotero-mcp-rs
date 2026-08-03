@@ -13,7 +13,7 @@ use serde::Deserialize;
 
 use crate::{ZoteroMcpServer, mcp::json_result};
 
-/// Arguments for `zotero_fulltext_search`.
+/// Arguments for the `fulltext` action of `zotero_sqlite_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct FulltextSearchArgs {
     /// Free-text query matched against title, creators, DOI, and indexed
@@ -23,7 +23,7 @@ pub(crate) struct FulltextSearchArgs {
     limit: Option<usize>,
 }
 
-/// Arguments for `zotero_search_notes_annotations`.
+/// Arguments for the `notes_annotations` action of `zotero_sqlite_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchNotesAnnotationsArgs {
     /// Free-text query matched against note body and annotation text/comment.

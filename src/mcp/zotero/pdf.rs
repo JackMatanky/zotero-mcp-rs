@@ -29,14 +29,14 @@ use crate::{
     zotero::{ItemKey, ItemType, ZoteroClient},
 };
 
-/// Arguments for `zotero_get_pdf_path`.
+/// Arguments for the `path` action of `zotero_pdf`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetPdfPathArgs {
     /// Zotero item key ([`ItemKey`]) for parent item or attachment item.
     item_key: ItemKey,
 }
 
-/// Arguments for `zotero_read_pdf_pages`.
+/// Arguments for the `read_pages` action of `zotero_pdf`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct ReadPdfPagesArgs {
     /// Zotero item key; direct PDF paths must resolve under configured or
@@ -46,7 +46,7 @@ pub(crate) struct ReadPdfPagesArgs {
     pages: Option<Vec<usize>>,
 }
 
-/// Arguments for `zotero_get_pdf_outline`.
+/// Arguments for the `outline` action of `zotero_pdf`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetPdfOutlineArgs {
     /// Zotero item key; direct PDF paths must resolve under configured or

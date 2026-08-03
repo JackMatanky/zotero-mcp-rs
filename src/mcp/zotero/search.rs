@@ -17,7 +17,7 @@ use crate::{
     },
 };
 
-/// Arguments for `zotero_search_items`.
+/// Arguments for the `items` action of `zotero_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchItemsArgs {
     /// Search query matched against title, creator, year, or full-text
@@ -41,13 +41,13 @@ impl SearchItemsArgs {
     }
 }
 
-/// Arguments for `zotero_search_by_citation_key`.
+/// Arguments for the `citation_key` action of `zotero_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchByCitationKeyArgs {
     /// Citation key ([`CitationKey`]) to match.
     citekey: CitationKey,
 }
-/// Arguments for `zotero_advanced_search`.
+/// Arguments for the `advanced` action of `zotero_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AdvancedSearchArgs {
     /// List of search conditions ([`SearchCondition`]).

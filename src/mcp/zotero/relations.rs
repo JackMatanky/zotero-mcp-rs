@@ -17,14 +17,14 @@ use crate::{
     zotero::{ItemKey, ZoteroClient},
 };
 
-/// Arguments for `zotero_get_related_items`.
+/// Arguments for the `get` action of `zotero_relations`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetRelatedItemsArgs {
     /// Zotero item key ([`ItemKey`]) whose related items to list.
     item_key: ItemKey,
 }
 
-/// Arguments for `zotero_add_item_relation`.
+/// Arguments for the `add` action of `zotero_relations_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AddItemRelationArgs {
     /// Zotero item key ([`ItemKey`]) of the first item to link (bidirectional,
@@ -35,7 +35,7 @@ pub(crate) struct AddItemRelationArgs {
     related_item_key: ItemKey,
 }
 
-/// Arguments for `zotero_remove_item_relation`.
+/// Arguments for the `remove` action of `zotero_relations_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct RemoveItemRelationArgs {
     /// Zotero item key ([`ItemKey`]) of the first item to unlink

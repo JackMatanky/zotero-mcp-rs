@@ -13,13 +13,13 @@ use crate::{
     zotero::{ItemKey, ItemType, ZoteroClient},
 };
 
-/// Arguments for `zotero_get_notes`.
+/// Arguments for the `list` action of `zotero_notes`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetNotesArgs {
     /// Zotero item key ([`ItemKey`]).
     item_key: ItemKey,
 }
-/// Arguments for `zotero_create_note`.
+/// Arguments for the `create` action of `zotero_notes_write`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CreateNoteArgs {
     /// Key of the parent item ([`ItemKey`]).
