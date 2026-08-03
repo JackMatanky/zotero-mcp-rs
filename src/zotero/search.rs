@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     errors::ZoteroMcpError,
     zotero::{
-        CitationKey, CollectionKey, ItemType, TagName, ZoteroItem,
-        client::ZoteroClient, objects::ZoteroCreator,
+        CitationKey, CollectionKey, TagName, ZoteroItem, client::ZoteroClient,
+        objects::ZoteroCreator,
     },
 };
 
@@ -566,10 +566,7 @@ fn finish_page(
 
 /// Returns true for items that are not attachments, notes, or annotations.
 fn is_searchable_item(item: &ZoteroItem) -> bool {
-    !matches!(
-        item.data.item_type,
-        ItemType::Attachment | ItemType::Note | ItemType::Annotation
-    )
+    item.data.item_type.is_indexable()
 }
 
 fn matches_creator_full_name(

@@ -21,8 +21,7 @@ pub(crate) enum ItemType {
     Note,
     Attachment,
     Annotation,
-    /// Any Zotero item type not modeled above; carries the API's original
-    /// value.
+    /// Any Zotero item type not modeled above; carries the original API value.
     Other(String),
 }
 
@@ -39,6 +38,13 @@ impl ItemType {
             Self::Annotation => "annotation",
             Self::Other(value) => value,
         }
+    }
+
+    /// Returns `true` for item types eligible for search and embedding
+    /// indexing: everything except attachments, notes, and annotations.
+    #[inline]
+    pub(crate) fn is_indexable(&self) -> bool {
+        !matches!(self, Self::Attachment | Self::Note | Self::Annotation)
     }
 }
 
@@ -324,6 +330,20 @@ mod tests {
         #[test]
         fn defaults_to_other_variant() {
             assert_eq!(ItemType::default(), ItemType::Other(String::new()));
+        }
+
+        #[test]
+        fn is_indexable_excludes_attachments_notes_and_annotations() {
+            for item_type in
+                [ItemType::Attachment, ItemType::Note, ItemType::Annotation]
+            {
+                assert!(
+                    !item_type.is_indexable(),
+                    "{item_type:?} must not be indexable"
+                );
+            }
+            assert!(ItemType::JournalArticle.is_indexable());
+            assert!(ItemType::Other("webpage".to_owned()).is_indexable());
         }
     }
 

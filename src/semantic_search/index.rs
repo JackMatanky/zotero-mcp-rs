@@ -67,7 +67,7 @@ pub(crate) async fn index_library(
     let mut current_keys = std::collections::HashSet::new();
 
     for item in &all_items {
-        if item.data.deleted || !is_indexable_item(&item.data.item_type) {
+        if item.data.deleted || !item.data.item_type.is_indexable() {
             continue;
         }
         report.items_scanned = report.items_scanned.saturating_add(1);
@@ -156,17 +156,6 @@ async fn index_one_item(
         .await?;
     report.items_indexed = report.items_indexed.saturating_add(1);
     Ok(true)
-}
-
-/// Returns `true` for item types eligible for indexing: everything except
-/// attachments, notes, and annotations (matches
-/// `crate::zotero::search::is_searchable_item`'s filter, duplicated here
-/// since that function is private to `zotero/search.rs`).
-fn is_indexable_item(item_type: &ItemType) -> bool {
-    !matches!(
-        item_type,
-        ItemType::Attachment | ItemType::Note | ItemType::Annotation
-    )
 }
 
 /// Assembles the text to index for `item`: title, then abstract, then the
