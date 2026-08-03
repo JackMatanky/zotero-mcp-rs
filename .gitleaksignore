@@ -1,0 +1,32 @@
+# Known false positives in docs/zotero_api.md, a mirror of Zotero's public
+# Web API reference documentation. Every flagged string is a placeholder
+# example key from that public documentation (e.g. Zotero's own published
+# example `P9NiFoyLeZu2bZNvvuQPDWsd`, or sequential placeholders like
+# `abcdefghijklmn1234567890`), not a real credential. Verified by hand
+# against the surrounding doc context for each entry below.
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:43
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:45
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:637
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:649
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:1065
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:1691
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:1699
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:1716
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:1723
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:1736
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:1764
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:1766
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:1776
+43365073cb262fafd47e9ef4c4df99c403b26111:docs/zotero_api.md:generic-api-key:1801
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:664
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:678
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:1132
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:1820
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:1828
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:1847
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:1854
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:1867
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:1897
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:1899
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:1911
+e57430dc120573a079bc64bf0039544f7ca670a3:docs/zotero_api.md:generic-api-key:1940
