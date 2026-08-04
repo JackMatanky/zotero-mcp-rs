@@ -11,7 +11,8 @@
 //!   compatibility dispatch
 //! - `annotations`: `synthesize` action of `zotero_notes` and `annotation`
 //!   action of `zotero_notes_write`
-//! - `attachments`: `attach_file` action of `zotero_items_write`
+//! - `attachments`: `attach_file` and `import_pdf` actions of
+//!   `zotero_items_write`
 //! - `fulltext`: `fulltext` action of `zotero_items`
 //! - `tags`: `zotero_tags` / `zotero_tags_write`
 //! - `relations`: `zotero_relations` / `zotero_relations_write`

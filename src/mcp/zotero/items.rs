@@ -83,6 +83,7 @@ pub(crate) enum ZoteroItemsWriteCommand {
     Restore(TrashItemArgs),
     AddByIdentifier(crate::mcp::zotero::metadata::AddByIdentifierArgs),
     AttachFile(crate::mcp::zotero::attachments::AttachFileArgs),
+    ImportPdf(crate::mcp::zotero::attachments::ImportPdfArgs),
 }
 
 #[tool_router(router = items_router, vis = "pub(crate)")]
@@ -126,7 +127,8 @@ impl ZoteroMcpServer {
     #[tool(
         name = "zotero_items_write",
         description = "Grouped Zotero item write router. action: update, \
-                       delete, trash, restore, add_by_identifier, attach_file",
+                       delete, trash, restore, add_by_identifier, \
+                       attach_file, import_pdf",
         annotations(
             title = "Write Zotero Items",
             read_only_hint = false,
@@ -160,6 +162,9 @@ impl ZoteroMcpServer {
             }
             ZoteroItemsWriteCommand::AttachFile(args) => {
                 self.zotero_attach_file_impl(args).await
+            }
+            ZoteroItemsWriteCommand::ImportPdf(args) => {
+                self.zotero_import_pdf_impl(args).await
             }
         }
     }

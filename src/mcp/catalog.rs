@@ -133,11 +133,11 @@ static PRIMITIVES: &[PrimitiveInfo] = &[
         domain: PrimitiveDomain::Items,
         requires: &[EnvGate::WriteEnabled],
         summary: "Grouped item write actions: update, delete, trash, restore, \
-                  add_by_identifier, attach_file",
+                  add_by_identifier, attach_file, import_pdf",
         example: Some(r#"{"action":"trash","item_key":"ITEMKEY"}"#),
         search_text: "zotero_items_write items grouped item write actions \
                       update delete trash restore add_by_identifier \
-                      attach_file zotero_write_enabled",
+                      attach_file import_pdf zotero_write_enabled",
     },
     PrimitiveInfo {
         name: "zotero_notes_write",
