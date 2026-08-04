@@ -70,12 +70,15 @@ impl ZoteroClient<'_> {
     /// Imports a local file into Zotero storage via the three-phase MD5
     /// upload and returns the created attachment item.
     ///
+    /// If Zotero already has the file (matching MD5), returns the existing
+    /// attachment without re-uploading.
+    ///
     /// # Arguments
     ///
     /// * `parent_item_key` - Parent item to attach to; [`None`] creates a
     ///   top-level attachment.
-    /// * `title` - Title for the attachment
-    /// * `path` - Canonical path to the local file to import
+    /// * `title` - Display title for the attachment
+    /// * `path` - Path to the local file to import
     /// * `content_type` - Optional MIME content type (defaults to
     ///   `"application/pdf"`)
     ///
