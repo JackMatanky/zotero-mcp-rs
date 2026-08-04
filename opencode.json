@@ -7,7 +7,6 @@
         "mcp",
         "serve"
       ],
-      "cwd": "/Users/jack/Documents/41_personal/zotero-mcp-rs/",
       "enabled": true,
       "environment": {
         "ADR_DIRECTORY": "docs/adr/"
@@ -19,7 +18,6 @@
         "mise",
         "mcp"
       ],
-      "cwd": "/Users/jack/Documents/41_personal/zotero-mcp-rs/",
       "enabled": true,
       "environment": {
         "MISE_EXPERIMENTAL": "1"

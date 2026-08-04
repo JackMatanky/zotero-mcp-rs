@@ -6,7 +6,6 @@
         "serve"
       ],
       "command": "adrs",
-      "cwd": "/Users/jack/Documents/41_personal/zotero-mcp-rs/",
       "env": {
         "ADR_DIRECTORY": "docs/adr/"
       }
