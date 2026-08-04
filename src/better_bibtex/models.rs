@@ -1,4 +1,14 @@
 //! JSON-RPC 2.0 envelopes and response shapes for the Better `BibTeX` API.
+//!
+//! Main types:
+//! - [`JsonRpcRequest`] - Outbound JSON-RPC request envelope
+//! - [`JsonRpcResponse`] - Inbound JSON-RPC response envelope
+//! - [`JsonRpcError`] - Error object from the API
+//! - [`BibliographyFormat`] - Export format configuration
+//! - [`BibliographyContentType`] - Content type for bibliography output
+//! - [`AutoExportAddRequest`] - Auto-export registration payload
+//! - [`CitekeyMap`] - Mapping of item keys to citation keys
+//! - [`RegenerateKeyMap`] - Mapping of old citation keys to new ones
 
 use std::collections::HashMap;
 

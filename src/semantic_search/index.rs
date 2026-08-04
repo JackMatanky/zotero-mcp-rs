@@ -1,4 +1,10 @@
 //! Whole-library scan that builds/refreshes the semantic index.
+//!
+//! Main types:
+//! - [`IndexReport`] - Summary of an indexing run (items scanned, errors, etc.)
+//!
+//! Main functions:
+//! - `index_library` - Scan and (re)index the entire Zotero library
 
 use std::sync::Arc;
 
@@ -22,7 +28,7 @@ enum IndexOutcome {
     SkippedEmpty,
 }
 
-/// Result of the `index` action of `zotero_semantic_search`.
+/// Summary of an indexing run, reporting items processed and any errors.
 #[derive(Clone, Debug, Default, Serialize)]
 pub(crate) struct IndexReport {
     pub(crate) items_scanned: usize,

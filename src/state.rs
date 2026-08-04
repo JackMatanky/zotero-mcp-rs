@@ -35,7 +35,7 @@ const RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
 ///
 /// Constructed once at startup via [`AppState::from_env`] and passed by
 /// reference to every backend client for the lifetime of the server.
-
+/// Cached handle to a Zotero `SQLite` database for a single library.
 #[derive(Clone, Debug)]
 pub(crate) struct CachedLocalZoteroDb {
     override_path: Option<PathBuf>,

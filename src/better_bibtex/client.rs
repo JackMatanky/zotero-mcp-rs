@@ -3,6 +3,9 @@
 //! Every RPC call is routed through [`BetterBibtexClient::call_rpc`], which
 //! wraps the JSON-RPC request/response envelope and maps failures to
 //! [`ZoteroMcpError::BetterBibTeX`].
+//!
+//! Main types:
+//! - [`BetterBibtexClient`] - JSON-RPC client scoped to a single tool call
 
 use std::path::Path;
 

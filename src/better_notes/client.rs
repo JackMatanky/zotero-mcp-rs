@@ -1,4 +1,7 @@
 //! Async client for the Better Notes bridge's HTTP companion API.
+//!
+//! Main types:
+//! - [`BetterNotesClient`] - HTTP client scoped to a single tool call
 
 use serde::Serialize;
 use serde_json::Value;

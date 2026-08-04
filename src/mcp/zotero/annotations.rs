@@ -1,4 +1,8 @@
 //! MCP tool handlers for Zotero PDF annotations and synthesis.
+//!
+//! Main types:
+//! - [`SynthesizeAnnotationsArgs`] - Arguments for the `synthesize` action
+//! - [`CreateAnnotationArgs`] - Arguments for the `annotation` action
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;

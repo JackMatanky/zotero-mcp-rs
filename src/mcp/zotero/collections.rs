@@ -3,6 +3,12 @@
 //! Covers `zotero_collections` / `zotero_collections_write` grouped-router
 //! actions: collection item listing, name search, creation, item membership
 //! management, rename/move, deletion, plus compatible unfiled-item dispatch.
+//!
+//! Main types:
+//! - [`ZoteroCollectionsCommand`] - Grouped-router command for read-only
+//!   collection actions
+//! - [`ZoteroCollectionsWriteCommand`] - Grouped-router command for write
+//!   collection actions
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -71,19 +77,28 @@ pub(crate) struct DeleteCollectionArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Read commands dispatched by the `zotero_collections` MCP tool router.
 pub(crate) enum ZoteroCollectionsCommand {
+    /// List items in a collection.
     Items(GetCollectionItemsArgs),
+    /// Search collections by name or query.
     Search(SearchCollectionsArgs),
+    /// List items not filed in any collection.
     Unfiled(crate::mcp::zotero::items::GetUnfiledItemsArgs),
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Write commands dispatched by the `zotero_collections` MCP tool router.
 pub(crate) enum ZoteroCollectionsWriteCommand {
+    /// Create a new collection.
     Create(CreateCollectionArgs),
+    /// Move items between collections.
     Manage(ManageCollectionsArgs),
+    /// Rename or update a collection.
     Update(UpdateCollectionArgs),
+    /// Permanently delete a collection.
     Delete(DeleteCollectionArgs),
 }
 

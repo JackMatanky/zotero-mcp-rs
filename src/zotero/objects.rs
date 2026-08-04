@@ -2,6 +2,16 @@
 //!
 //! Contains item, collection, creator, tag, and status payload shapes returned
 //! by Zotero.
+//!
+//! Main types:
+//! - [`ZoteroItem`] - A single library item with metadata envelope
+//! - [`ZoteroItemData`] - Bibliographic, attachment, note, and annotation
+//!   fields
+//! - [`ZoteroCreator`] - Author or editor credited on an item
+//! - [`ZoteroTag`] - Tag attached to an item
+//! - [`ZoteroCollection`] - A collection hierarchy node
+//! - [`ZoteroCollectionData`] - Collection metadata payload
+//! - [`LocalApiStatus`] - Local API availability probe result
 
 use serde::{Deserialize, Serialize};
 

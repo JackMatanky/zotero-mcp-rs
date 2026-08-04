@@ -231,17 +231,26 @@ impl ZoteroMcpServer {
     }
 }
 
+/// Commands dispatched by the `better_bibtex` MCP tool router.
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
 pub(crate) enum BetterBibtexCommand {
+    /// Retrieve citation keys for items.
     Citekeys(GetCitekeysArgs),
+    /// Regenerate citation keys for items.
     Regenerate(RegenerateKeysArgs),
+    /// Export items in BibTeX/BibLaTeX format.
     Export(ExportItemsArgs),
+    /// Format a bibliography from citation keys.
     Bibliography(BibliographyArgs),
+    /// Import references from a `LaTeX` .aux file.
     ScanAux(ScanAuxArgs),
+    /// Process citation keys through the Pandoc filter.
     PandocFilter(PandocFilterArgs),
+    /// Configure an auto-export target.
     AutoexportAdd(AutoExportAddArgs),
+    /// Search items by query.
     Search(BetterBibtexSearchArgs),
 }
 

@@ -2,6 +2,10 @@
 //!
 //! Covers `zotero_tags` / `zotero_tags_write` grouped-router actions: tag
 //! listing, batch add/remove across items, renaming, and deletion.
+//!
+//! Main types:
+//! - [`ZoteroTagsCommand`] - Grouped-router command for read-only tag actions
+//! - [`ZoteroTagsWriteCommand`] - Grouped-router command for write tag actions
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -63,17 +67,24 @@ pub(crate) struct DeleteTagsArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Read commands dispatched by the `zotero_tags` MCP tool router.
 pub(crate) enum ZoteroTagsCommand {
+    /// List all tags in a library.
     List(ListTagsArgs),
+    /// Find items with a specific tag.
     Search(SearchByTagArgs),
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Write commands dispatched by the `zotero_tags` MCP tool router.
 pub(crate) enum ZoteroTagsWriteCommand {
+    /// Add or remove tags on items in bulk.
     BatchUpdate(BatchUpdateTagsArgs),
+    /// Rename a tag across the entire library.
     Rename(RenameTagArgs),
+    /// Delete tags from the library.
     Delete(DeleteTagsArgs),
 }
 

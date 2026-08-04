@@ -2,6 +2,10 @@
 //!
 //! Adds [`ZoteroClient`] methods for item reads, metadata-created item writes,
 //! field updates, trash/restore, and deletion.
+//!
+//! Main types:
+//! - [`TrashAction`] - Requested trash state transition (`MoveToTrash` or
+//!   `Restore`)
 
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -19,6 +23,7 @@ pub(crate) enum TrashAction {
 }
 
 impl TrashAction {
+    /// Returns `true` if this action represents a deletion to trash.
     pub(crate) fn is_deleted(self) -> bool {
         matches!(self, Self::MoveToTrash)
     }

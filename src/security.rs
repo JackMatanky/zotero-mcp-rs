@@ -1,4 +1,9 @@
 //! Security profiles, path allowlists, and input size constraints.
+//!
+//! Main types:
+//! - [`SecurityProfile`] - Supported security profiles (Default, Workspace,
+//!   `TrustedLocal`, `Hardened`)
+//! - [`SecurityConfig`] - Path allowlists and size limits
 
 use std::{
     env,

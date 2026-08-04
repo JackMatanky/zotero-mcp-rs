@@ -1,4 +1,10 @@
 //! MCP primitive catalog and discovery tool routing.
+//!
+//! Main types:
+//! - [`PrimitiveKind`] - Kind of MCP primitive (tool, resource, or prompt)
+//! - [`PrimitiveDomain`] - Functional domain grouping for primitives
+//! - [`EnvGate`] - Environment variable gate controlling primitive visibility
+//! - [`PrimitiveInfo`] - Metadata for a single discoverable MCP primitive
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -9,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ZoteroMcpServer, state::AppState};
 
+/// Arguments for the `zotero_discover` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DiscoverArgs {
     pub(crate) query: Option<String>,
@@ -16,48 +23,69 @@ pub(crate) struct DiscoverArgs {
     pub(crate) include_disabled: Option<bool>,
 }
 
+/// Kind of MCP primitive (tool, resource, or prompt).
 #[derive(
     Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, JsonSchema,
 )]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum PrimitiveKind {
+    /// A callable MCP tool.
     Tool,
+    /// A readable MCP resource.
     Resource,
+    /// An MCP prompt template.
     Prompt,
 }
 
+/// Functional domain grouping for MCP primitives.
 #[derive(
     Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PrimitiveDomain {
+    /// Discovery and introspection tools.
     Discovery,
+    /// Item read/write operations.
     Items,
+    /// Collection operations.
     Collections,
+    /// Search operations.
     Search,
+    /// Note operations.
     Notes,
+    /// Direct `SQLite` database queries.
     Sqlite,
+    /// Semantic search operations.
     Semantic,
+    /// Prompt templates.
     Prompts,
 }
 
+/// Environment variable that gates access to a group of tools.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub(crate) enum EnvGate {
+    /// Requires `ZOTERO_WRITE_ENABLED=1` for write tools.
     #[serde(rename = "ZOTERO_WRITE_ENABLED")]
     WriteEnabled,
+    /// Requires `ZOTERO_SQLITE_ACCESS=1` for `SQLite` tools.
     #[serde(rename = "ZOTERO_SQLITE_ACCESS")]
     SqliteAccess,
+    /// Requires `ZOTERO_SEMANTIC_SEARCH=1` for semantic tools.
     #[serde(rename = "ZOTERO_SEMANTIC_SEARCH")]
     SemanticSearchEnabled,
 }
 
+/// Metadata for a single discoverable MCP primitive.
 #[derive(Clone, Copy, Serialize)]
 struct PrimitiveInfo {
     name: &'static str,
     kind: PrimitiveKind,
     domain: PrimitiveDomain,
+    /// Environment variables that must be set for this primitive to be
+    /// visible.
     requires: &'static [EnvGate],
     summary: &'static str,
+    /// Example invocation shown in discovery output.
     example: Option<&'static str>,
     #[serde(skip_serializing)]
     search_text: &'static str,
@@ -229,6 +257,7 @@ pub(crate) fn is_tool_visible(state: &AppState, name: &str) -> bool {
 }
 
 impl ZoteroMcpServer {
+    /// Returns primitives matching the query, domain, and enabled state.
     fn discover_primitives(&self, args: &DiscoverArgs) -> Vec<PrimitiveInfo> {
         let query = args.query.as_ref().map(|value| value.to_lowercase());
         PRIMITIVES
@@ -249,6 +278,7 @@ impl ZoteroMcpServer {
             .collect()
     }
 
+    /// Returns `true` if all env gates for `primitive` are satisfied.
     fn is_primitive_enabled(&self, primitive: PrimitiveInfo) -> bool {
         !primitive.requires.iter().any(|requirement| {
             (*requirement == EnvGate::WriteEnabled && !self.state.write_enabled)
@@ -257,6 +287,7 @@ impl ZoteroMcpServer {
         })
     }
 
+    /// Builds a JSON [`CallToolResult`] listing matching capabilities.
     pub(crate) fn zotero_discover_impl(
         &self,
         args: &DiscoverArgs,
@@ -285,6 +316,7 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Discovers Zotero capabilities matching the given query and filters.
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.

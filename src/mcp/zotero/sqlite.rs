@@ -3,6 +3,10 @@
 //! Covers `zotero_sqlite_search` grouped-router actions (gated behind
 //! `ZOTERO_SQLITE_ACCESS=1`): full-text search and note/annotation search
 //! against Zotero's local database.
+//!
+//! Main types:
+//! - [`ZoteroSqliteSearchCommand`] - Grouped-router command for `SQLite` search
+//!   actions
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -35,8 +39,11 @@ pub(crate) struct SearchNotesAnnotationsArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Search commands dispatched by the `zotero_sqlite_search` MCP tool router.
 pub(crate) enum ZoteroSqliteSearchCommand {
+    /// Full-text search against the Zotero `SQLite` database.
     Fulltext(FulltextSearchArgs),
+    /// Search notes and annotations by content.
     NotesAnnotations(SearchNotesAnnotationsArgs),
 }
 

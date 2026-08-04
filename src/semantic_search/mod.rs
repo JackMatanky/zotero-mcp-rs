@@ -3,6 +3,12 @@
 //! server owns (distinct from Zotero's own `zotero.sqlite`, which
 //! `zotero::sqlite` reads read-only). Consumes `zotero::ZoteroClient` to scan
 //! the library; owns everything else independently.
+//!
+//! Main types:
+//! - [`Embedding`] - L2-normalized f32 vector
+//! - [`FastEmbedProvider`] - Local ONNX embedding via `fastembed`
+//! - [`SemanticIndex`] - Read/write semantic index database
+//! - [`EmbeddingProvider`] - Trait for embedding backends
 
 mod chunking;
 mod embedding;
@@ -76,8 +82,12 @@ pub(crate) fn resolve_db_path(
         })
 }
 
-/// Resolves the directory fastembed caches downloaded model files in: the
-/// parent directory of the resolved index db path, joined with `models`.
+/// Resolves the directory where ONNX model files are cached.
+///
+/// # Arguments
+///
+/// * `db_path` — Path to the semantic search database; the model cache
+///   directory is derived as a sibling.
 pub(crate) fn resolve_model_cache_dir(db_path: &std::path::Path) -> PathBuf {
     db_path
         .parent()
@@ -88,7 +98,7 @@ pub(crate) fn resolve_model_cache_dir(db_path: &std::path::Path) -> PathBuf {
 /// files (distinct from Zotero's own data directory), or [`None`] if it
 /// cannot be determined for the current OS/environment.
 ///
-/// Mirrors [`crate::zotero::sqlite::profiles_dirs`]'s per-OS branching style.
+/// Mirrors `sqlite::profiles_dirs`'s per-OS branching style.
 fn default_semantic_data_dir() -> Option<PathBuf> {
     if let Some(appdata) = env::var_os("APPDATA") {
         return Some(PathBuf::from(appdata).join("zotero-mcp-rs"));

@@ -3,6 +3,17 @@
 //! Provides [`ZoteroClient`] plus domain modules for Zotero keys, controlled
 //! vocabulary types, API objects, resource endpoints, item subdomains,
 //! metadata lookup, derived views, and direct `zotero.sqlite` access.
+//!
+//! Main types:
+//! - [`ZoteroClient`] - HTTP client for the Zotero Local API
+//! - [`ZoteroItem`] - A single library item
+//! - [`ZoteroCollection`] - A collection hierarchy node
+//! - [`ItemKey`] - 8-character alphanumeric item identifier
+//! - [`CollectionKey`] - 8-character alphanumeric collection identifier
+//! - [`LibraryVersion`] - Library version counter
+//! - [`ItemType`] - Item kind (`journalArticle`, `book`, etc.)
+//! - [`AnnotationType`] - PDF annotation kind
+//! - [`LocalZoteroDb`] - Read-only `zotero.sqlite` access
 
 mod annotations;
 mod attachments;

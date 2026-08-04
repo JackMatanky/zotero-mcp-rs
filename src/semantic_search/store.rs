@@ -1,5 +1,11 @@
 //! Owns the writable side-car `SQLite` database (`embeddings.sqlite`) storing
 //! chunk text and embedding BLOBs, independent of Zotero's own database.
+//!
+//! Main types:
+//! - [`SemanticIndex`] - Read/write semantic index database
+//! - [`StoredChunk`] - Decoded chunk ready for cosine scan
+//! - [`NewChunk`] - Chunk ready to be embedded and stored
+//! - [`SemanticIndexStats`] - Database statistics
 
 use std::{path::Path, time::Duration};
 
@@ -22,7 +28,7 @@ pub(crate) struct StoredChunk {
     pub(crate) embedding: Embedding,
 }
 
-/// A chunk to insert, with its already-normalized embedding.
+/// A text chunk ready to be embedded and stored in the semantic index.
 pub(crate) struct NewChunk {
     pub(crate) chunk_index: i64,
     pub(crate) chunk_text: String,

@@ -1,4 +1,7 @@
 //! MCP tool handlers for Zotero item full-text content.
+//!
+//! Main types:
+//! - [`GetItemFulltextArgs`] - Arguments for the `fulltext` action
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;

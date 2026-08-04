@@ -1,4 +1,8 @@
 //! MCP tool handlers for Zotero attachment items.
+//!
+//! Main types:
+//! - [`AttachFileArgs`] - Arguments for the `attach_file` action
+//! - [`ImportPdfArgs`] - Arguments for the `import_pdf` action
 
 use std::path::Path;
 

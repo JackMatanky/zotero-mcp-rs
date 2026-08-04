@@ -2,6 +2,8 @@
 //!
 //! This uses `/items/{itemKey}/fulltext`; direct `zotero.sqlite` full-text
 //! search lives in [`crate::zotero::sqlite`].
+//!
+//! No types defined — functionality is exposed via [`ZoteroClient`] methods.
 
 use crate::{
     errors::ZoteroMcpError,

@@ -2,6 +2,10 @@
 //!
 //! Covers the `zotero_semantic_search` grouped-router actions (gated behind
 //! `ZOTERO_SEMANTIC_SEARCH=1`): search, index, and status.
+//!
+//! Main types:
+//! - [`ZoteroSemanticSearchCommand`] - Grouped-router command for semantic
+//!   search
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -31,12 +35,16 @@ pub(crate) struct SemanticIndexArgs {
     force: Option<bool>,
 }
 
+/// Commands dispatched by the `zotero_semantic_search` MCP tool router.
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
 pub(crate) enum ZoteroSemanticSearchCommand {
+    /// Search indexed content by semantic similarity.
     Search(SemanticSearchArgs),
+    /// Embed and index library items.
     Index(SemanticIndexArgs),
+    /// Report index statistics.
     Status,
 }
 
@@ -76,6 +84,7 @@ impl ZoteroMcpServer {
 }
 
 impl ZoteroMcpServer {
+    /// Searches the local semantic index for items matching `args.query`.
     async fn semantic_search_impl(
         &self,
         args: SemanticSearchArgs,
@@ -102,6 +111,7 @@ impl ZoteroMcpServer {
         Ok(json_result(result))
     }
 
+    /// Embeds and indexes library items, optionally re-indexing all.
     async fn semantic_index_impl(
         &self,
         args: SemanticIndexArgs,
@@ -121,6 +131,7 @@ impl ZoteroMcpServer {
         Ok(json_result(result))
     }
 
+    /// Returns statistics about the current semantic search index.
     async fn semantic_status_impl(
         &self,
     ) -> Result<CallToolResult, rmcp::ErrorData> {

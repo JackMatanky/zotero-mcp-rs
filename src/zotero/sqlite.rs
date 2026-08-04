@@ -13,6 +13,12 @@
 //!
 //! Every method is gated at the MCP tool layer by
 //! [`AppState::check_sqlite_access`](crate::state::AppState::check_sqlite_access).
+//!
+//! Main types:
+//! - [`LocalZoteroDb`] - Immutable read-only database handle
+//! - [`FulltextHit`] - Full-text search hit across items
+//! - [`NoteAnnotationHit`] - Note or annotation search hit
+//! - [`HitKind`] - Search hit discriminator (`Note` or `Annotation`)
 
 use std::{
     collections::HashSet,

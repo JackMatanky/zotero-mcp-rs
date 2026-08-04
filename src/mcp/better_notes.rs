@@ -152,14 +152,20 @@ impl ZoteroMcpServer {
     }
 }
 
+/// Commands dispatched by the `better_notes` MCP tool router.
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
 pub(crate) enum BetterNotesCommand {
+    /// Export a note to Markdown or HTML.
     Export(NoteExportArgs),
+    /// Create a note from Markdown content.
     FromMarkdown(FromMarkdownArgs),
+    /// Execute a note template.
     RunTemplate(RunTemplateArgs),
+    /// Retrieve note relations.
     Relations(NoteRelationsArgs),
+    /// Retrieve note tree structure.
     Tree(NoteTreeArgs),
 }
 

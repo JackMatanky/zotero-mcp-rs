@@ -1,4 +1,7 @@
 //! MCP tool handlers for Zotero library coverage metrics.
+//!
+//! Main types:
+//! - [`LibraryCoverageArgs`] - Arguments for the `coverage` action
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;

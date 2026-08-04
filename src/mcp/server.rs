@@ -6,6 +6,10 @@
 //!
 //! Tools are routed using the `#[tool_router]` macro, delegating logic to the
 //! underlying Zotero Local API, Better `BibTeX`, and Better Notes handlers.
+//!
+//! Main types:
+//! - [`ZoteroMcpServer`] - Shared state holder and `ServerHandler`
+//!   implementation
 
 use std::future::Future;
 
@@ -41,6 +45,7 @@ impl ZoteroMcpServer {
         }
     }
 
+    /// Returns the tool names visible given the current environment state.
     pub(crate) fn visible_tools_for_state(
         state: &AppState,
     ) -> Vec<rmcp::model::Tool> {
@@ -49,6 +54,7 @@ impl ZoteroMcpServer {
         tools
     }
 
+    /// Returns `true` if `tool_name` is visible given the environment state.
     fn is_visible_tool(state: &AppState, name: &str) -> bool {
         is_tool_visible(state, name)
     }

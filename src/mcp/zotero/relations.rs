@@ -3,6 +3,12 @@
 //! Covers `zotero_relations` / `zotero_relations_write` grouped-router
 //! actions: listing an item's `dc:relation` links, and bidirectionally
 //! linking or unlinking two items.
+//!
+//! Main types:
+//! - [`ZoteroRelationsCommand`] - Grouped-router command for read-only relation
+//!   actions
+//! - [`ZoteroRelationsWriteCommand`] - Grouped-router command for write
+//!   relation actions
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -49,15 +55,20 @@ pub(crate) struct RemoveItemRelationArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Read commands dispatched by the `zotero_relations` MCP tool router.
 pub(crate) enum ZoteroRelationsCommand {
+    /// Get items related to a given item.
     Get(GetRelatedItemsArgs),
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Write commands dispatched by the `zotero_relations` MCP tool router.
 pub(crate) enum ZoteroRelationsWriteCommand {
+    /// Create a bidirectional relation between two items.
     Add(AddItemRelationArgs),
+    /// Remove a relation between two items.
     Remove(RemoveItemRelationArgs),
 }
 

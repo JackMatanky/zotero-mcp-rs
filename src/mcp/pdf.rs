@@ -4,6 +4,11 @@
 //! (`imported_file`) and linked (`linked_file`) PDF attachments. It queries
 //! companion bridge endpoints to discover valid Zotero storage directories and
 //! validates target paths against security configuration limits.
+//!
+//! Main types:
+//! - [`ResolvedPdfPath`] - Resolved filesystem path for a Zotero PDF attachment
+//! - [`BridgePdfRoot`] - Bridge file-roots response for Zotero storage
+//!   validation
 
 use std::path::{Path, PathBuf};
 
@@ -27,6 +32,7 @@ pub(super) enum ResolvedPdfPath {
 }
 
 impl ResolvedPdfPath {
+    /// Consumes the wrapper and returns the underlying [`PathBuf`].
     pub(super) fn into_path(self) -> PathBuf {
         match self {
             Self::Trusted(path) | Self::NeedsRootCheck(path) => path,

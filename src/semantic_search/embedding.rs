@@ -1,6 +1,10 @@
 //! The [`Embedding`] newtype (L2 normalization, dot-product scoring, and the
 //! BLOB codec used by `store.rs`/`search.rs`) plus local ONNX embedding
 //! generation via `fastembed`.
+//!
+//! Main types:
+//! - [`Embedding`] - L2-normalized f32 vector with BLOB codec
+//! - [`FastEmbedProvider`] - Local ONNX embedding provider
 
 use std::{path::Path, sync::Mutex};
 

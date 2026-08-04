@@ -34,17 +34,17 @@ use rmcp::model::{CallToolResult, ContentBlock};
 use serde::Serialize;
 pub(crate) use server::ZoteroMcpServer;
 
-/// Wraps a text message in a successful [`CallToolResult`].
+/// Wraps `text` in a successful [`CallToolResult`].
 fn text_success(text: impl Into<String>) -> CallToolResult {
     CallToolResult::success(vec![ContentBlock::text(text.into())])
 }
 
-/// Wraps an error message in an error [`CallToolResult`].
+/// Wraps `error` in an error [`CallToolResult`].
 fn text_error(error: &(impl ToString + ?Sized)) -> CallToolResult {
     CallToolResult::error(vec![ContentBlock::text(error.to_string())])
 }
 
-/// Converts a text [`Result<String, E>`] into a [`CallToolResult`].
+/// Wraps `result` or `error` in a [`CallToolResult`], matching on [`Result`].
 fn text_result<E: ToString>(result: Result<String, E>) -> CallToolResult {
     match result {
         Ok(text) => text_success(text),
@@ -52,13 +52,13 @@ fn text_result<E: ToString>(result: Result<String, E>) -> CallToolResult {
     }
 }
 
-/// Formats a value as pretty JSON and wraps it in a successful
-/// [`CallToolResult`].
+/// Wraps `value` as pretty-printed JSON in a successful [`CallToolResult`].
 fn json_success<T: Serialize>(value: &T) -> CallToolResult {
     text_success(serde_json::to_string_pretty(value).unwrap_or_default())
 }
 
-/// Converts a [`Result<T, E>`] into a JSON-formatted [`CallToolResult`].
+/// Wraps `result` or `error` in a JSON [`CallToolResult`], matching on
+/// [`Result`].
 fn json_result<T: Serialize, E: ToString>(
     result: Result<T, E>,
 ) -> CallToolResult {

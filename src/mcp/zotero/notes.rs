@@ -1,4 +1,9 @@
 //! MCP tool handlers and argument models for Zotero notes.
+//!
+//! Main types:
+//! - [`ZoteroNotesCommand`] - Grouped-router command for read-only note actions
+//! - [`ZoteroNotesWriteCommand`] - Grouped-router command for write note
+//!   actions
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -31,16 +36,22 @@ pub(crate) struct CreateNoteArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Read commands dispatched by the `zotero_notes` MCP tool router.
 pub(crate) enum ZoteroNotesCommand {
+    /// List notes attached to an item.
     List(GetNotesArgs),
+    /// Synthesize annotations into a structured note.
     Synthesize(crate::mcp::zotero::annotations::SynthesizeAnnotationsArgs),
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Write commands dispatched by the `zotero_notes` MCP tool router.
 pub(crate) enum ZoteroNotesWriteCommand {
+    /// Create a note on an item.
     Create(CreateNoteArgs),
+    /// Create an annotation on an attached PDF.
     Annotation(crate::mcp::zotero::annotations::CreateAnnotationArgs),
 }
 

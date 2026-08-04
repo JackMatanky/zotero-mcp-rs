@@ -57,9 +57,13 @@ pub(crate) struct GetPdfOutlineArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// PDF commands dispatched by the `zotero_pdf` MCP tool router.
 pub(crate) enum ZoteroPdfCommand {
+    /// Get the local file path for a PDF attachment.
     Path(GetPdfPathArgs),
+    /// Extract text from specific PDF pages.
     ReadPages(ReadPdfPagesArgs),
+    /// Get the table of contents / outline of a PDF.
     Outline(GetPdfOutlineArgs),
 }
 

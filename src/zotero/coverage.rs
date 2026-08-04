@@ -1,4 +1,9 @@
 //! Library and collection coverage metrics.
+//!
+//! Main types:
+//! - [`LibraryCoverage`] - Aggregate PDF, DOI, and note coverage statistics
+//! - [`LibraryCoveragePage`] - Coverage page with pagination metadata
+//! - [`ItemCoverageFlags`] - Per-item PDF/DOI/note availability flags
 
 use serde::{Deserialize, Serialize};
 

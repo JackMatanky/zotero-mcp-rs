@@ -2,6 +2,14 @@
 //!
 //! These enums model the Zotero strings this crate branches on while preserving
 //! unknown API values for round-tripping.
+//!
+//! Main types:
+//! - [`ItemType`] - Item kind (`journalArticle`, `book`, `note`, etc.)
+//! - [`AnnotationType`] - PDF annotation kind (`highlight`, `underline`, etc.)
+//! - [`CreatorType`] - Creator role (`author`, `editor`, etc.)
+//! - [`LinkMode`] - Attachment storage mode
+//! - [`CollectionParent`] - Parent collection state
+//! - [`TagOrigin`] - Tag source (user-created vs. automatic)
 
 use serde::{Deserialize, Serialize};
 

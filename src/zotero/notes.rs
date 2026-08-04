@@ -1,4 +1,6 @@
 //! Note item operations for the Zotero Local HTTP API.
+//!
+//! No types defined — functionality is exposed via [`ZoteroClient`] methods.
 
 use crate::{
     errors::ZoteroMcpError,

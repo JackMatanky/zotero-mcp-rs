@@ -3,6 +3,11 @@
 //! Covers `zotero_items` / `zotero_items_write` grouped-router actions for
 //! item lifecycle, with compatible dispatch to metadata, full-text, and
 //! attachment modules.
+//!
+//! Main types:
+//! - [`ZoteroItemsCommand`] - Grouped-router command for read-only item actions
+//! - [`ZoteroItemsWriteCommand`] - Grouped-router command for write item
+//!   actions
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -65,24 +70,38 @@ pub(crate) struct TrashItemArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Read commands dispatched by the `zotero_items` MCP tool router.
 pub(crate) enum ZoteroItemsCommand {
+    /// Fetch recently added or modified items.
     Recent(GetRecentArgs),
+    /// Get a single item by key.
     Get(GetItemArgs),
+    /// Retrieve metadata for an item in various formats.
     Metadata(crate::mcp::zotero::metadata::GetItemMetadataArgs),
+    /// List child items (notes, attachments) of an item.
     Children(GetItemChildrenArgs),
+    /// Retrieve full-text content extracted from an item's attachments.
     Fulltext(crate::mcp::zotero::fulltext::GetItemFulltextArgs),
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Write commands dispatched by the `zotero_items` MCP tool router.
 pub(crate) enum ZoteroItemsWriteCommand {
+    /// Update fields on an existing item.
     Update(UpdateItemArgs),
+    /// Permanently delete an item (must be trashed first).
     Delete(DeleteItemArgs),
+    /// Move an item to the trash.
     Trash(TrashItemArgs),
+    /// Restore an item from the trash.
     Restore(TrashItemArgs),
+    /// Create an item by DOI, ISBN, arXiv ID, or other identifier.
     AddByIdentifier(crate::mcp::zotero::metadata::AddByIdentifierArgs),
+    /// Attach a file to an item.
     AttachFile(crate::mcp::zotero::attachments::AttachFileArgs),
+    /// Import a PDF and attach it to an item.
     ImportPdf(crate::mcp::zotero::attachments::ImportPdfArgs),
 }
 

@@ -1,4 +1,7 @@
 //! MCP tool handler and argument model for Zotero Local API status.
+//!
+//! Main types:
+//! - [`EmptyArgs`] - Arguments for tools that take no parameters
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,

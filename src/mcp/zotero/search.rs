@@ -1,4 +1,7 @@
 //! MCP tool handlers and argument models for Zotero library search.
+//!
+//! Main types:
+//! - [`ZoteroSearchCommand`] - Grouped-router command for search actions
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -68,12 +71,19 @@ pub(crate) struct AdvancedSearchArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
+/// Search commands dispatched by the `zotero_search` MCP tool router.
 pub(crate) enum ZoteroSearchCommand {
+    /// Full-text search across item fields.
     Items(SearchItemsArgs),
+    /// Find items by tag.
     Tag(SearchByTagArgs),
+    /// Find items by `BibTeX` citation key.
     CitationKey(SearchByCitationKeyArgs),
+    /// Run a structured search with multiple conditions.
     Advanced(AdvancedSearchArgs),
+    /// Find potential duplicate items in a library.
     Duplicates(crate::mcp::zotero::duplicates::FindDuplicatesArgs),
+    /// Report coverage statistics for a library.
     Coverage(crate::mcp::zotero::coverage::LibraryCoverageArgs),
 }
 

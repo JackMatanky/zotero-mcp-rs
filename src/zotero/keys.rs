@@ -2,6 +2,14 @@
 //!
 //! Keeps identity-like values in one place: item keys, collection keys, tag
 //! names, citation keys, relation URIs, and library-version counters.
+//!
+//! Main types:
+//! - [`ItemKey`] - 8-character alphanumeric item identifier
+//! - [`CollectionKey`] - 8-character alphanumeric collection identifier
+//! - [`TagName`] - Tag name wrapper
+//! - [`CitationKey`] - Citation key wrapper
+//! - [`RelationUri`] - Item relation URI (`http://zotero.org/...`)
+//! - [`LibraryVersion`] - Library version counter
 
 use serde::{Deserialize, Serialize};
 
@@ -30,6 +38,7 @@ macro_rules! string_key {
 
         impl $name {
             #[inline]
+            /// Returns the inner string slice.
             pub(crate) fn as_str(&self) -> &str {
                 &self.0
             }

@@ -1,4 +1,6 @@
 //! Attachment item operations for the Zotero Local HTTP API.
+//!
+//! No public types — all functionality is exposed as [`ZoteroClient`] methods.
 
 use std::{fmt::Write, path::Path};
 

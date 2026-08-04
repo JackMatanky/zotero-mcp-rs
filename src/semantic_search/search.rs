@@ -1,5 +1,11 @@
 //! Embeds a query and scores it against every stored chunk (`MaxSim`
 //! aggregation: the highest-scoring chunk per item wins).
+//!
+//! Main types:
+//! - [`SemanticSearchHit`] - Best-matching chunk for an item
+//!
+//! Main functions:
+//! - `search_library` - Embed a query and return ranked results
 
 use std::{collections::HashMap, sync::Arc};
 

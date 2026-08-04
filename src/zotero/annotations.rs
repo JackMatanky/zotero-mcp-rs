@@ -1,4 +1,8 @@
 //! PDF annotation creation and annotation/note synthesis operations.
+//!
+//! Main types:
+//! - [`AnnotationDraft`] - Payload for creating a PDF annotation
+//! - [`AnnotationPosition`] - Serialized annotation position payload
 
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +19,7 @@ use crate::{
 pub(crate) struct AnnotationPosition(serde_json::Value);
 
 impl AnnotationPosition {
+    /// Serializes the position to the JSON string expected by the Zotero API.
     fn as_zotero_string(&self) -> String {
         self.0.to_string()
     }

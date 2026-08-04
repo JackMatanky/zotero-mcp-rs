@@ -1,4 +1,7 @@
 //! MCP tool handlers for Zotero duplicate detection.
+//!
+//! Main types:
+//! - [`FindDuplicatesArgs`] - Arguments for the `duplicates` action
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;

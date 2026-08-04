@@ -1,4 +1,8 @@
 //! Duplicate item detection for Zotero libraries and collections.
+//!
+//! Main types:
+//! - [`DuplicateGroup`] - Group of items identified as potential duplicates
+//! - [`DuplicateType`] - Duplication criterion (`Doi` or `Title`)
 
 use serde::{Deserialize, Serialize};
 

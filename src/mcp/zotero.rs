@@ -22,6 +22,8 @@
 //! - `coverage`: `coverage` action of `zotero_search`
 //! - `sqlite`: `zotero_sqlite_search`
 //! - `pdf`: `zotero_pdf`
+//!
+//! Main types: defined in sibling modules — see per-module docs.
 
 mod annotations;
 mod attachments;

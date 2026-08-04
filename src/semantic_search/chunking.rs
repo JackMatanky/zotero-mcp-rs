@@ -5,6 +5,9 @@
 //! itself exceeds `max_chars`, in which case it is split at sentence
 //! boundaries, then (if a single sentence still exceeds `max_chars`) at a
 //! hard character-count boundary on a UTF-8 char boundary.
+//!
+//! Main functions:
+//! - [`chunk_text`] - Split text into paragraph-bounded chunks
 
 /// Splits `text` into chunks of at most `max_chars` characters each,
 /// preferring paragraph (`"\n\n"`) boundaries, then sentence boundaries

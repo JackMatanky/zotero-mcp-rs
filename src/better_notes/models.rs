@@ -1,4 +1,15 @@
 //! Response shapes returned by the Better Notes bridge's HTTP endpoints.
+//!
+//! Main types:
+//! - [`TemplateName`] - Template name newtype
+//! - [`NoteExportFormat`] - Export format (Markdown or HTML)
+//! - [`NoteExportResponse`] - Export result payload
+//! - [`NoteItemResponse`] - Note item with metadata
+//! - [`TemplateResponse`] - Template listing response
+//! - [`RelationsResponse`] - Note relations container
+//! - [`NoteRelations`] - Bidirectional relation links
+//! - [`NoteRelationLink`] - Single relation link
+//! - [`NoteTreeResponse`] - Nested note tree structure
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -23,6 +34,7 @@ use crate::zotero::ItemKey;
 pub(crate) struct TemplateName(pub(crate) String);
 
 impl TemplateName {
+    /// Returns the template name as a string slice.
     pub(crate) fn as_str(&self) -> &str {
         &self.0
     }

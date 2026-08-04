@@ -4,6 +4,10 @@
 //! Wraps the [`pdf_extract`] crate to pull plain text out of a PDF file on
 //! disk (with optional page-range filtering) and [`lopdf`] to read its
 //! bookmark outline (table of contents).
+//!
+//! Main functions:
+//! - `extract_pdf_pages` - Extract text from PDF pages
+//! - `get_pdf_outline` - Read bookmark/table-of-contents outline
 
 use std::path::Path;
 
@@ -126,6 +130,7 @@ pub(crate) fn extract_pdf_outline(
         .collect())
 }
 
+/// A single entry in a PDF document outline (table of contents).
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub(crate) struct PdfOutlineEntry {
     pub(crate) level: usize,

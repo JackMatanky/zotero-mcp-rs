@@ -1,4 +1,8 @@
 //! MCP tool handlers for Zotero item metadata and metadata lookup.
+//!
+//! Main types:
+//! - [`MetadataFormat`] - Output format for item metadata responses (JSON or
+//!   `BibTeX`)
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -18,6 +22,7 @@ use crate::{
 #[derive(
     Copy, Clone, Debug, Default, Eq, PartialEq, Deserialize, JsonSchema,
 )]
+/// Output format for item metadata responses.
 #[serde(rename_all = "lowercase")]
 pub(in crate::mcp::zotero) enum MetadataFormat {
     /// Return Zotero item metadata as JSON.

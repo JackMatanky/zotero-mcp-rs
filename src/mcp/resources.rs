@@ -46,6 +46,8 @@ fn resource_template(
         .with_mime_type("application/json")
 }
 
+/// Builds a [`ResourceTemplate`](rmcp::model::ResourceTemplate) for a
+/// `zotero://` plain-text resource URI.
 fn text_resource_template(
     uri_template: &str,
     name: &str,
@@ -58,6 +60,7 @@ fn text_resource_template(
         .with_mime_type("text/plain")
 }
 
+/// Filters child items to only notes.
 fn note_children(children: Vec<ZoteroItem>) -> Vec<ZoteroItem> {
     children
         .into_iter()
@@ -93,6 +96,7 @@ impl ZoteroMcpServer {
         ])
     }
 
+    /// Lists MCP resource templates available for parameterized reads.
     pub(crate) fn list_resource_templates_impl()
     -> rmcp::model::ListResourceTemplatesResult {
         rmcp::model::ListResourceTemplatesResult::with_all_items(vec![
@@ -250,6 +254,8 @@ fn json_resource<T: Serialize>(
     ])
 }
 
+/// Wraps plain text in a
+/// [`ReadResourceResult`] for `uri`.
 fn text_resource(uri: &str, text: &str) -> rmcp::model::ReadResourceResult {
     ReadResourceResult::new(vec![
         ResourceContents::text(text.to_owned(), uri.to_owned())
@@ -257,6 +263,15 @@ fn text_resource(uri: &str, text: &str) -> rmcp::model::ReadResourceResult {
     ])
 }
 
+/// Reads a single Zotero item by key and returns its JSON as a resource.
+///
+/// Supports nested sub-resources: `children`, `notes`, `fulltext`,
+/// `relations`.
+///
+/// # Errors
+///
+/// Returns [`rmcp::ErrorData`] if the item key is invalid or the API request
+/// fails.
 async fn read_item_resource(
     client: &ZoteroClient<'_>,
     uri: &str,
@@ -296,6 +311,12 @@ async fn read_item_resource(
     .map_err(resource_error)
 }
 
+/// Reads a Zotero collection by key, optionally returning its items.
+///
+/// # Errors
+///
+/// Returns [`rmcp::ErrorData`] if the collection key is invalid or the API
+/// request fails.
 async fn read_collection_resource(
     client: &ZoteroClient<'_>,
     uri: &str,
@@ -334,10 +355,12 @@ async fn read_collection_resource(
         .map_err(resource_error)
 }
 
+/// Wraps an error into an [`rmcp::ErrorData`] for resource read failures.
 fn resource_error(error: impl std::fmt::Display) -> rmcp::ErrorData {
     rmcp::ErrorData::internal_error(error.to_string(), None)
 }
 
+/// Returns an [`rmcp::ErrorData`] for unrecognized resource URIs.
 fn unknown_resource(uri: &str) -> rmcp::ErrorData {
     rmcp::ErrorData::invalid_params(
         format!("Unknown resource URI: {uri}"),
