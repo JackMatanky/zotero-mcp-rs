@@ -15,6 +15,7 @@
 //! [`AppState::check_sqlite_access`](crate::state::AppState::check_sqlite_access).
 
 use std::{
+    collections::HashSet,
     env,
     path::{Path, PathBuf},
     time::Duration,
@@ -30,6 +31,9 @@ use crate::{errors::ZoteroMcpError, zotero::ItemKey};
 
 /// Maximum rows to scan before full-text results are filtered in Rust.
 const FULLTEXT_SCAN_CAP: usize = 2000;
+
+/// Maximum number of characters of a full-text snippet returned to clients.
+const SNIPPET_CHARS: usize = 400;
 
 /// Opens Zotero's local `SQLite` database in immutable read-only mode.
 #[derive(Clone, Debug)]
@@ -289,7 +293,7 @@ impl LocalZoteroDb {
                 creators: creators.unwrap_or_default(),
                 snippet: words
                     .as_deref()
-                    .map(|w| w.chars().take(400).collect())
+                    .map(|w| w.chars().take(SNIPPET_CHARS).collect())
                     .unwrap_or_default(),
             });
         }
@@ -313,7 +317,7 @@ impl LocalZoteroDb {
     ) -> Result<Vec<NoteAnnotationHit>, ZoteroMcpError> {
         let query_lc = query.to_lowercase();
         let pattern = format!("%{query}%");
-        let fetch_limit = limit.saturating_mul(5).max(limit).min(500);
+        let fetch_limit = limit.saturating_mul(5).min(500);
         let note_rows = sqlx::query(
             r"
             SELECT i.key, n.note, n.title,
@@ -504,13 +508,17 @@ fn read_string_pref(prefs: &Path, key: &str) -> Option<String> {
 /// Splits a search query into lowercased, punctuation-stripped, de-duplicated
 /// tokens for matching against Zotero's stored fulltext words.
 fn tokenize_query(query: &str) -> Vec<String> {
-    let mut seen = std::collections::HashSet::new();
-    query
-        .to_lowercase()
+    let lowercase = query.to_lowercase();
+    let mut seen = HashSet::new();
+    lowercase
         .split(|c: char| !c.is_alphanumeric())
-        .filter(|t| !t.is_empty())
-        .filter(|t| seen.insert(t.to_owned()))
-        .map(str::to_owned)
+        .filter_map(|token| {
+            if !token.is_empty() && seen.insert(token) {
+                Some(token.to_owned())
+            } else {
+                None
+            }
+        })
         .collect()
 }
 
