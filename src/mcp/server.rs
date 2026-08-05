@@ -83,7 +83,6 @@ impl ZoteroMcpServer {
         router.merge(Self::relations_router());
         router.merge(Self::better_bibtex_router());
         router.merge(Self::better_notes_router());
-        router.merge(Self::connector_router());
         router
     }
 }

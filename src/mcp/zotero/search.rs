@@ -34,6 +34,14 @@ use rmcp::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 
+/// Arguments for the connector-compatible `search` tool.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct ConnectorSearchArgs {
+    /// Search query string matched against title, creator, or metadata
+    /// fields.
+    pub(crate) query: String,
+}
+
 use super::tags::SearchByTagArgs;
 use crate::{
     ZoteroMcpServer,
@@ -162,6 +170,29 @@ impl ZoteroMcpServer {
             }
         }
     }
+
+    #[tool(
+        name = "search",
+        description = "Connector search tool - search Zotero items by query",
+        annotations(
+            title = "Search Zotero",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn connector_search(
+        &self,
+        Parameters(args): Parameters<ConnectorSearchArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_search_items_impl(SearchItemsArgs::for_connector(
+            args.query,
+        ))
+        .await
+    }
 }
 
 impl ZoteroMcpServer {
@@ -242,5 +273,42 @@ impl ZoteroMcpServer {
                 )
                 .await,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::{ZoteroMcpServer, mcp::zotero::fixtures::*};
+
+    mod connector_operations {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn connector_search_returns_matching_items() {
+            let item = json!({
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Quantum Physics Paper" }
+            });
+            let base = mock_server(vec![http_response(
+                "200 OK",
+                &json!([item]).to_string(),
+            )]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            let res = server
+                .connector_search(Parameters(ConnectorSearchArgs {
+                    query: "quantum".to_owned(),
+                }))
+                .await
+                .expect("search succeeded");
+
+            assert_eq!(res.is_error, Some(false));
+        }
     }
 }

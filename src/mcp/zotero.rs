@@ -58,9 +58,6 @@ mod sqlite;
 mod status;
 mod tags;
 
-pub(crate) use metadata::GetItemMetadataArgs;
-pub(crate) use search::SearchItemsArgs;
-
 #[cfg(test)]
 mod fixtures {
     use std::{

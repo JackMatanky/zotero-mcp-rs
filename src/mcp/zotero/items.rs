@@ -48,6 +48,13 @@ use crate::{
     zotero::{ItemKey, TrashAction, ZoteroClient},
 };
 
+/// Arguments for the connector-compatible `fetch` tool.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct ConnectorFetchArgs {
+    /// Zotero item key or item identifier to fetch.
+    pub(crate) id: String,
+}
+
 /// Arguments for the `recent` action of `zotero_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetRecentArgs {
@@ -223,6 +230,32 @@ impl ZoteroMcpServer {
                 self.zotero_import_pdf_impl(args).await
             }
         }
+    }
+
+    #[tool(
+        name = "fetch",
+        description = "Connector fetch tool - get Zotero item metadata by \
+                       item ID/key",
+        annotations(
+            title = "Fetch Zotero Item",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(crate) async fn connector_fetch(
+        &self,
+        Parameters(args): Parameters<ConnectorFetchArgs>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        self.zotero_get_item_metadata_impl(
+            crate::mcp::zotero::metadata::GetItemMetadataArgs::json(
+                args.id.into(),
+            ),
+        )
+        .await
     }
 }
 
@@ -532,6 +565,33 @@ mod tests {
 
             // Assert
             assert_eq!(res.is_error, Some(true));
+        }
+    }
+
+    mod connector_operations {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn connector_fetch_returns_item_metadata() {
+            let item = json!({
+                "key": "ITEM1",
+                "version": 1,
+                "data": { "key": "ITEM1", "itemType": "journalArticle", "title": "Quantum Physics Paper" }
+            });
+            let base =
+                mock_server(vec![http_response("200 OK", &item.to_string())]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            let res = server
+                .connector_fetch(Parameters(ConnectorFetchArgs {
+                    id: "ITEM1".to_owned(),
+                }))
+                .await
+                .expect("fetch succeeded");
+
+            assert_eq!(res.is_error, Some(false));
         }
     }
 }
