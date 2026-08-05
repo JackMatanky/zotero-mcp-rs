@@ -21,7 +21,6 @@
 //! - [`LocalZoteroDb`] - Read-only `zotero.sqlite` access
 
 mod annotations;
-mod attachments;
 mod client;
 mod collections;
 mod coverage;
