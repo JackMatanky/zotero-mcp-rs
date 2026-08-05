@@ -6,8 +6,22 @@
 //! bookmark outline (table of contents).
 //!
 //! Main functions:
-//! - `extract_pdf_pages` - Extract text from PDF pages
-//! - `get_pdf_outline` - Read bookmark/table-of-contents outline
+//! - [`extract_pdf_pages`] - Extract text from PDF pages
+//! - [`extract_pdf_outline`] - Read bookmark/table-of-contents outline
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use std::path::Path;
+//!
+//! use zotero_mcp_rs::pdf::extract_pdf_pages;
+//!
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let path = Path::new("/path/to/document.pdf");
+//! let text = extract_pdf_pages(path, Some(&[1, 2]), 50 * 1024 * 1024)?;
+//! # Ok(())
+//! # }
+//! ```
 
 use std::path::Path;
 
@@ -21,6 +35,11 @@ use crate::errors::ZoteroMcpError;
 /// is returned unmodified. An empty `page_numbers` slice returns an empty
 /// string.
 ///
+/// # Arguments
+///
+/// * `file_path` - Path to the PDF file on disk.
+/// * `page_numbers` - Optional 1-based page numbers to extract.
+/// * `max_pdf_bytes` - Maximum allowed PDF size in bytes.
 /// # Errors
 ///
 /// - [`NotFound`] if `file_path` does not exist
@@ -133,8 +152,11 @@ pub(crate) fn extract_pdf_outline(
 /// A single entry in a PDF document outline (table of contents).
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub(crate) struct PdfOutlineEntry {
+    /// 1-based nesting level of the outline entry (1 for top-level chapters).
     pub(crate) level: usize,
+    /// Display title of the section or bookmark.
     pub(crate) title: String,
+    /// 1-based page number where the outline entry points.
     pub(crate) page: usize,
 }
 

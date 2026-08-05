@@ -1,7 +1,31 @@
 //! MCP tool handlers and argument models for Zotero library search.
 //!
-//! Main types:
+//! Exposes the `zotero_search` MCP tool router, allowing clients to search
+//! items by full text, tag, citation key, or structured multi-condition
+//! queries.
+//!
+//! # Main Types
+//!
 //! - [`ZoteroSearchCommand`] - Grouped-router command for search actions
+//! - [`SearchItemsArgs`] - Arguments for full-text search across item fields
+//! - [`SearchByCitationKeyArgs`] - Arguments for searching items by citation
+//!   key
+//! - [`AdvancedSearchArgs`] - Arguments for structured multi-condition search
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use rmcp::handler::server::wrapper::Parameters;
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::mcp::zotero::search::{ZoteroSearchCommand, SearchItemsArgs};
+//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = Parameters(ZoteroSearchCommand::Items(SearchItemsArgs::for_connector(
+//!     "quantum computing".to_string(),
+//! )));
+//! let result = server.zotero_search(args).await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -28,12 +52,14 @@ pub(crate) struct SearchItemsArgs {
     query: String,
     /// Optional collection key ([`CollectionKey`]) to search within.
     collection_key: Option<CollectionKey>,
-    /// 0-based offset into the full result set (default: 0).
+    /// Zero-based offset into the full result set (default: 0).
     start: Option<usize>,
     /// Maximum number of items to return (default: 20).
     limit: Option<usize>,
 }
+
 impl SearchItemsArgs {
+    /// Constructs full-text search arguments with default offset and limit.
     pub(crate) fn for_connector(query: String) -> Self {
         Self {
             query,
@@ -50,19 +76,22 @@ pub(crate) struct SearchByCitationKeyArgs {
     /// Citation key ([`CitationKey`]) to match.
     citekey: CitationKey,
 }
+
 /// Arguments for the `advanced` action of `zotero_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AdvancedSearchArgs {
     /// List of search conditions ([`SearchCondition`]).
     conditions: Vec<SearchCondition>,
-    /// `"all"` (AND, default) or `"any"` (OR).
+    /// Match mode: `"all"` ([`JoinMode::All`], AND, default) or `"any"`
+    /// ([`JoinMode::Any`], OR).
     join_mode: Option<JoinMode>,
-    /// Sort field: `"dateAdded"`, `"dateModified"`, `"title"`, `"date"`, or
-    /// `"creator"`.
+    /// Sort field ([`SortField`]): `"dateAdded"`, `"dateModified"`, `"title"`,
+    /// `"date"`, or `"creator"`.
     sort_by: Option<SortField>,
-    /// Sort direction: `"asc"` or `"desc"` (default: `"asc"`).
+    /// Sort direction: `"asc"` or `"desc"` ([`SortDirection`], default:
+    /// `"asc"`).
     sort_direction: Option<SortDirection>,
-    /// 0-based offset into the full result set (default: 0).
+    /// Zero-based offset into the full result set (default: 0).
     start: Option<usize>,
     /// Maximum number of items to return (default: 20).
     limit: Option<usize>,
@@ -75,7 +104,7 @@ pub(crate) struct AdvancedSearchArgs {
 pub(crate) enum ZoteroSearchCommand {
     /// Full-text search across item fields.
     Items(SearchItemsArgs),
-    /// Find items by tag.
+    /// Find items by tag name.
     Tag(SearchByTagArgs),
     /// Find items by `BibTeX` citation key.
     CitationKey(SearchByCitationKeyArgs),
@@ -99,9 +128,15 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Dispatches search requests to the appropriate search handler.
+    ///
+    /// Accepts a [`Parameters<ZoteroSearchCommand>`] containing the specific
+    /// action and parameters, routing it to internal search handlers.
+    ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures.
+    /// Returns [`rmcp::ErrorData`] if the underlying tool handler fails or
+    /// returns an error.
     pub(crate) async fn zotero_search(
         &self,
         Parameters(args): Parameters<ZoteroSearchCommand>,
@@ -132,10 +167,14 @@ impl ZoteroMcpServer {
 impl ZoteroMcpServer {
     /// Handles Zotero item search tool calls.
     ///
+    /// Queries the Zotero API using the provided [`SearchItemsArgs`] parameters
+    /// and returns matching items as MCP JSON content.
+    ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// Returns [`rmcp::ErrorData`] if protocol-level failures occur. Backend
+    /// failures from [`ZoteroClient::search_items`] are formatted as MCP JSON
+    /// error responses.
     pub(crate) async fn zotero_search_items_impl(
         &self,
         args: SearchItemsArgs,
@@ -157,10 +196,14 @@ impl ZoteroMcpServer {
 
     /// Handles Zotero citation-key search tool calls.
     ///
+    /// Queries the Zotero API using the provided [`SearchByCitationKeyArgs`]
+    /// parameters and returns matching items as MCP JSON content.
+    ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// Returns [`rmcp::ErrorData`] if protocol-level failures occur. Backend
+    /// failures from [`ZoteroClient::search_by_citation_key`] are formatted as
+    /// MCP JSON error responses.
     async fn zotero_search_by_citation_key_impl(
         &self,
         args: SearchByCitationKeyArgs,
@@ -171,10 +214,15 @@ impl ZoteroMcpServer {
 
     /// Handles Zotero structured search tool calls.
     ///
+    /// Executes a multi-condition query against the Zotero API using
+    /// [`AdvancedSearchArgs`] and returns matching items as MCP JSON
+    /// content.
+    ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// Returns [`rmcp::ErrorData`] if protocol-level failures occur. Backend
+    /// failures from [`ZoteroClient::advanced_search`] are formatted as MCP
+    /// JSON error responses.
     async fn zotero_advanced_search_impl(
         &self,
         args: AdvancedSearchArgs,

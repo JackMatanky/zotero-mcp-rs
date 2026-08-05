@@ -1,7 +1,11 @@
-//! Bridge to the Better `BibTeX` plugin's JSON-RPC API.
+//! Bridge to the Better `BibTeX` Zotero plugin JSON-RPC API.
 //!
-//! Re-exports [`BetterBibtexClient`], used by every `better_bibtex_*` MCP tool.
-
+//! Provides [`BetterBibtexClient`] for issuing RPC requests to an active Better
+//! `BibTeX` extension running inside Zotero. Used by MCP tool handlers in
+//! `crate::mcp::better_bibtex` to search citation keys, export bibliographies,
+//! add auto-exports, and scan `LaTeX` `.aux` files.
+//!
+//! See [`BetterBibtexClient`] for example usage.
 mod client;
 mod models;
 

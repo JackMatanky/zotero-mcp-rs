@@ -1,12 +1,25 @@
-//! Async client for the Better `BibTeX` JSON-RPC API.
+//! Async HTTP client for the Better `BibTeX` Zotero plugin JSON-RPC 2.0 API.
 //!
-//! Every RPC call is routed through [`BetterBibtexClient::call_rpc`], which
-//! wraps the JSON-RPC request/response envelope and maps failures to
-//! [`ZoteroMcpError::BetterBibTeX`].
+//! Wraps JSON-RPC method dispatch, request/response serialization, error
+//! mapping, and security permission checks for all Better `BibTeX` operations.
+//! Used by MCP tool handlers in `crate::mcp::better_bibtex`.
 //!
 //! Main types:
-//! - [`BetterBibtexClient`] - JSON-RPC client scoped to a single tool call
-
+//! - [`BetterBibtexClient`] - JSON-RPC client borrowing [`AppState`]
+//!
+//! [`AppState`]: crate::state::AppState
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::better_bibtex::BetterBibtexClient;
+//! # use zotero_mcp_rs::state::AppState;
+//! # async fn example(state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
+//! let client = BetterBibtexClient::new(state);
+//! let search_results = client.search(&"author:smith".into()).await?;
+//! # Ok(())
+//! # }
+//! ```
 use std::path::Path;
 
 use serde::Serialize;
@@ -23,26 +36,28 @@ use crate::{
     zotero::{CitationKey, ItemKey},
 };
 
-/// Client for the Better `BibTeX` JSON-RPC API, scoped to a single tool call.
+/// Client for issuing JSON-RPC 2.0 requests to the Better `BibTeX` plugin,
+/// scoped to a single tool call.
 pub(crate) struct BetterBibtexClient<'a> {
     state: &'a AppState,
 }
 
 impl<'a> BetterBibtexClient<'a> {
-    /// Creates a Better `BibTeX` client borrowing shared `state`
-    /// ([`AppState`]).
+    /// Creates a new [`BetterBibtexClient`] borrowing the shared [`AppState`].
     pub(crate) fn new(state: &'a AppState) -> Self {
         Self {
             state,
         }
     }
 
-    /// Maps Zotero `item_keys` to their current Better `BibTeX` citation keys
-    /// through the plugin JSON-RPC API.
+    /// Maps Zotero `item_keys` to their current Better `BibTeX` citation keys.
+    ///
+    /// Issues an `item.citationkey` JSON-RPC request to retrieve citation keys
+    /// for the provided item keys.
     ///
     /// # Errors
     ///
-    /// - [`BetterBibTeX`] if the JSON-RPC call fails
+    /// - [`BetterBibTeX`]: if the JSON-RPC call fails or returns an RPC error
     ///
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn get_citekeys(
@@ -53,11 +68,16 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("item.citationkey", params).await
     }
 
-    /// Exports `citekeys` using `translator`.
+    /// Exports items identified by `citekeys` formatted with the specified
+    /// `translator`.
+    ///
+    /// Issues an `item.export` JSON-RPC request using translators such as
+    /// `Better BibTeX` or `Better BibLaTeX`.
     ///
     /// # Errors
     ///
-    /// - [`BetterBibTeX`] if the JSON-RPC call fails
+    /// - [`BetterBibTeX`]: if the JSON-RPC call fails or the translator is
+    ///   invalid
     ///
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn export_items(
@@ -69,15 +89,15 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("item.export", params).await
     }
 
-    /// Generates a formatted bibliography for `citekeys`.
+    /// Generates a formatted bibliography string for `citekeys`.
     ///
-    /// # Arguments
+    /// Issues an `item.bibliography` JSON-RPC request with optional `format`
+    /// output options.
     ///
-    /// * `citekeys` - Citation keys to include in the bibliography
-    /// * `format` - Optional Better `BibTeX` bibliography format object
     /// # Errors
     ///
-    /// - [`BetterBibTeX`] if the JSON-RPC call fails
+    /// - [`BetterBibTeX`]: if the JSON-RPC call fails or formatting options are
+    ///   rejected
     ///
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn bibliography(
@@ -92,11 +112,15 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("item.bibliography", params).await
     }
 
-    /// Runs a high-precision Better `BibTeX` search for `terms`.
+    /// Executes a high-precision Better `BibTeX` search for `terms`.
+    ///
+    /// Issues an `item.search` JSON-RPC request against the Zotero item
+    /// library.
     ///
     /// # Errors
     ///
-    /// - [`BetterBibTeX`] if the JSON-RPC call fails
+    /// - [`BetterBibTeX`]: if the JSON-RPC call fails or the search query is
+    ///   malformed
     ///
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn search(
@@ -107,12 +131,14 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("item.search", params).await
     }
 
-    /// Fetches Pandoc citeproc filter metadata for `citekeys`, as CSL JSON
-    /// when `as_csl` is `true`.
+    /// Fetches Pandoc citeproc filter metadata for `citekeys`.
+    ///
+    /// Issues an `item.pandoc_filter` JSON-RPC request. When `as_csl` is
+    /// `true`, returns the output in CSL JSON format.
     ///
     /// # Errors
     ///
-    /// - [`BetterBibTeX`] if the JSON-RPC call fails
+    /// - [`BetterBibTeX`]: if the JSON-RPC call fails
     ///
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn pandoc_filter(
@@ -126,14 +152,15 @@ impl<'a> BetterBibtexClient<'a> {
 
     /// Regenerates citation keys for `citekeys`.
     ///
-    /// Mutates the Zotero library; assumes the caller has already enforced
-    /// [`AppState::check_write_permission`], and re-checks it itself before
-    /// issuing the call.
+    /// Mutates keys in the Zotero library. Checks write permission via
+    /// [`AppState::check_write_permission`] before issuing the
+    /// `item.regenerate_key` RPC call.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`] if write operations are disabled
-    /// - [`BetterBibTeX`] if the JSON-RPC call fails
+    /// - [`PermissionDenied`]: if write operations are disabled in security
+    ///   settings
+    /// - [`BetterBibTeX`]: if the JSON-RPC call fails
     ///
     /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
@@ -148,21 +175,21 @@ impl<'a> BetterBibtexClient<'a> {
 
     /// Registers an auto-export job for a collection.
     ///
-    /// Mutates Better `BibTeX`'s export configuration; assumes the caller has
-    /// already enforced [`AppState::check_write_permission`], and re-checks it
-    /// itself before issuing the call.
-    ///
-    /// # Arguments
-    ///
-    /// * `request` - Auto-export collection, translator, output path, and
-    ///   optional display/replace settings
+    /// Mutates Better `BibTeX` export settings. Checks write permission via
+    /// [`AppState::check_write_permission`], ensures filepath features are
+    /// enabled, and validates output path permissions before issuing the
+    /// `autoexport.add` RPC call.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`] if write operations are disabled
-    /// - [`BetterBibTeX`] if the JSON-RPC call fails
+    /// - [`PermissionDenied`]: if write operations are disabled in security
+    ///   settings
+    /// - [`InputRejected`]: if filepath features are disabled or the export
+    ///   directory is disallowed
+    /// - [`BetterBibTeX`]: if the JSON-RPC call fails
     ///
     /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`InputRejected`]: ZoteroMcpError::InputRejected
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn autoexport_add(
         &self,
@@ -200,19 +227,24 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("autoexport.add", params).await
     }
 
-    /// Scans a `LaTeX` `.aux` file at `aux_path` and imports its cited
-    /// references into `collection`.
+    /// Scans a `LaTeX` `.aux` file at `aux_path` and imports cited references
+    /// into `collection`.
     ///
-    /// Mutates the Zotero library; assumes the caller has already enforced
-    /// [`AppState::check_write_permission`], and re-checks it itself before
-    /// issuing the call.
+    /// Mutates the Zotero library by importing missing items. Checks write
+    /// permission via [`AppState::check_write_permission`], ensures
+    /// filepath features are enabled, and validates the AUX filepath before
+    /// issuing the `collection.scanAUX` RPC call.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`] if write operations are disabled
-    /// - [`BetterBibTeX`] if the JSON-RPC call fails
+    /// - [`PermissionDenied`]: if write operations are disabled in security
+    ///   settings
+    /// - [`InputRejected`]: if filepath features are disabled or the AUX
+    ///   filepath is disallowed
+    /// - [`BetterBibTeX`]: if the JSON-RPC call fails
     ///
     /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`InputRejected`]: ZoteroMcpError::InputRejected
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     pub(crate) async fn scan_aux(
         &self,
@@ -238,13 +270,13 @@ impl<'a> BetterBibtexClient<'a> {
     }
 
     /// Issues a JSON-RPC 2.0 call to `method` with `params`, decoding the
-    /// result as `R`.
+    /// result payload as `R`.
     ///
     /// # Errors
     ///
-    /// - [`BetterBibTeX`] if the HTTP response is non-2xx, the RPC response
-    ///   carries an `error` object, or the result is `null`
-    /// - [`Network`] if the request fails at the transport level
+    /// - [`BetterBibTeX`]: if the HTTP response is non-2xx, RPC response
+    ///   carries an error object, or result is null
+    /// - [`Network`]: if the transport-level HTTP request fails
     ///
     /// [`BetterBibTeX`]: ZoteroMcpError::BetterBibTeX
     /// [`Network`]: ZoteroMcpError::Network

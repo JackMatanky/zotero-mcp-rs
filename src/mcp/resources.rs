@@ -1,7 +1,9 @@
 //! MCP resource and prompt handlers.
 //!
-//! This module implements handler logic for exposing Zotero library resources
-//! and prompt templates via MCP.
+//! This module implements handler logic for exposing Zotero library resources,
+//! resource templates, and prompt templates via Model Context Protocol (MCP).
+//! It is called by the MCP server handler in [`crate::mcp::server`] and
+//! dispatches data fetches to [`ZoteroClient`].
 //!
 //! Exposed resources:
 //! - `zotero://collections`: Returns all collection metadata in JSON format.
@@ -12,12 +14,34 @@
 //! Exposed resource templates:
 //! - `zotero://items/{item_key}`: Returns item data for a specific Zotero item.
 //! - `zotero://items/{item_key}/fulltext`: Returns indexed item full text.
+//! - `zotero://items/{item_key}/children`: Returns child items, notes,
+//!   attachments, and annotations.
+//! - `zotero://items/{item_key}/notes`: Returns child note items.
+//! - `zotero://items/{item_key}/relations`: Returns related items.
 //! - `zotero://collections/{collection_key}`: Returns collection metadata.
+//! - `zotero://collections/{collection_key}/items`: Returns items within a
+//!   collection.
 //!
 //! Exposed prompts:
 //! - `zotero_literature_review`: Generates a structured literature review
 //!   prompt for a collection.
-
+//!
+//! # Examples
+//!
+//! Reading an MCP resource through the server interface:
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::state::AppState;
+//! # async fn example() -> Result<(), rmcp::ErrorData> {
+//! let state = AppState::from_env();
+//! let server = ZoteroMcpServer {
+//!     state,
+//! };
+//! let result = server.read_resource_impl("zotero://collections").await?;
+//! # Ok(())
+//! # }
+//! ```
 use rmcp::model::{
     GetPromptResult, PromptMessage, ReadResourceResult, ResourceContents, Role,
 };
@@ -34,6 +58,13 @@ use crate::{
 ///
 /// MCP treats `name` as a logical identifier and `title` as UI copy, falling
 /// back to `name` only when `title` is absent.
+///
+/// # Arguments
+///
+/// * `uri_template` - URI template string (e.g. `zotero://items/{item_key}`).
+/// * `name` - Programmatic identifier for the resource.
+/// * `title` - Human-readable display title for UI elements.
+/// * `description` - Description explaining what the resource returns.
 fn resource_template(
     uri_template: &str,
     name: &str,
@@ -48,6 +79,16 @@ fn resource_template(
 
 /// Builds a [`ResourceTemplate`](rmcp::model::ResourceTemplate) for a
 /// `zotero://` plain-text resource URI.
+///
+/// Configures the resource template with a `text/plain` MIME type.
+///
+/// # Arguments
+///
+/// * `uri_template` - URI template string (e.g.
+///   `zotero://items/{item_key}/fulltext`).
+/// * `name` - Programmatic identifier for the resource.
+/// * `title` - Human-readable display title for UI elements.
+/// * `description` - Description explaining what the resource returns.
 fn text_resource_template(
     uri_template: &str,
     name: &str,
@@ -60,7 +101,10 @@ fn text_resource_template(
         .with_mime_type("text/plain")
 }
 
-/// Filters child items to only notes.
+/// Filters child items to only note items.
+///
+/// Takes a vector of child [`ZoteroItem`] objects and returns only those items
+/// whose `item_type` is [`ItemType::Note`].
 fn note_children(children: Vec<ZoteroItem>) -> Vec<ZoteroItem> {
     children
         .into_iter()
@@ -69,9 +113,11 @@ fn note_children(children: Vec<ZoteroItem>) -> Vec<ZoteroItem> {
 }
 
 impl ZoteroMcpServer {
-    /// Lists MCP resources exposed by the server as a [`ListResourcesResult`].
+    /// Lists MCP static resources exposed by the server as a
+    /// [`ListResourcesResult`](rmcp::model::ListResourcesResult).
     ///
-    /// [`ListResourcesResult`]: rmcp::model::ListResourcesResult
+    /// Returns resources for `zotero://collections`, `zotero://items/recent`,
+    /// and `zotero://tags`.
     pub(crate) fn list_resources_impl() -> rmcp::model::ListResourcesResult {
         let collections =
             rmcp::model::Resource::new("zotero://collections", "collections")
@@ -96,7 +142,12 @@ impl ZoteroMcpServer {
         ])
     }
 
-    /// Lists MCP resource templates available for parameterized reads.
+    /// Lists MCP resource templates available for parameterized reads as a
+    /// [`ListResourceTemplatesResult`](rmcp::model::ListResourceTemplatesResult).
+    ///
+    ///
+    /// Returns templates for item details, full text, children, notes,
+    /// relations, collection details, and collection items.
     pub(crate) fn list_resource_templates_impl()
     -> rmcp::model::ListResourceTemplatesResult {
         rmcp::model::ListResourceTemplatesResult::with_all_items(vec![
@@ -147,11 +198,36 @@ impl ZoteroMcpServer {
 
     /// Reads a single MCP resource identified by `uri`.
     ///
+    /// Routes request URIs to static resource handlers, item resource templates
+    /// (`read_item_resource`), or collection resource templates
+    /// (`read_collection_resource`).
+    ///
     /// # Errors
     ///
-    /// - [`ErrorData`] if `uri` is unrecognized or resource reading fails
+    /// Returns [`rmcp::ErrorData`] under the following conditions:
     ///
-    /// [`ErrorData`]: rmcp::ErrorData
+    /// * `zotero://collections` - Fails if fetching collections from Zotero API
+    ///   fails.
+    /// * `zotero://tags` - Fails if fetching library tags from Zotero API
+    ///   fails.
+    /// * `zotero://items/recent` - Fails if fetching recent items from Zotero
+    ///   API fails.
+    /// * `zotero://items/{item_key}` - Fails if item key is missing, empty, or
+    ///   fetching item fails.
+    /// * `zotero://items/{item_key}/children` - Fails if item key is invalid or
+    ///   fetching child items fails.
+    /// * `zotero://items/{item_key}/notes` - Fails if item key is invalid or
+    ///   fetching child items fails.
+    /// * `zotero://items/{item_key}/fulltext` - Fails if item key is invalid or
+    ///   fetching indexed fulltext fails.
+    /// * `zotero://items/{item_key}/relations` - Fails if item key is invalid
+    ///   or fetching related items fails.
+    /// * `zotero://collections/{collection_key}` - Fails if collection key is
+    ///   invalid, collection is not found, or API fetch fails.
+    /// * `zotero://collections/{collection_key}/items` - Fails if collection
+    ///   key is empty or API fetch for collection items fails.
+    /// * Any unrecognized URI pattern - Returns invalid parameters error
+    ///   ([`unknown_resource`]).
     pub(crate) async fn read_resource_impl(
         &self,
         uri: &str,
@@ -187,9 +263,11 @@ impl ZoteroMcpServer {
         Err(unknown_resource(uri))
     }
 
-    /// Lists MCP prompts exposed by the server as a [`ListPromptsResult`].
+    /// Lists MCP prompts exposed by the server as a
+    /// [`ListPromptsResult`](rmcp::model::ListPromptsResult).
     ///
-    /// [`ListPromptsResult`]: rmcp::model::ListPromptsResult
+    /// Exposes the `zotero_literature_review` prompt template requiring a
+    /// `collection_key` argument.
     pub(crate) fn list_prompts_impl() -> rmcp::model::ListPromptsResult {
         let argument = rmcp::model::PromptArgument::new("collection_key")
             .with_title("Collection Key")
@@ -206,11 +284,13 @@ impl ZoteroMcpServer {
 
     /// Builds an MCP prompt response for `name` using `arguments`.
     ///
+    /// Constructs prompt messages for supported prompt templates (such as
+    /// `zotero_literature_review`).
+    ///
     /// # Errors
     ///
-    /// - [`ErrorData`] if `name` is not a recognized prompt
-    ///
-    /// [`ErrorData`]: rmcp::ErrorData
+    /// Returns [`rmcp::ErrorData`] with an invalid parameters error if `name`
+    /// is not a recognized prompt template identifier.
     pub(crate) fn get_prompt_impl(
         name: &str,
         arguments: Option<&serde_json::Map<String, serde_json::Value>>,
@@ -237,10 +317,11 @@ impl ZoteroMcpServer {
     }
 }
 
-/// Formats `value` as pretty JSON and constructs a [`ReadResourceResult`] for
-/// `uri`.
+/// Formats `value` as pretty-printed JSON and constructs a
+/// [`ReadResourceResult`] for `uri`.
 ///
-/// [`ReadResourceResult`]: rmcp::model::ReadResourceResult
+/// Encapsulates JSON serialization and creates a `ResourceContents` text
+/// payload with `application/json` MIME type.
 fn json_resource<T: Serialize>(
     uri: &str,
     value: &T,
@@ -256,6 +337,8 @@ fn json_resource<T: Serialize>(
 
 /// Wraps plain text in a
 /// [`ReadResourceResult`] for `uri`.
+///
+/// Creates a `ResourceContents` text payload with `text/plain` MIME type.
 fn text_resource(uri: &str, text: &str) -> rmcp::model::ReadResourceResult {
     ReadResourceResult::new(vec![
         ResourceContents::text(text.to_owned(), uri.to_owned())
@@ -263,15 +346,33 @@ fn text_resource(uri: &str, text: &str) -> rmcp::model::ReadResourceResult {
     ])
 }
 
-/// Reads a single Zotero item by key and returns its JSON as a resource.
+/// Reads a single Zotero item resource by key and returns its payload as a
+/// [`ReadResourceResult`].
 ///
-/// Supports nested sub-resources: `children`, `notes`, `fulltext`,
+/// Supports nested sub-resource selectors: `children`, `notes`, `fulltext`, and
 /// `relations`.
+///
+/// # Arguments
+///
+/// * `client` - Zotero API client reference.
+/// * `uri` - Original resource URI requested.
+/// * `rest` - Sub-path after `zotero://items/`.
 ///
 /// # Errors
 ///
-/// Returns [`rmcp::ErrorData`] if the item key is invalid or the API request
-/// fails.
+/// Returns [`rmcp::ErrorData`] under the following conditions:
+///
+/// * `zotero://items/{item_key}` - Fails if item key is missing, empty, or
+///   fetching item fails.
+/// * `zotero://items/{item_key}/children` - Fails if fetching child items
+///   fails.
+/// * `zotero://items/{item_key}/notes` - Fails if fetching child items fails.
+/// * `zotero://items/{item_key}/fulltext` - Fails if fetching indexed fulltext
+///   fails.
+/// * `zotero://items/{item_key}/relations` - Fails if fetching related items
+///   fails.
+/// * Unknown sub-path or extra path segments - Returns invalid parameters error
+///   ([`unknown_resource`]).
 async fn read_item_resource(
     client: &ZoteroClient<'_>,
     uri: &str,
@@ -311,12 +412,29 @@ async fn read_item_resource(
     .map_err(resource_error)
 }
 
-/// Reads a Zotero collection by key, optionally returning its items.
+/// Reads a Zotero collection resource by key, returning collection metadata or
+/// collection items.
+///
+/// Parses `rest` to route between single collection metadata
+/// (`zotero://collections/{collection_key}`) and collection item lists
+/// (`zotero://collections/{collection_key}/items`).
+///
+/// # Arguments
+///
+/// * `client` - Zotero API client reference.
+/// * `uri` - Original resource URI requested.
+/// * `rest` - Sub-path after `zotero://collections/`.
 ///
 /// # Errors
 ///
-/// Returns [`rmcp::ErrorData`] if the collection key is invalid or the API
-/// request fails.
+/// Returns [`rmcp::ErrorData`] under the following conditions:
+///
+/// * `zotero://collections/{collection_key}` - Fails if collection key is
+///   invalid, collection is not found, or API fetch fails.
+/// * `zotero://collections/{collection_key}/items` - Fails if collection key is
+///   empty or API fetch for collection items fails.
+/// * Malformed sub-path or extra path segments - Returns invalid parameters
+///   error ([`unknown_resource`]).
 async fn read_collection_resource(
     client: &ZoteroClient<'_>,
     uri: &str,
@@ -355,19 +473,20 @@ async fn read_collection_resource(
         .map_err(resource_error)
 }
 
-/// Wraps an error into an [`rmcp::ErrorData`] for resource read failures.
+/// Wraps an error into an [`rmcp::ErrorData`] internal error for resource read
+/// failures.
 fn resource_error(error: impl std::fmt::Display) -> rmcp::ErrorData {
     rmcp::ErrorData::internal_error(error.to_string(), None)
 }
 
-/// Returns an [`rmcp::ErrorData`] for unrecognized resource URIs.
+/// Returns an [`rmcp::ErrorData`] invalid parameters error for unrecognized
+/// resource URIs.
 fn unknown_resource(uri: &str) -> rmcp::ErrorData {
     rmcp::ErrorData::invalid_params(
         format!("Unknown resource URI: {uri}"),
         None,
     )
 }
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;

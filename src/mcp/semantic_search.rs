@@ -1,12 +1,29 @@
 //! MCP tool handler and argument models for local semantic search.
 //!
 //! Covers the `zotero_semantic_search` grouped-router actions (gated behind
-//! `ZOTERO_SEMANTIC_SEARCH=1`): search, index, and status.
+//! `ZOTERO_SEMANTIC_SEARCH=1`), providing vector embedding generation, chunk
+//! indexing, and similarity search over Zotero item content.
 //!
-//! Main types:
-//! - [`ZoteroSemanticSearchCommand`] - Grouped-router command for semantic
-//!   search
-
+//! # Main Types
+//!
+//! - [`ZoteroSemanticSearchCommand`]: Grouped-router command for semantic
+//!   search actions.
+//! - [`SemanticSearchArgs`]: Arguments for natural-language semantic similarity
+//!   search.
+//! - [`SemanticIndexArgs`]: Arguments for re-embedding and indexing library
+//!   items.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let state = AppState::from_env();
+//! let server = ZoteroMcpServer::new(state);
+//! # Ok(())
+//! # }
+//! ```
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
     tool_router,
@@ -31,7 +48,7 @@ pub(crate) struct SemanticSearchArgs {
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SemanticIndexArgs {
     /// Re-index every item regardless of stored `dateModified` (default:
-    /// false — only changed/new items are re-embedded).
+    /// false; only changed or new items are re-embedded).
     force: Option<bool>,
 }
 

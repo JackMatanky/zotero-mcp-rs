@@ -1,11 +1,33 @@
 //! MCP tool handlers and argument models for Zotero tag administration.
 //!
-//! Covers `zotero_tags` / `zotero_tags_write` grouped-router actions: tag
-//! listing, batch add/remove across items, renaming, and deletion.
+//! Exposes the `zotero_tags` and `zotero_tags_write` MCP tool routers. These
+//! handlers enable reading, searching, batch updating, renaming, and deleting
+//! tags across a Zotero library.
 //!
-//! Main types:
+//! # Main Types
+//!
 //! - [`ZoteroTagsCommand`] - Grouped-router command for read-only tag actions
 //! - [`ZoteroTagsWriteCommand`] - Grouped-router command for write tag actions
+//! - [`ListTagsArgs`] - Arguments for listing library tags
+//! - [`SearchByTagArgs`] - Arguments for searching items by tag
+//! - [`BatchUpdateTagsArgs`] - Arguments for batch tag additions and removals
+//! - [`RenameTagArgs`] - Arguments for library-wide tag renaming
+//! - [`DeleteTagsArgs`] - Arguments for deleting tags from a library
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use rmcp::handler::server::wrapper::Parameters;
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::mcp::zotero::tags::{ZoteroTagsCommand, ListTagsArgs};
+//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = Parameters(ZoteroTagsCommand::List(ListTagsArgs {
+//!     limit: Some(50),
+//! }));
+//! let result = server.zotero_tags(args).await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -99,6 +121,11 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Dispatches read-only tag tool calls.
+    ///
+    /// Accepts a [`Parameters<ZoteroTagsCommand>`] containing the specific
+    /// action and parameters, routing it to internal tag read handlers.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
@@ -128,6 +155,11 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Dispatches tag modification and deletion tool calls.
+    ///
+    /// Accepts a [`Parameters<ZoteroTagsWriteCommand>`] containing the specific
+    /// action and parameters, routing it to internal tag write handlers.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
@@ -152,10 +184,14 @@ impl ZoteroMcpServer {
 impl ZoteroMcpServer {
     /// Handles Zotero tag listing tool calls.
     ///
+    /// Queries the Zotero API using [`ListTagsArgs`] parameters and returns all
+    /// tags in the library as MCP JSON content.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// failures from [`ZoteroClient::list_tags`] are returned as MCP error
+    /// content.
     async fn zotero_list_tags_impl(
         &self,
         args: ListTagsArgs,
@@ -167,10 +203,14 @@ impl ZoteroMcpServer {
 
     /// Handles Zotero tag search tool calls.
     ///
+    /// Queries the Zotero API using [`SearchByTagArgs`] parameters and returns
+    /// matching items for the specified tag as MCP JSON content.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// failures from [`ZoteroClient::search_by_tag`] are returned as MCP error
+    /// content.
     pub(crate) async fn zotero_search_by_tag_impl(
         &self,
         args: SearchByTagArgs,
@@ -182,10 +222,14 @@ impl ZoteroMcpServer {
 
     /// Handles Zotero batch tag update tool calls.
     ///
+    /// Updates tags across multiple items using [`BatchUpdateTagsArgs`]
+    /// parameters.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// failures from [`ZoteroClient::batch_update_tags`] are returned as MCP
+    /// error content.
     async fn zotero_batch_update_tags_impl(
         &self,
         args: BatchUpdateTagsArgs,
@@ -203,10 +247,13 @@ impl ZoteroMcpServer {
 
     /// Handles Zotero tag rename tool calls.
     ///
+    /// Renames a tag library-wide using [`RenameTagArgs`] parameters.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// failures from [`ZoteroClient::rename_tag`] are returned as MCP error
+    /// content.
     async fn zotero_rename_tag_impl(
         &self,
         args: RenameTagArgs,
@@ -224,10 +271,14 @@ impl ZoteroMcpServer {
 
     /// Handles Zotero tag deletion tool calls.
     ///
+    /// Deletes specified tags from the library using [`DeleteTagsArgs`]
+    /// parameters.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
-    /// failures are returned as MCP error content.
+    /// failures from [`ZoteroClient::delete_tags`] are returned as MCP error
+    /// content.
     async fn zotero_delete_tags_impl(
         &self,
         args: DeleteTagsArgs,

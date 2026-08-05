@@ -1,9 +1,13 @@
-//! Zotero Local API JSON objects.
+//! Zotero Local API JSON objects and payload data structures.
 //!
-//! Contains item, collection, creator, tag, and status payload shapes returned
-//! by Zotero.
+//! Defines serde deserialization shapes for Zotero items, collections,
+//! creators, tags, annotations, and local API availability status returned by
+//! `/users/0` HTTP endpoints. These types form the core data layer used across
+//! [`crate::zotero`] client methods and higher-level [`crate::mcp`] tool
+//! handlers.
 //!
-//! Main types:
+//! # Main Types
+//!
 //! - [`ZoteroItem`] - A single library item with metadata envelope
 //! - [`ZoteroItemData`] - Bibliographic, attachment, note, and annotation
 //!   fields
@@ -68,7 +72,7 @@ pub(crate) struct ZoteroItemData {
     pub(crate) doi: Option<String>,
     /// Zotero's native citation key field.
     ///
-    /// Zotero 9 exposes this as `itemFields.citationKey`, and quicksearch can
+    /// Zotero 9 exposes this as `itemFields.citationKey`, and quick search can
     /// search it server-side. This field takes precedence over any
     /// `Citation Key: ...` line Better `BibTeX` may write to
     /// [`ZoteroItemData::extra`].

@@ -1,15 +1,31 @@
 //! Tag operations for the Zotero Local HTTP API.
 //!
-//! Adds [`ZoteroClient`] methods for listing library tags, updating tags across
-//! items, renaming tags library-wide, and deleting tags.
+//! Provides methods on [`ZoteroClient`] for listing library tags, updating tags
+//! across items, renaming tags library-wide, and deleting tags from
+//! `/users/0/tags`. This module is called by tag MCP tool handlers in
+//! `crate::mcp::zotero`.
 //!
-//! # Key operations
+//! # Key Operations
 //!
 //! - [`ZoteroClient::list_tags`]: list library-wide tag names.
 //! - [`ZoteroClient::batch_update_tags`]: add or remove tags across items.
 //! - [`ZoteroClient::rename_tag`] and [`ZoteroClient::delete_tags`]: bulk tag
 //!   mutation and cleanup.
-
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::errors::ZoteroMcpError;
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::ZoteroClient;
+//! # async fn example() -> Result<(), ZoteroMcpError> {
+//! let state = AppState::from_env();
+//! let client = ZoteroClient::new(&state);
+//! let tags = client.list_tags(50).await?;
+//! println!("Found {} tags", tags.len());
+//! # Ok(())
+//! # }
+//! ```
 use std::collections::BTreeSet;
 
 use crate::{
@@ -137,7 +153,14 @@ impl ZoteroClient<'_> {
     }
 }
 
-/// Computes the tag list after applying additions and removals.
+/// Computes the updated tag array for an item after applying additions and
+/// removals.
+///
+/// # Arguments
+///
+/// * `existing` - Current tag objects attached to the item
+/// * `add` - Tag names to attach to the item
+/// * `remove` - Tag names to strip from the item
 pub(crate) fn diff_tags(
     existing: Vec<ZoteroTag>,
     add: &[TagName],

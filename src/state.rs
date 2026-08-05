@@ -5,6 +5,15 @@
 //! operation checks before touching the Zotero library. This module also
 //! provides [`AppState::send_with_retry`], the single retry policy used by
 //! all three backend clients.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use zotero_mcp_rs::state::AppState;
+//!
+//! let state = AppState::from_env();
+//! assert!(!state.zotero_api_url.is_empty());
+//! ```
 
 use std::{
     env,
@@ -30,11 +39,6 @@ const RETRY_MAX_ATTEMPTS: u32 = 3;
 const RETRY_BASE_DELAY: Duration = Duration::from_millis(200);
 const RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
 
-/// Shared configuration and HTTP client for the Zotero, Better `BibTeX`, and
-/// Better Notes backends.
-///
-/// Constructed once at startup via [`AppState::from_env`] and passed by
-/// reference to every backend client for the lifetime of the server.
 /// Cached handle to a Zotero `SQLite` database for a single library.
 #[derive(Clone, Debug)]
 pub(crate) struct CachedLocalZoteroDb {
@@ -42,6 +46,11 @@ pub(crate) struct CachedLocalZoteroDb {
     db: LocalZoteroDb,
 }
 
+/// Shared configuration and HTTP client for the Zotero, Better `BibTeX`, and
+/// Better Notes backends.
+///
+/// Constructed once at startup via [`AppState::from_env`] and passed by
+/// reference to every backend client for the lifetime of the server.
 #[derive(Clone, Debug)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -94,15 +103,16 @@ impl AppState {
     /// `CROSSREF_URL`, `SEMANTIC_SCHOLAR_URL`, and `OPEN_LIBRARY_URL` for the
     /// backend URLs (defaulting to standard local Zotero plugin ports or
     /// public endpoints when unset), and `ZOTERO_WRITE_ENABLED` (`"1"` or
-    /// `"true"`, case-insensitive) to opt into write operations, defaulting to
-    /// read-only. `ZOTERO_SQLITE_ACCESS` (`"1"` or `"true"`,
-    /// case-insensitive) likewise gates direct reads of the local Zotero
-    /// `SQLite` database, defaulting to disabled. `ZOTERO_DB_PATH` optionally
-    /// points directly to `zotero.sqlite` when `SQLite` access is enabled.
+    /// `"true"`, case-insensitive) to opt into write operations (read-only by
+    /// default). `ZOTERO_SQLITE_ACCESS` (`"1"` or `"true"`, case-insensitive)
+    /// likewise gates direct reads of the local Zotero `SQLite` database
+    /// (disabled by default). `ZOTERO_DB_PATH` optionally points directly to
+    /// `zotero.sqlite` when `SQLite` access is enabled.
     /// `ZOTERO_SEMANTIC_SEARCH` (`"1"` or `"true"`, case-insensitive)
-    /// likewise gates local semantic-search indexing/querying, defaulting to
-    /// disabled. `ZOTERO_SEMANTIC_DB_PATH` optionally points directly to the
+    /// likewise gates local semantic-search indexing/querying (disabled by
+    /// default). `ZOTERO_SEMANTIC_DB_PATH` optionally points directly to the
     /// semantic search index `SQLite` file when enabled.
+    ///
     /// Returns the constructed [`AppState`].
     pub(crate) fn from_env() -> Self {
         let client = Client::builder()
@@ -327,11 +337,11 @@ impl AppState {
         Ok(Arc::clone(provider))
     }
 
-    /// Checks if direct file path access is enabled by security policy.
+    /// Checks if direct filepath access is enabled by security policy.
     ///
     /// # Errors
     ///
-    /// - [`InputRejected`] if direct file path access is disabled
+    /// - [`InputRejected`] if direct filepath access is disabled
     ///
     /// [`InputRejected`]: ZoteroMcpError::InputRejected
     pub(crate) fn check_direct_file_paths_enabled(
@@ -340,8 +350,14 @@ impl AppState {
         self.security.check_direct_file_paths_enabled()
     }
 
-    /// Validates that an existing `path` falls under one of the allowed
+    /// Validates that a path exists and falls under one of the allowed
     /// `roots`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Target path to validate.
+    /// * `roots` - Iterator of allowed parent root directories.
+    /// * `purpose` - Human-readable label for error reporting.
     ///
     /// # Errors
     ///
@@ -363,6 +379,12 @@ impl AppState {
     }
 
     /// Validates that an output `path` target directory is allowed for writes.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Output target file path.
+    /// * `roots` - Slice of allowed export/output root directories.
+    /// * `purpose` - Human-readable label for error reporting.
     ///
     /// # Errors
     ///
@@ -632,7 +654,7 @@ mod tests {
 
         #[test]
         fn permits_when_enabled() {
-            // Arrange: fixture defaults to disabled; flip the gate on.
+            // Arrange: fixture is disabled by default; flip the gate on.
             let mut state = test_state(false);
             state.sqlite_access = true;
 

@@ -1,11 +1,28 @@
 //! Core item lifecycle operations for the Zotero Local HTTP API.
 //!
-//! Adds [`ZoteroClient`] methods for item reads, metadata-created item writes,
-//! field updates, trash/restore, and deletion.
+//! Provides [`ZoteroClient`] methods for reading, creating, updating, deleting,
+//! and moving library items into or out of the trash. Called by item management
+//! tool handlers in `crate::mcp::zotero::items`.
 //!
-//! Main types:
-//! - [`TrashAction`] - Requested trash state transition (`MoveToTrash` or
-//!   `Restore`)
+//! # Main Types
+//!
+//! - [`TrashAction`]: Requested trash state transition (`MoveToTrash` or
+//!   `Restore`).
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::client::ZoteroClient;
+//! # use zotero_mcp_rs::zotero::ItemKey;
+//! # async fn example(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
+//! let client = ZoteroClient::new(&state);
+//! let item_key = ItemKey::from("ABCD1234");
+//! let item = client.get_item(&item_key).await?;
+//! println!("Item key: {}", item.key);
+//! # Ok(())
+//! # }
+//! ```
 
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -15,10 +32,12 @@ use crate::{
     zotero::{ItemKey, ZoteroItem, client::ZoteroClient, metadata::ItemDraft},
 };
 
-/// Requested trash state transition for an item.
+/// Requested trash state transition for a library item.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub(crate) enum TrashAction {
+    /// Move the item into the trash.
     MoveToTrash,
+    /// Restore the item from the trash back to the library.
     Restore,
 }
 
@@ -36,9 +55,10 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    ///   code.
+    /// - [`ZoteroMcpError::Network`] if the request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded.
     pub(crate) async fn get_recent_items(
         &self,
         limit: usize,
@@ -58,9 +78,10 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if a response cannot be decoded
+    ///   code.
+    /// - [`ZoteroMcpError::Network`] if the request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if a response body cannot be decoded.
     pub(crate) async fn get_all_items(
         &self,
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
@@ -75,11 +96,12 @@ impl ZoteroClient<'_> {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::NotFound`] if the item does not exist
+    /// - [`ZoteroMcpError::NotFound`] if the item does not exist.
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    ///   code.
+    /// - [`ZoteroMcpError::Network`] if the request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded.
     pub(crate) async fn get_item(
         &self,
         item_key: &ItemKey,
@@ -100,9 +122,10 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    ///   code.
+    /// - [`ZoteroMcpError::Network`] if the request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded.
     pub(crate) async fn get_unfiled_items(
         &self,
         limit: usize,
@@ -123,9 +146,10 @@ impl ZoteroClient<'_> {
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    ///   code.
+    /// - [`ZoteroMcpError::Network`] if the request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded.
     pub(crate) async fn get_item_children(
         &self,
         item_key: &ItemKey,
@@ -142,11 +166,12 @@ impl ZoteroClient<'_> {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::PermissionDenied`] if write access is disabled.
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    ///   code.
+    /// - [`ZoteroMcpError::Network`] if the request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded.
     pub(crate) async fn update_item(
         &self,
         item_key: &ItemKey,
@@ -170,12 +195,13 @@ impl ZoteroClient<'_> {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::NotFound`] if the item does not exist
+    /// - [`ZoteroMcpError::PermissionDenied`] if write access is disabled.
+    /// - [`ZoteroMcpError::NotFound`] if the item does not exist.
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    ///   code.
+    /// - [`ZoteroMcpError::Network`] if the request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded.
     pub(crate) async fn delete_item(
         &self,
         item_key: &ItemKey,
@@ -187,16 +213,17 @@ impl ZoteroClient<'_> {
         self.delete(&url, item.version).await
     }
 
-    /// Sets the item's trash state for `item_key`.
+    /// Sets the item's trash state for `item_key` according to `action`.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::NotFound`] if the item does not exist
+    /// - [`ZoteroMcpError::PermissionDenied`] if write access is disabled.
+    /// - [`ZoteroMcpError::NotFound`] if the item does not exist.
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    ///   code.
+    /// - [`ZoteroMcpError::Network`] if the request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded.
     pub(crate) async fn set_item_deleted(
         &self,
         item_key: &ItemKey,
@@ -216,11 +243,12 @@ impl ZoteroClient<'_> {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::PermissionDenied`] if write access is disabled.
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    ///   code.
+    /// - [`ZoteroMcpError::Network`] if the request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded.
     pub(crate) async fn create_item_from_metadata(
         &self,
         draft: ItemDraft,

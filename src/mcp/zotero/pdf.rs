@@ -1,9 +1,37 @@
 //! MCP tool handlers and argument models for Zotero PDF attachment access.
 //!
-//! Covers `zotero_pdf` grouped-router actions: attachment path lookup,
-//! page-range text extraction, and outline (table of contents) extraction.
-//! Delegates path resolution and security enforcement to
-//! [`crate::mcp::pdf`].
+//! Handles the `zotero_pdf` grouped-router tool calls for finding PDF file
+//! paths, extracting text from page ranges, and retrieving PDF outlines (table
+//! of contents). Converts incoming MCP tool parameters into calls on
+//! [`ZoteroClient`] and delegates path resolution, canonicalization, and
+//! security checks to [`crate::mcp::pdf`].
+//!
+//! # Main Types
+//!
+//! - [`ZoteroPdfCommand`]: Grouped-router command for PDF actions (`Path`,
+//!   `ReadPages`, `Outline`).
+//! - [`GetPdfPathArgs`]: Arguments for discovering the local file path of a PDF
+//!   attachment.
+//! - [`ReadPdfPagesArgs`]: Arguments for extracting text from specific PDF
+//!   pages.
+//! - [`GetPdfOutlineArgs`]: Arguments for extracting the table of contents /
+//!   outline of a PDF.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use rmcp::handler::server::wrapper::Parameters;
+//! # use zotero_mcp_rs::{ZoteroMcpServer, state::AppState};
+//! # use zotero_mcp_rs::mcp::zotero::pdf::{ZoteroPdfCommand, GetPdfPathArgs};
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let server = ZoteroMcpServer::new(AppState::from_env());
+//! let args = ZoteroPdfCommand::Path(GetPdfPathArgs {
+//!     item_key: "ITEM0001".into(),
+//! });
+//! let result = server.zotero_pdf(Parameters(args)).await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use std::path::{Path, PathBuf};
 
@@ -79,6 +107,11 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Dispatches PDF tool commands to internal handlers.
+    ///
+    /// Receives parsed `args` wrapped in [`Parameters`], routing `path`,
+    /// `read_pages`, or `outline` actions.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
@@ -101,7 +134,8 @@ impl ZoteroMcpServer {
 }
 
 impl ZoteroMcpServer {
-    /// Handles Zotero PDF path discovery tool calls.
+    /// Handles Zotero PDF path discovery tool calls via
+    /// [`ZoteroClient::get_item`] and [`ZoteroClient::get_item_children`].
     ///
     /// # Errors
     ///
@@ -198,7 +232,7 @@ impl ZoteroMcpServer {
         }
     }
 
-    /// Handles PDF page extraction tool calls.
+    /// Handles PDF page extraction tool calls via [`extract_pdf_pages`].
     ///
     /// # Errors
     ///
@@ -221,7 +255,7 @@ impl ZoteroMcpServer {
         )))
     }
 
-    /// Handles PDF outline extraction tool calls.
+    /// Handles PDF outline extraction tool calls via [`extract_pdf_outline`].
     ///
     /// # Errors
     ///

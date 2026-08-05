@@ -1,25 +1,37 @@
 //! Model Context Protocol (MCP) server integration and tool handlers.
 //!
-//! This module implements the MCP server interface ([`ZoteroMcpServer`])
+//! This module implements the MCP server interface ([`ZoteroMcpServer`]),
 //! exposing Zotero capabilities to AI models through standard MCP tools,
-//! resources, and prompts.
+//! resources, and prompts. It routes incoming JSON-RPC requests across
+//! domain-specific tool routers and manages response formatting.
 //!
 //! # Submodules
 //!
-//! - `better_bibtex`: Tools for Better `BibTeX` integration (citekeys,
+//! - [`better_bibtex`]: Tools for Better `BibTeX` integration (citekeys,
 //!   bibliographies, search).
-//! - `better_notes`: Tools for Better Notes plugin integration (export, import,
-//!   templates, trees).
-//! - `catalog`: Tool/resource/prompt capability catalog and discovery.
-//! - `connector_tools`: High-level `search` and `fetch` compatibility tools.
-//! - `pdf`: PDF path resolution and security policy enforcement.
-//! - `resources`: Resource and prompt definitions (`zotero://...`).
-//! - `semantic_search`: Local embedding index/search
+//! - [`better_notes`]: Tools for Better Notes plugin integration (export,
+//!   import, templates, trees).
+//! - [`catalog`]: Tool, resource, and prompt capability catalog and discovery.
+//! - [`connector_tools`]: High-level `search` and `fetch` compatibility tools.
+//! - [`pdf`]: PDF path resolution and security policy enforcement.
+//! - [`resources`]: Resource and prompt definitions (`zotero://...`).
+//! - [`semantic_search`]: Local embedding index and search
 //!   (`zotero_semantic_search`).
-//! - `server`: Main server struct definition and tool routing logic.
-//! - `zotero`: Core Zotero Local API tools (read, write, collections, tags,
+//! - [`server`]: Main server struct definition and tool routing logic.
+//! - [`zotero`]: Core Zotero Local API tools (read, write, collections, tags,
 //!   annotations).
-
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let state = AppState::from_env();
+//! let server = ZoteroMcpServer::new(state);
+//! # Ok(())
+//! # }
+//! ```
 mod better_bibtex;
 mod better_notes;
 mod catalog;

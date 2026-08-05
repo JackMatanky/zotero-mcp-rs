@@ -1,9 +1,27 @@
 //! Zotero Local API full-text item content operations.
 //!
-//! This uses `/items/{itemKey}/fulltext`; direct `zotero.sqlite` full-text
-//! search lives in [`crate::zotero::sqlite`].
+//! Provides methods on [`ZoteroClient`] for fetching extracted text from
+//! `/items/{itemKey}/fulltext`. This module is called by full-text MCP tool
+//! handlers in `crate::mcp::zotero`. For direct `zotero.sqlite` full-text
+//! indexing and search, see [`crate::zotero::sqlite`].
 //!
-//! No types defined — functionality is exposed via [`ZoteroClient`] methods.
+//! No types defined; functionality is exposed via [`ZoteroClient`] methods.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::errors::ZoteroMcpError;
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::{ItemKey, ZoteroClient};
+//! # async fn example() -> Result<(), ZoteroMcpError> {
+//! let state = AppState::from_env();
+//! let client = ZoteroClient::new(&state);
+//! let item_key = ItemKey::from("ITEMKEY1");
+//! let text = client.get_item_fulltext(&item_key).await?;
+//! println!("Extracted text length: {}", text.len());
+//! # Ok(())
+//! # }
+//! ```
 
 use crate::{
     errors::ZoteroMcpError,
@@ -11,15 +29,16 @@ use crate::{
 };
 
 impl ZoteroClient<'_> {
-    /// Fetches Zotero's indexed fulltext content for `item_key`, returning an
-    /// empty string if unindexed.
+    /// Fetches Zotero's indexed full-text content for `item_key`, returning an
+    /// empty string if the item is unindexed or missing text.
     ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   code
+    /// - [`ZoteroMcpError::Network`] if the HTTP request fails at the transport
     ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded
     pub(crate) async fn get_item_fulltext(
         &self,
         item_key: &ItemKey,

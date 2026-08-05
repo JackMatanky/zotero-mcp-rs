@@ -4,11 +4,29 @@
 //! modules. The client centralizes authentication, retries, HTTP error
 //! conversion, pagination helpers, and JSON decoding.
 //!
-//! # Key types
+//! # Key Types
 //!
 //! - [`ZoteroClient`]: API client borrowing shared application state.
-//! - [`LocalApiStatus`]: health check payload returned by status probes.
-
+//! - [`LocalApiStatus`]: Health check payload returned by status probes.
+//!
+//! # Examples
+//!
+//! Constructing a [`ZoteroClient`] from shared [`AppState`] and checking Local
+//! API availability:
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::client::ZoteroClient;
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let state = AppState::from_env();
+//! let client = ZoteroClient::new(&state);
+//! let status = client.check_status().await;
+//! if status.online {
+//!     println!("Connected to Zotero version: {:?}", status.version);
+//! }
+//! # Ok(())
+//! # }
+//! ```
 use reqwest::Response;
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -20,12 +38,20 @@ use crate::{
 
 /// One page of Zotero items and the optional `Total-Results` header count.
 pub(super) struct ItemsPage {
+    /// Fetched items for the requested page.
     pub(super) items: Vec<ZoteroItem>,
+    /// Total number of matching items across all pages, if provided by Zotero.
     pub(super) total: Option<usize>,
 }
 
 /// Client for the Zotero Local HTTP API, scoped to a single tool call.
+///
+/// Wraps shared application state ([`AppState`]) to issue HTTP requests
+/// against Zotero's local REST API with automatic retries and error
+/// mapping.
 pub(crate) struct ZoteroClient<'a> {
+    /// Borrowed shared application state containing HTTP client and API
+    /// configuration.
     pub(super) state: &'a AppState,
 }
 
@@ -83,8 +109,8 @@ impl<'a> ZoteroClient<'a> {
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if `resp` status is not a successful HTTP status
-    ///   (non-2xx)
+    /// - [`LocalApi`]: If `resp` status is not a successful HTTP status
+    ///   (non-2xx).
     ///
     /// [`LocalApi`]: ZoteroMcpError::LocalApi
     pub(super) async fn ensure_success(
@@ -100,15 +126,15 @@ impl<'a> ZoteroClient<'a> {
         })
     }
 
-    /// Sends a GET request to `url` and decodes the JSON response body.
+    /// Fetches JSON data from `url` and decodes the response body.
     ///
     /// Returns the decoded payload of type `T`.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if Zotero responds with a non-2xx HTTP status
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body cannot be decoded
+    /// - [`LocalApi`]: If Zotero responds with a non-2xx HTTP status.
+    /// - [`Network`]: If the request fails at the transport level.
+    /// - [`Json`]: If the response body cannot be decoded.
     ///
     /// [`LocalApi`]: ZoteroMcpError::LocalApi
     /// [`Network`]: ZoteroMcpError::Network
@@ -122,17 +148,17 @@ impl<'a> ZoteroClient<'a> {
         Ok(self.ensure_success(resp).await?.json().await?)
     }
 
-    /// Fetches every page of a paginated list endpoint, stopping when a page
-    /// returns fewer than `page_size` items (Zotero respects `start`/`limit`).
+    /// Fetches every page of a paginated list endpoint.
     ///
-    /// `start`/`limit` query parameters are appended to `url` on every request,
-    /// starting at `start=0`; any existing query string is preserved.
+    /// Appends `start` and `limit` query parameters to `url` on every request,
+    /// starting at `start=0`, and stops when a page returns fewer than
+    /// `page_size` items (Zotero respects `start`/`limit`).
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if a response body cannot be decoded
+    /// - [`LocalApi`]: If Zotero responds with a non-2xx HTTP status.
+    /// - [`Network`]: If the request fails at the transport level.
+    /// - [`Json`]: If a response body cannot be decoded.
     ///
     /// [`LocalApi`]: ZoteroMcpError::LocalApi
     /// [`Network`]: ZoteroMcpError::Network
@@ -160,17 +186,17 @@ impl<'a> ZoteroClient<'a> {
         Ok(all)
     }
 
-    /// Fetches one page of a paginated list endpoint, also returning the
-    /// `Total-Results` response header (the full result count) when present.
+    /// Fetches one page of a paginated list endpoint, returning the
+    /// `Total-Results` header count.
     ///
     /// Used by server-side search so pagination can report the true total
     /// without scanning every page.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body cannot be decoded
+    /// - [`LocalApi`]: If Zotero responds with a non-2xx HTTP status.
+    /// - [`Network`]: If the request fails at the transport level.
+    /// - [`Json`]: If the response body cannot be decoded.
     ///
     /// [`LocalApi`]: ZoteroMcpError::LocalApi
     /// [`Network`]: ZoteroMcpError::Network
@@ -199,17 +225,17 @@ impl<'a> ZoteroClient<'a> {
     ///
     /// # Arguments
     ///
-    /// * `url` - Target API endpoint URL
-    /// * `payload` - JSON-serializable request payload
+    /// * `url` - Target API endpoint URL.
+    /// * `payload` - JSON-serializable request payload.
     /// * `empty_message` - Error message to return if Zotero returns an empty
-    ///   array
+    ///   array.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status, or returns an
-    ///   empty array
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body cannot be decoded
+    /// - [`LocalApi`]: If Zotero responds with a non-2xx status, or returns an
+    ///   empty array.
+    /// - [`Network`]: If the request fails at the transport level.
+    /// - [`Json`]: If the response body cannot be decoded.
     ///
     /// [`LocalApi`]: ZoteroMcpError::LocalApi
     /// [`Network`]: ZoteroMcpError::Network
@@ -231,13 +257,14 @@ impl<'a> ZoteroClient<'a> {
         })
     }
 
-    /// Sends a `DELETE` request to `url` with an `If-Unmodified-Since-Version`
-    /// header for `version`.
+    /// Sends a `DELETE` request to `url` with version concurrency control.
+    ///
+    /// Attaches an `If-Unmodified-Since-Version` header set to `version`.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`Network`] if the request fails at the transport level
+    /// - [`LocalApi`]: If Zotero responds with a non-2xx HTTP status.
+    /// - [`Network`]: If the request fails at the transport level.
     ///
     /// [`LocalApi`]: ZoteroMcpError::LocalApi
     /// [`Network`]: ZoteroMcpError::Network
@@ -263,9 +290,9 @@ impl<'a> ZoteroClient<'a> {
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status, or the response
-    ///   lacks a valid `Last-Modified-Version` header
-    /// - [`Network`] if the request fails at the transport level
+    /// - [`LocalApi`]: If Zotero responds with a non-2xx status, or the
+    ///   response lacks a valid `Last-Modified-Version` header.
+    /// - [`Network`]: If the request fails at the transport level.
     ///
     /// [`LocalApi`]: ZoteroMcpError::LocalApi
     /// [`Network`]: ZoteroMcpError::Network
@@ -292,8 +319,14 @@ impl<'a> ZoteroClient<'a> {
     }
 }
 
-/// Appends `start`/`limit` query parameters to `url`, preserving any existing
-/// query string.
+/// Appends `start` and `limit` query parameters to `url`, preserving any
+/// existing query string.
+///
+/// # Arguments
+///
+/// * `url` - Target URL string.
+/// * `start` - Starting item index (zero-based).
+/// * `limit` - Maximum number of items to return.
 pub(super) fn add_pagination(url: &str, start: usize, limit: usize) -> String {
     let sep = if url.contains('?') {
         '&'

@@ -10,6 +10,16 @@
 //! Main types:
 //! - [`ZoteroMcpServer`] - Shared state holder and `ServerHandler`
 //!   implementation
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::state::AppState;
+//! let server = ZoteroMcpServer::new(AppState::from_env());
+//! let tools = ZoteroMcpServer::visible_tools_for_state(&server.state);
+//! assert!(!tools.is_empty());
+//! ```
 
 use std::future::Future;
 

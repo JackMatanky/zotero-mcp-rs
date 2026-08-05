@@ -1,16 +1,34 @@
 //! Zotero object keys, relation URIs, and library versions.
 //!
-//! Keeps identity-like values in one place: item keys, collection keys, tag
-//! names, citation keys, relation URIs, and library-version counters.
+//! Provides strongly-typed identifier newtypes ([`ItemKey`], [`CollectionKey`],
+//! [`TagName`], [`CitationKey`], [`RelationUri`]) and library version counters
+//! ([`LibraryVersion`]) used across the Zotero domain layer to prevent string
+//! transposition errors.
 //!
-//! Main types:
+//! # Main Types
+//!
 //! - [`ItemKey`] - 8-character alphanumeric item identifier
 //! - [`CollectionKey`] - 8-character alphanumeric collection identifier
 //! - [`TagName`] - Tag name wrapper
 //! - [`CitationKey`] - Citation key wrapper
 //! - [`RelationUri`] - Item relation URI (`http://zotero.org/...`)
 //! - [`LibraryVersion`] - Library version counter
-
+//!
+//! # Examples
+//!
+//! ```rust
+//! use zotero_mcp_rs::zotero::{ItemKey, RelationUri};
+//!
+//! let item_key = ItemKey::from("ABC12345");
+//! let relation_uri = RelationUri::from(&item_key);
+//! assert_eq!(
+//!     relation_uri.as_str(),
+//!     "http://zotero.org/users/0/items/ABC12345"
+//! );
+//!
+//! let parsed_key = ItemKey::try_from(&relation_uri).unwrap();
+//! assert_eq!(parsed_key, item_key);
+//! ```
 use serde::{Deserialize, Serialize};
 
 /// Generates a [`String`]-backed identifier newtype.

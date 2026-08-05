@@ -1,19 +1,42 @@
 //! Paragraph-aware text chunking for embedding.
 //!
-//! Splits on blank-line-separated paragraphs, accumulating into chunks up to
-//! `max_chars`. Never splits a paragraph across chunks unless the paragraph
-//! itself exceeds `max_chars`, in which case it is split at sentence
-//! boundaries, then (if a single sentence still exceeds `max_chars`) at a
-//! hard character-count boundary on a UTF-8 char boundary.
+//! Splits text into paragraph-bounded chunks, preferring double-newline
+//! boundaries (`"\n\n"`), falling back to sentence boundaries (`". "`, `"! "`,
+//! `"? "`), and using hard UTF-8 character cuts only when individual segments
+//! exceed the character limit.
 //!
-//! Main functions:
-//! - [`chunk_text`] - Split text into paragraph-bounded chunks
-
-/// Splits `text` into chunks of at most `max_chars` characters each,
-/// preferring paragraph (`"\n\n"`) boundaries, then sentence boundaries
-/// (`". "`, `"! "`, `"? "`), then a hard UTF-8-safe character cut as a last
-/// resort. Empty or all-whitespace paragraphs are dropped. Returns an empty
-/// `Vec` if `text` is empty or all-whitespace after trimming.
+//! # Main Functions
+//!
+//! - [`chunk_text`] - Splits text into paragraph-bounded chunks up to a
+//!   character limit.
+//!
+//! # Examples
+//!
+//! Chunking a multi-paragraph text block:
+//!
+//! ```rust
+//! use zotero_mcp_rs::semantic_search::chunking::chunk_text;
+//!
+//! let text = "First paragraph.\n\nSecond paragraph.";
+//! let chunks = chunk_text(text, 20);
+//! assert_eq!(chunks, vec!["First paragraph.", "Second paragraph."]);
+//! ```
+/// Splits `text` into chunks of at most `max_chars` characters each.
+///
+/// Prefers paragraph (`"\n\n"`) boundaries, then sentence boundaries
+/// (`". "`, `"! "`, `"? "`), and falls back to a hard UTF-8 character cut if a
+/// single segment exceeds `max_chars`. Empty or all-whitespace paragraphs are
+/// dropped. Returns an empty [`Vec`] if `text` is empty or whitespace-only.
+///
+/// # Examples
+///
+/// ```rust
+/// use zotero_mcp_rs::semantic_search::chunking::chunk_text;
+///
+/// let text = "Short paragraph.\n\nAnother paragraph.";
+/// let chunks = chunk_text(text, 25);
+/// assert_eq!(chunks, vec!["Short paragraph.", "Another paragraph."]);
+/// ```
 pub(crate) fn chunk_text(text: &str, max_chars: usize) -> Vec<String> {
     let paragraphs: Vec<&str> =
         text.split("\n\n").map(str::trim).filter(|p| !p.is_empty()).collect();
@@ -90,13 +113,14 @@ fn split_long_segment(
     chunks
 }
 
-/// Hard-splits `text` into pieces whose *byte* length is `<= max_chars`,
-/// cutting only on UTF-8 char boundaries (never mid-codepoint). Used only
-/// when no separator in `split_long_segment`'s list breaks a segment into
-/// small-enough pieces. A single character whose own byte length exceeds
-/// `max_chars` (e.g. a 4-byte emoji with `max_chars = 1`) is kept whole
-/// rather than corrupting UTF-8 — the resulting chunk exceeds `max_chars` in
-/// that pathological case only.
+/// Hard-splits `text` into pieces whose byte length is at most `max_chars`.
+///
+/// Cuts only on UTF-8 character boundaries. Used as a last resort when no
+/// separator in `split_long_segment` breaks a segment into small-enough pieces.
+/// A single character whose byte length exceeds `max_chars` (for example, a
+/// 4-byte emoji with `max_chars = 1`) is kept whole rather than corrupting
+/// UTF-8; the resulting chunk exceeds `max_chars` in that pathological case
+/// only.
 fn hard_split(text: &str, max_chars: usize) -> Vec<String> {
     if max_chars == 0 {
         return vec![text.to_owned()];

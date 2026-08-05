@@ -1,8 +1,25 @@
-//! MCP tool handlers for Zotero item full-text content.
+//! MCP tool handlers for retrieving full-text content of Zotero items.
 //!
-//! Main types:
+//! This module provides the execution logic for extracting full text from
+//! library attachments, delegating backend operations to
+//! [`ZoteroClient::get_item_fulltext`].
+//!
+//! # Main Types
 //! - [`GetItemFulltextArgs`] - Arguments for the `fulltext` action
-
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::mcp::zotero::fulltext::GetItemFulltextArgs;
+//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = serde_json::from_value(serde_json::json!({
+//!     "item_key": "ABC12345"
+//! }))?;
+//! let result = server.zotero_get_item_fulltext_impl(args).await?;
+//! # Ok(())
+//! # }
+//! ```
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -16,12 +33,15 @@ use crate::{
 /// Arguments for the `fulltext` action of `zotero_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemFulltextArgs {
-    /// Zotero item key ([`ItemKey`]).
+    /// Unique Zotero item key ([`ItemKey`]).
     item_key: ItemKey,
 }
 
 impl ZoteroMcpServer {
     /// Handles Zotero full-text retrieval tool calls.
+    ///
+    /// Extracts full-text content for the item specified by `args.item_key`
+    /// using the underlying [`ZoteroClient`].
     ///
     /// # Errors
     ///

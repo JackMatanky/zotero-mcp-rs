@@ -1,11 +1,28 @@
 //! MCP primitive catalog and discovery tool routing.
 //!
-//! Main types:
-//! - [`PrimitiveKind`] - Kind of MCP primitive (tool, resource, or prompt)
-//! - [`PrimitiveDomain`] - Functional domain grouping for primitives
-//! - [`EnvGate`] - Environment variable gate controlling primitive visibility
-//! - [`PrimitiveInfo`] - Metadata for a single discoverable MCP primitive
-
+//! Provides capability discovery and metadata for MCP primitives (tools,
+//! resources, and prompts) registered with the server, including environment
+//! variable gates and example invocations.
+//!
+//! # Main Types
+//!
+//! - [`PrimitiveKind`]: Kind of MCP primitive (tool, resource, or prompt).
+//! - [`PrimitiveDomain`]: Functional domain grouping for MCP primitives.
+//! - [`EnvGate`]: Environment variable gate controlling primitive visibility.
+//! - [`PrimitiveInfo`]: Metadata for a single discoverable MCP primitive.
+//! - [`DiscoverArgs`]: Arguments for the `zotero_discover` discovery tool.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let state = AppState::from_env();
+//! let server = ZoteroMcpServer::new(state);
+//! # Ok(())
+//! # }
+//! ```
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
     tool_router,
@@ -213,7 +230,7 @@ static PRIMITIVES: &[PrimitiveInfo] = &[
     },
 ];
 
-/// Returns true if `name` is a write (mutating) tool, gated behind
+/// Returns `true` if `name` is a write (mutating) tool gated behind
 /// `ZOTERO_WRITE_ENABLED`.
 pub(crate) fn is_write_tool(name: &str) -> bool {
     matches!(
@@ -226,8 +243,8 @@ pub(crate) fn is_write_tool(name: &str) -> bool {
     )
 }
 
-/// Returns true if `name` is currently advertised to MCP clients given
-/// `state`'s write/`SQLite` gates.
+/// Returns `true` if `name` is currently advertised to MCP clients given
+/// `state`'s write and `SQLite` gates.
 pub(crate) fn is_tool_visible(state: &AppState, name: &str) -> bool {
     if is_write_tool(name) {
         return state.write_enabled;

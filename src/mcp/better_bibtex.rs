@@ -11,6 +11,23 @@
 //! - Pandoc filter integration ([`PandocFilterArgs`])
 //! - Configuring auto-exports ([`AutoExportAddArgs`])
 //! - Performing quick search queries ([`BetterBibtexSearchArgs`])
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::mcp::better_bibtex::GetCitekeysArgs;
+//! # use zotero_mcp_rs::zotero::ItemKey;
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let server = ZoteroMcpServer::new(AppState::from_env());
+//! let args = GetCitekeysArgs {
+//!     item_keys: vec![ItemKey::from("ABCD1234")],
+//! };
+//! let result = server.better_bibtex_get_citekeys_impl(args).await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,

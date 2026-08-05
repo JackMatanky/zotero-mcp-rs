@@ -1,8 +1,27 @@
-//! MCP tool handlers for Zotero library coverage metrics.
+//! MCP tool handlers for calculating coverage metrics across a Zotero library.
 //!
-//! Main types:
+//! This module provides the execution logic for analyzing attachment and
+//! metadata completeness, delegating calculations to
+//! [`ZoteroClient::get_library_coverage`].
+//!
+//! # Main Types
 //! - [`LibraryCoverageArgs`] - Arguments for the `coverage` action
-
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::mcp::zotero::coverage::LibraryCoverageArgs;
+//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = serde_json::from_value(serde_json::json!({
+//!     "collection_key": null,
+//!     "start": 0,
+//!     "limit": 50
+//! }))?;
+//! let result = server.zotero_library_coverage_impl(args).await?;
+//! # Ok(())
+//! # }
+//! ```
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -18,7 +37,7 @@ use crate::{
 pub(crate) struct LibraryCoverageArgs {
     /// Optional collection key ([`CollectionKey`]) to scope coverage analysis.
     collection_key: Option<CollectionKey>,
-    /// 0-based offset into the item set (default: 0).
+    /// Zero-based offset into the item set (default: 0).
     start: Option<usize>,
     /// Maximum number of items to analyze (default: 100, max: 500).
     limit: Option<usize>,
@@ -26,6 +45,9 @@ pub(crate) struct LibraryCoverageArgs {
 
 impl ZoteroMcpServer {
     /// Handles Zotero library coverage analysis tool calls.
+    ///
+    /// Analyzes library coverage metrics for the requested range using
+    /// [`ZoteroClient`].
     ///
     /// # Errors
     ///

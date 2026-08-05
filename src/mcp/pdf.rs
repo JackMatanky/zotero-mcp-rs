@@ -9,6 +9,24 @@
 //! - [`ResolvedPdfPath`] - Resolved filesystem path for a Zotero PDF attachment
 //! - [`BridgePdfRoot`] - Bridge file-roots response for Zotero storage
 //!   validation
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use std::path::Path;
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::state::AppState;
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let server = ZoteroMcpServer::new(AppState::from_env());
+//! let bridge_roots = server.fetch_bridge_pdf_roots().await;
+//! let pdf_path = server.validate_pdf_read_path(
+//!     Path::new("/path/to/paper.pdf"),
+//!     &bridge_roots,
+//!     true,
+//! )?;
+//! # Ok(())
+//! # }
+//! ```
 
 use std::path::{Path, PathBuf};
 
@@ -107,7 +125,7 @@ fn resolve_linked_attachment_path(
     linked_base_roots(bridge_roots).next().map(|root| root.join(relative))
 }
 
-/// Extracts the local file path from an imported attachment `item`'s enclosure
+/// Extracts the local filepath from an imported attachment `item`'s enclosure
 /// link.
 fn enclosure_file_path(item: &ZoteroItem) -> Option<PathBuf> {
     let href = item.links.get("enclosure")?.get("href")?.as_str()?;
@@ -195,14 +213,22 @@ impl ZoteroMcpServer {
     ///
     /// Checks `path` against both user-configured allowed directories and
     /// reported `bridge_roots`. If `direct_input` is `true` and `path` is not
-    /// under bridge roots, validates that direct file path access is explicitly
+    /// under bridge roots, validates that direct filepath access is explicitly
     /// enabled in security configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Filesystem path to validate.
+    /// * `bridge_roots` - Bridge file roots fetched from
+    ///   [`ZoteroMcpServer::fetch_bridge_pdf_roots`].
+    /// * `direct_input` - Whether `path` comes directly from user input rather
+    ///   than a Zotero item lookup.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::InputRejected`] if path access is disallowed, direct
-    ///   paths are disabled, or the file is not a valid PDF / exceeds byte
-    ///   limits
+    /// - [`ZoteroMcpError::InputRejected`]: If path access is disallowed,
+    ///   direct paths are disabled, or the file is not a valid PDF or exceeds
+    ///   byte limits.
     pub(super) fn validate_pdf_read_path(
         &self,
         path: &Path,

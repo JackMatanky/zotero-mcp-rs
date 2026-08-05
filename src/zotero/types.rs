@@ -1,15 +1,32 @@
 //! Zotero controlled-vocabulary value types.
 //!
-//! These enums model the Zotero strings this crate branches on while preserving
-//! unknown API values for round-tripping.
+//! Models controlled string and integer enumerations returned by the Zotero
+//! Local API, including item types, annotation kinds, creator roles, attachment
+//! link modes, collection parent relationships, and tag origins. Unknown API
+//! values are preserved in `Other` variants to ensure lossless round-tripping.
 //!
-//! Main types:
-//! - [`ItemType`] - Item kind (`journalArticle`, `book`, `note`, etc.)
-//! - [`AnnotationType`] - PDF annotation kind (`highlight`, `underline`, etc.)
-//! - [`CreatorType`] - Creator role (`author`, `editor`, etc.)
-//! - [`LinkMode`] - Attachment storage mode
-//! - [`CollectionParent`] - Parent collection state
-//! - [`TagOrigin`] - Tag source (user-created vs. automatic)
+//! # Main Types
+//!
+//! - [`ItemType`]: Item kind (`journalArticle`, `book`, `note`, etc.).
+//! - [`AnnotationType`]: PDF annotation kind (`highlight`, `underline`, etc.).
+//! - [`CreatorType`]: Creator role (`author`, `editor`, etc.).
+//! - [`LinkMode`]: Attachment storage mode.
+//! - [`CollectionParent`]: Parent collection state (`TopLevel` or child
+//!   `Parent`).
+//! - [`TagOrigin`]: Tag origin source (`User`, `Automatic`, or `Other`).
+//!
+//! # Examples
+//!
+//! ```rust
+//! # use zotero_mcp_rs::zotero::types::{ItemType, TagOrigin};
+//! let item_type = ItemType::from("journalArticle".to_string());
+//! assert_eq!(item_type, ItemType::JournalArticle);
+//! assert_eq!(item_type.as_str(), "journalArticle");
+//! assert!(item_type.is_indexable());
+//!
+//! let origin = TagOrigin::from(0);
+//! assert_eq!(origin, TagOrigin::User);
+//! ```
 
 use serde::{Deserialize, Serialize};
 
@@ -23,18 +40,24 @@ use crate::zotero::keys::CollectionKey;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub(crate) enum ItemType {
+    /// Journal article item (`journalArticle`).
     JournalArticle,
+    /// Book item (`book`).
     Book,
+    /// Preprint item (`preprint`).
     Preprint,
+    /// Note item (`note`).
     Note,
+    /// File or URL attachment item (`attachment`).
     Attachment,
+    /// PDF annotation item (`annotation`).
     Annotation,
     /// Any Zotero item type not modeled above; carries the original API value.
     Other(String),
 }
 
 impl ItemType {
-    /// Borrows the API string this variant serializes to.
+    /// Borrows the API string representation of this [`ItemType`].
     #[inline]
     pub(crate) fn as_str(&self) -> &str {
         match self {
@@ -48,7 +71,7 @@ impl ItemType {
         }
     }
 
-    /// Returns `true` for item types eligible for search and embedding
+    /// Returns `true` if this item type is eligible for search and embedding
     /// indexing: everything except attachments, notes, and annotations.
     #[inline]
     pub(crate) fn is_indexable(&self) -> bool {
@@ -95,16 +118,18 @@ impl From<ItemType> for String {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub(crate) enum AnnotationType {
+    /// Text highlight annotation (`highlight`).
     Highlight,
+    /// Text underline annotation (`underline`).
     Underline,
+    /// Standalone PDF note annotation (`note`).
     Note,
-    /// Any annotation kind not modeled above; carries the API's original
-    /// value.
+    /// Any annotation kind not modeled above; carries the original API value.
     Other(String),
 }
 
 impl AnnotationType {
-    /// Borrows the API string this variant serializes to.
+    /// Borrows the API string representation of this [`AnnotationType`].
     #[inline]
     pub(crate) fn as_str(&self) -> &str {
         match self {
@@ -160,9 +185,13 @@ impl From<AnnotationType> for String {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub(crate) enum CreatorType {
+    /// Primary author or creator (`author`).
     Author,
+    /// Editor (`editor`).
     Editor,
+    /// Translator (`translator`).
     Translator,
+    /// Any creator role not modeled above; carries the original API value.
     Other(String),
 }
 
@@ -194,10 +223,16 @@ impl From<CreatorType> for String {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub(crate) enum LinkMode {
+    /// File stored directly inside Zotero's storage directory
+    /// (`imported_file`).
     ImportedFile,
+    /// File linked from an external filesystem path (`linked_file`).
     LinkedFile,
+    /// Web page or remote URL link (`linked_url`).
     LinkedUrl,
+    /// Saved HTML snapshot or imported URL content (`imported_url`).
     ImportedUrl,
+    /// Any link mode not modeled above; carries the original API value.
     Other(String),
 }
 
@@ -231,8 +266,11 @@ impl From<LinkMode> for String {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "serde_json::Value", into = "serde_json::Value")]
 pub(crate) enum CollectionParent {
+    /// Top-level collection with no parent collection.
     #[default]
     TopLevel,
+    /// Child collection belonging to a parent collection identified by
+    /// [`CollectionKey`].
     Parent(CollectionKey),
 }
 
@@ -283,8 +321,10 @@ impl schemars::JsonSchema for CollectionParent {
 )]
 #[serde(from = "u8", into = "u8")]
 pub(crate) enum TagOrigin {
+    /// Tag explicitly created by a user (`0`).
     #[default]
     User,
+    /// Tag assigned automatically on import or export (`1`).
     Automatic,
     /// Any origin value outside Zotero's documented `0`/`1`; carries the
     /// original integer.

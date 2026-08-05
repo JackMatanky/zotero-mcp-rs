@@ -1,11 +1,28 @@
-//! The [`Embedding`] newtype (L2 normalization, dot-product scoring, and the
-//! BLOB codec used by `store.rs`/`search.rs`) plus local ONNX embedding
-//! generation via `fastembed`.
+//! Vector representation, dot-product scoring, BLOB encoding, and local ONNX
+//! embedding.
 //!
-//! Main types:
-//! - [`Embedding`] - L2-normalized f32 vector with BLOB codec
-//! - [`FastEmbedProvider`] - Local ONNX embedding provider
-
+//! Defines the [`Embedding`] newtype wrapper for L2-normalized vector
+//! operations, binary serialization for `SQLite` storage, and the
+//! [`FastEmbedProvider`] struct for local inference.
+//!
+//! # Main Types
+//!
+//! - [`Embedding`] - L2-normalized `f32` vector with BLOB codec.
+//! - [`FastEmbedProvider`] - Local ONNX embedding provider backed by
+//!   `fastembed`.
+//!
+//! # Examples
+//!
+//! Creating and scoring embeddings:
+//!
+//! ```rust
+//! use zotero_mcp_rs::semantic_search::Embedding;
+//!
+//! let mut a = Embedding::from(vec![3.0, 4.0]);
+//! a.normalize();
+//! let b = Embedding::from(vec![0.6, 0.8]);
+//! assert_eq!(a.dot(&b), 1.0);
+//! ```
 use std::{path::Path, sync::Mutex};
 
 use fastembed::{EmbeddingModel, TextEmbedding, TextInitOptions};
@@ -15,9 +32,9 @@ use crate::{errors::ZoteroMcpError, semantic_search::EmbeddingProvider};
 /// The single fixed embedding model this server uses. `BGESmallENV15` is
 /// fastembed's own documented default (BAAI/bge-small-en-v1.5, 384
 /// dimensions): no query/document instruction-prefix handling required,
-/// small download (~130MB), strong retrieval quality for the model size.
+/// small download (~130 MB), strong retrieval quality for the model size.
 /// Changing this requires deleting the existing index db (dimensions and
-/// vector space are incompatible across models) — there is no per-model
+/// vector space are incompatible across models); there is no per-model
 /// partitioning in this schema (see `store.rs`).
 const MODEL: EmbeddingModel = EmbeddingModel::BGESmallENV15;
 
@@ -34,12 +51,13 @@ pub(crate) struct FastEmbedProvider {
 }
 
 impl FastEmbedProvider {
-    /// Loads (downloading on first use into `cache_dir` if not already
-    /// present) the fixed embedding model.
+    /// Loads the fixed embedding model, downloading it to `cache_dir` if
+    /// needed.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::Embedding`] if model load/download fails
+    /// Returns [`ZoteroMcpError::Embedding`] if model loading or downloading
+    /// fails.
     pub(crate) fn load(cache_dir: &Path) -> Result<Self, ZoteroMcpError> {
         let options = TextInitOptions::new(MODEL)
             .with_cache_dir(cache_dir.to_path_buf())
@@ -84,7 +102,19 @@ impl EmbeddingProvider for FastEmbedProvider {
 pub(crate) struct Embedding(Vec<f32>);
 
 impl Embedding {
-    /// L2-normalizes in place. A zero vector is left unchanged.
+    /// L2-normalizes the vector in place.
+    ///
+    /// A vector with a zero or negative norm squared is left unchanged.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use zotero_mcp_rs::semantic_search::Embedding;
+    ///
+    /// let mut embedding = Embedding::from(vec![3.0, 4.0]);
+    /// embedding.normalize();
+    /// assert_eq!(embedding, Embedding::from(vec![0.6, 0.8]));
+    /// ```
     pub(crate) fn normalize(&mut self) {
         let norm_sq: f32 = self.0.iter().map(|x| x * x).sum();
         if norm_sq <= 0.0 {
@@ -96,9 +126,23 @@ impl Embedding {
         }
     }
 
-    /// Dot product of two equal-length, pre-normalized vectors — equal to
-    /// their cosine similarity. Returns `0.0` if lengths differ (defensive:
-    /// should never happen since only one model/dimensionality is stored).
+    /// Calculates the dot product of two equal-length prenormalized vectors.
+    ///
+    /// For prenormalized vectors, the dot product equals their cosine
+    /// similarity. Returns `0.0` if vector lengths differ.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use zotero_mcp_rs::semantic_search::Embedding;
+    ///
+    /// let a = Embedding::from(vec![1.0, 0.0]);
+    /// let b = Embedding::from(vec![0.0, 1.0]);
+    /// assert_eq!(a.dot(&b), 0.0);
+    ///
+    /// let c = Embedding::from(vec![0.6, 0.8]);
+    /// assert_eq!(c.dot(&c), 1.0);
+    /// ```
     pub(crate) fn dot(&self, other: &Embedding) -> f32 {
         if self.0.len() != other.0.len() {
             return 0.0;

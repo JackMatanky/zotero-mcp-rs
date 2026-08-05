@@ -1,14 +1,40 @@
 //! MCP tool handlers and argument models for core Zotero item operations.
 //!
-//! Covers `zotero_items` / `zotero_items_write` grouped-router actions for
-//! item lifecycle, with compatible dispatch to metadata, full-text, and
-//! attachment modules.
+//! Handles `zotero_items` (read-only) and `zotero_items_write` (mutation)
+//! grouped-router tool calls for item lifecycle management. Converts incoming
+//! MCP tool parameters into calls on [`ZoteroClient`] for retrieving, creating,
+//! updating, trashing, restoring, and deleting Zotero items, with compatible
+//! dispatch to metadata, full-text, and attachment modules.
 //!
-//! Main types:
-//! - [`ZoteroItemsCommand`] - Grouped-router command for read-only item actions
-//! - [`ZoteroItemsWriteCommand`] - Grouped-router command for write item
-//!   actions
-
+//! # Main Types
+//!
+//! - [`ZoteroItemsCommand`]: Grouped-router command for read-only item actions.
+//! - [`ZoteroItemsWriteCommand`]: Grouped-router command for write item
+//!   actions.
+//! - [`GetRecentArgs`]: Arguments for retrieving recently added or modified
+//!   items.
+//! - [`GetItemArgs`]: Arguments for retrieving a single item by key.
+//! - [`GetUnfiledItemsArgs`]: Arguments for listing items not assigned to any
+//!   collection.
+//! - [`GetItemChildrenArgs`]: Arguments for listing child items (notes,
+//!   attachments).
+//! - [`UpdateItemArgs`]: Arguments for updating fields on an existing item.
+//! - [`DeleteItemArgs`]: Arguments for permanently deleting an item.
+//! - [`TrashItemArgs`]: Arguments for trashing or restoring an item.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use rmcp::handler::server::wrapper::Parameters;
+//! # use zotero_mcp_rs::{ZoteroMcpServer, state::AppState};
+//! # use zotero_mcp_rs::mcp::zotero::items::{ZoteroItemsCommand, GetRecentArgs};
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let server = ZoteroMcpServer::new(AppState::from_env());
+//! let args = ZoteroItemsCommand::Recent(GetRecentArgs { limit: Some(10) });
+//! let result = server.zotero_items(Parameters(args)).await?;
+//! # Ok(())
+//! # }
+//! ```
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
     tool_router,
@@ -117,6 +143,11 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Dispatches read-only item tool commands to internal handlers.
+    ///
+    /// Receives parsed `args` wrapped in [`Parameters`], routing `recent`,
+    /// `get`, `metadata`, `children`, or `fulltext` actions.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
@@ -156,6 +187,12 @@ impl ZoteroMcpServer {
             open_world_hint = true
         )
     )]
+    /// Dispatches item write tool commands to internal handlers.
+    ///
+    /// Receives parsed `args` wrapped in [`Parameters`], routing `update`,
+    /// `delete`, `trash`, `restore`, `add_by_identifier`, `attach_file`, or
+    /// `import_pdf` actions.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
@@ -190,7 +227,8 @@ impl ZoteroMcpServer {
 }
 
 impl ZoteroMcpServer {
-    /// Handles recent Zotero item lookup tool calls.
+    /// Handles recent Zotero item lookup tool calls via
+    /// [`ZoteroClient::get_recent_items`].
     ///
     /// # Errors
     ///
@@ -205,7 +243,7 @@ impl ZoteroMcpServer {
         Ok(json_result(client.get_recent_items(limit).await))
     }
 
-    /// Handles Zotero item retrieval tool calls.
+    /// Handles Zotero item retrieval tool calls via [`ZoteroClient::get_item`].
     ///
     /// # Errors
     ///
@@ -219,7 +257,8 @@ impl ZoteroMcpServer {
         Ok(json_result(client.get_item(&args.item_key).await))
     }
 
-    /// Handles Zotero child item listing tool calls.
+    /// Handles Zotero child item listing tool calls via
+    /// [`ZoteroClient::get_item_children`].
     ///
     /// # Errors
     ///
@@ -233,7 +272,7 @@ impl ZoteroMcpServer {
         Ok(json_result(client.get_item_children(&args.item_key).await))
     }
 
-    /// Handles Zotero item update tool calls.
+    /// Handles Zotero item update tool calls via [`ZoteroClient::update_item`].
     ///
     /// # Errors
     ///
@@ -247,7 +286,8 @@ impl ZoteroMcpServer {
         Ok(json_result(client.update_item(&args.item_key, args.fields).await))
     }
 
-    /// Handles Zotero item permanent deletion tool calls.
+    /// Handles Zotero item permanent deletion tool calls via
+    /// [`ZoteroClient::delete_item`].
     ///
     /// # Errors
     ///
@@ -264,7 +304,8 @@ impl ZoteroMcpServer {
         }
     }
 
-    /// Handles Zotero item trash tool calls.
+    /// Handles Zotero item trash tool calls via
+    /// [`ZoteroClient::set_item_deleted`].
     ///
     /// # Errors
     ///
@@ -282,7 +323,8 @@ impl ZoteroMcpServer {
         ))
     }
 
-    /// Handles Zotero item restore-from-trash tool calls.
+    /// Handles Zotero item restore-from-trash tool calls via
+    /// [`ZoteroClient::set_item_deleted`].
     ///
     /// # Errors
     ///
@@ -298,7 +340,8 @@ impl ZoteroMcpServer {
         ))
     }
 
-    /// Handles Zotero unfiled items listing tool calls.
+    /// Handles Zotero unfiled items listing tool calls via
+    /// [`ZoteroClient::get_unfiled_items`].
     ///
     /// # Errors
     ///

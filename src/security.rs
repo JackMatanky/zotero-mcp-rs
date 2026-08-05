@@ -4,6 +4,15 @@
 //! - [`SecurityProfile`] - Supported security profiles (Default, Workspace,
 //!   `TrustedLocal`, `Hardened`)
 //! - [`SecurityConfig`] - Path allowlists and size limits
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use zotero_mcp_rs::security::{SecurityConfig, SecurityProfile};
+//!
+//! let config = SecurityConfig::default();
+//! assert_eq!(config.profile, SecurityProfile::Default);
+//! ```
 
 use std::{
     env,
@@ -41,16 +50,27 @@ pub(crate) enum SecurityProfile {
 /// Security configuration parameters controlling path access and size limits.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct SecurityConfig {
+    /// Active security profile.
     pub(crate) profile: SecurityProfile,
+    /// Whether direct file paths are enabled.
     pub(crate) direct_file_paths: bool,
+    /// Whether file path checking is enabled.
     pub(crate) file_paths_enabled: bool,
+    /// Allowed directories for reading files.
     pub(crate) allowed_read_dirs: Vec<PathBuf>,
+    /// Allowed directories for auxiliary tools.
     pub(crate) allowed_aux_dirs: Vec<PathBuf>,
+    /// Allowed directories for export files.
     pub(crate) allowed_export_dirs: Vec<PathBuf>,
+    /// Maximum allowed PDF size in bytes.
     pub(crate) max_pdf_bytes: u64,
+    /// Maximum allowed HTTP response body size in bytes.
     pub(crate) max_http_body_bytes: usize,
+    /// Maximum allowed Markdown size in bytes.
     pub(crate) max_markdown_bytes: usize,
+    /// Maximum allowed HTML size in bytes.
     pub(crate) max_html_bytes: usize,
+    /// Maximum allowed template name size in bytes.
     pub(crate) max_template_name_bytes: usize,
 }
 
@@ -196,11 +216,11 @@ impl SecurityConfig {
         config
     }
 
-    /// Checks if direct file path access is enabled by policy.
+    /// Checks if direct filepath access is enabled by policy.
     ///
     /// # Errors
     ///
-    /// - [`InputRejected`] if direct file path access is disabled
+    /// - [`InputRejected`] if direct filepath access is disabled
     ///
     /// [`InputRejected`]: ZoteroMcpError::InputRejected
     pub(crate) fn check_direct_file_paths_enabled(
@@ -218,8 +238,14 @@ impl SecurityConfig {
         }
     }
 
-    /// Validates that an existing `path` falls under one of the allowed
+    /// Validates that a path exists and falls under one of the allowed
     /// `roots`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Target path to validate.
+    /// * `roots` - Iterator of allowed parent root directories.
+    /// * `purpose` - Human-readable label for error reporting.
     ///
     /// # Errors
     ///
@@ -258,6 +284,12 @@ impl SecurityConfig {
     }
 
     /// Validates that an output `path` target directory is allowed for writes.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Output target file path.
+    /// * `roots` - Slice of allowed export/output root directories.
+    /// * `purpose` - Human-readable label for error reporting.
     ///
     /// # Errors
     ///

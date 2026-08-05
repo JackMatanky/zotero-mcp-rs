@@ -3,11 +3,24 @@
 //! [`ZoteroMcpError`] is the single error type returned by every fallible
 //! operation in the crate, built with `thiserror` so each variant's `Display`
 //! message doubles as the text surfaced back to MCP clients.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use zotero_mcp_rs::errors::ZoteroMcpError;
+//!
+//! fn check_found(found: bool) -> Result<(), ZoteroMcpError> {
+//!     if !found {
+//!         return Err(ZoteroMcpError::NotFound("item missing".to_string()));
+//!     }
+//!     Ok(())
+//! }
+//! ```
 
 use thiserror::Error;
 
 /// Unifies failures from the Zotero Local API, Better `BibTeX`, Better Notes,
-/// or local file system.
+/// or local filesystem.
 #[derive(Debug, Error)]
 pub(crate) enum ZoteroMcpError {
     /// Network or HTTP transport failure from [`reqwest`].

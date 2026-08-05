@@ -1,8 +1,30 @@
 //! PDF annotation creation and annotation/note synthesis operations.
 //!
-//! Main types:
+//! Provides [`ZoteroClient`] methods for creating PDF annotations and
+//! extracting child annotations and notes into structured Markdown documents.
+//! This module is called by annotation MCP tool handlers in
+//! `crate::mcp::zotero`.
+//!
+//! # Main Types
+//!
 //! - [`AnnotationDraft`] - Payload for creating a PDF annotation
 //! - [`AnnotationPosition`] - Serialized annotation position payload
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::errors::ZoteroMcpError;
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::{ItemKey, ZoteroClient};
+//! # async fn example() -> Result<(), ZoteroMcpError> {
+//! let state = AppState::from_env();
+//! let client = ZoteroClient::new(&state);
+//! let item_key = ItemKey::from("ITEMKEY1");
+//! let markdown = client.synthesize_annotations(&item_key).await?;
+//! println!("{markdown}");
+//! # Ok(())
+//! # }
+//! ```
 
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +46,7 @@ impl AnnotationPosition {
         self.0.to_string()
     }
 }
+
 impl schemars::JsonSchema for AnnotationPosition {
     #[inline]
     fn schema_name() -> std::borrow::Cow<'static, str> {
@@ -47,12 +70,19 @@ impl From<serde_json::Value> for AnnotationPosition {
 /// Payload for creating a PDF annotation.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct AnnotationDraft {
+    /// Key of the parent PDF attachment item.
     pub(crate) parent_attachment_key: ItemKey,
+    /// Annotation kind (`highlight`, `underline`, `note`, etc.).
     pub(crate) annotation_type: AnnotationType,
+    /// Optional highlighted or extracted text string.
     pub(crate) text: Option<String>,
+    /// Optional user comment attached to the annotation.
     pub(crate) comment: Option<String>,
+    /// Optional CSS hex color string (e.g. `"#ffd400"`).
     pub(crate) color: Option<String>,
+    /// Optional PDF page label where the annotation appears.
     pub(crate) page_label: Option<String>,
+    /// Serialized annotation coordinates payload.
     pub(crate) position: AnnotationPosition,
 }
 

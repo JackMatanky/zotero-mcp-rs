@@ -1,12 +1,30 @@
-//! Owns the writable side-car `SQLite` database (`embeddings.sqlite`) storing
-//! chunk text and embedding BLOBs, independent of Zotero's own database.
+//! Persistence layer for the semantic search `SQLite` database.
 //!
-//! Main types:
-//! - [`SemanticIndex`] - Read/write semantic index database
-//! - [`StoredChunk`] - Decoded chunk ready for cosine scan
-//! - [`NewChunk`] - Chunk ready to be embedded and stored
-//! - [`SemanticIndexStats`] - Database statistics
-
+//! Manages the dedicated `embeddings.sqlite` database storing text chunks and
+//! binary vector embeddings. Operates independently from Zotero's main
+//! `zotero.sqlite` database.
+//!
+//! # Main Types
+//!
+//! - [`SemanticIndex`] - Read/write handle to the semantic search database.
+//! - [`StoredChunk`] - Decoded chunk ready for cosine similarity scanning.
+//! - [`NewChunk`] - Unsaved text chunk paired with its embedding vector.
+//! - [`SemanticIndexStats`] - Aggregate counts of indexed items and chunks.
+//!
+//! # Examples
+//!
+//! Opening a semantic index database handle:
+//!
+//! ```no_run
+//! use std::path::Path;
+//!
+//! use zotero_mcp_rs::semantic_search::store::SemanticIndex;
+//!
+//! # async fn run() {
+//! let index =
+//!     SemanticIndex::open(Path::new("/tmp/embeddings.sqlite")).await.unwrap();
+//! # }
+//! ```
 use std::{path::Path, time::Duration};
 
 use sqlx::{
@@ -18,27 +36,37 @@ use crate::{
     errors::ZoteroMcpError, semantic_search::Embedding, zotero::ItemKey,
 };
 
-/// One stored chunk, decoded, ready for a cosine scan.
+/// One stored chunk, decoded and ready for a cosine similarity scan.
 #[derive(Clone, Debug)]
 pub(crate) struct StoredChunk {
+    /// Unique Zotero item key.
     pub(crate) item_key: ItemKey,
+    /// Item title, if present.
     pub(crate) title: Option<String>,
+    /// Zero-based index of the chunk within the item's text.
     pub(crate) chunk_index: i64,
+    /// Text content of the chunk.
     pub(crate) chunk_text: String,
+    /// Decoded L2-normalized vector embedding.
     pub(crate) embedding: Embedding,
 }
 
 /// A text chunk ready to be embedded and stored in the semantic index.
 pub(crate) struct NewChunk {
+    /// Zero-based index of the chunk within the item's text.
     pub(crate) chunk_index: i64,
+    /// Text content of the chunk.
     pub(crate) chunk_text: String,
+    /// Vector embedding produced for this chunk.
     pub(crate) embedding: Embedding,
 }
 
 /// Aggregate stats for the `status` action of `zotero_semantic_search`.
 #[derive(Clone, Debug, serde::Serialize)]
 pub(crate) struct SemanticIndexStats {
+    /// Total number of distinct indexed Zotero items.
     pub(crate) indexed_items: i64,
+    /// Total number of stored text chunks across all items.
     pub(crate) indexed_chunks: i64,
 }
 
@@ -49,15 +77,17 @@ pub(crate) struct SemanticIndex {
 }
 
 impl SemanticIndex {
-    /// Opens (creating if missing, including parent directories) the `SQLite`
-    /// database at `db_path`, in WAL mode with foreign keys enabled, and
-    /// ensures the schema exists.
+    /// Opens (creating parent directories and the database file if missing) the
+    /// `SQLite` database.
+    ///
+    /// Sets WAL mode, enables foreign key constraints, and ensures the table
+    /// schema exists.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::Io`] if the parent directory cannot be created
-    /// - [`ZoteroMcpError::Sqlite`] if the database cannot be opened or the
-    ///   schema cannot be created
+    /// - [`ZoteroMcpError::Io`] if parent directories cannot be created.
+    /// - [`ZoteroMcpError::Sqlite`] if database opening or schema creation
+    ///   fails.
     pub(crate) async fn open(db_path: &Path) -> Result<Self, ZoteroMcpError> {
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
@@ -133,15 +163,22 @@ impl SemanticIndex {
         Ok(date_modified)
     }
 
-    /// Replaces all chunks for `item_key` with `chunks` in one transaction:
-    /// upserts the `items` row, deletes any existing `chunks` rows for it
-    /// (`ON DELETE CASCADE` via re-inserting the `items` row would also
-    /// work, but an explicit delete is clearer here since we UPDATE, not
-    /// replace, the `items` row), then inserts `chunks`.
+    /// Replaces all chunks for `item_key` with `chunks` in a single
+    /// transaction.
+    ///
+    /// Upserts the `items` metadata row, deletes any existing `chunks` rows for
+    /// the item, and inserts the new chunk batch.
+    ///
+    /// # Arguments
+    ///
+    /// * `item_key` - Unique Zotero item key.
+    /// * `title` - Optional item title.
+    /// * `date_modified` - Optional modification timestamp string from Zotero.
+    /// * `chunks` - Slice of chunks to insert.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::Sqlite`] on query or transaction failure
+    /// - [`ZoteroMcpError::Sqlite`] on query or transaction failure.
     pub(crate) async fn upsert_item(
         &self,
         item_key: &ItemKey,

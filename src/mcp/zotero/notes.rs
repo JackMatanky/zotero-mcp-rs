@@ -1,9 +1,31 @@
 //! MCP tool handlers and argument models for Zotero notes.
 //!
-//! Main types:
+//! This module defines the grouped `zotero_notes` read router and
+//! `zotero_notes_write` write router, dispatching commands to note retrieval,
+//! note creation, and PDF annotation handlers.
+//!
+//! # Main Types
 //! - [`ZoteroNotesCommand`] - Grouped-router command for read-only note actions
 //! - [`ZoteroNotesWriteCommand`] - Grouped-router command for write note
 //!   actions
+//! - [`GetNotesArgs`] - Arguments for the `list` action of `zotero_notes`
+//! - [`CreateNoteArgs`] - Arguments for the `create` action of
+//!   `zotero_notes_write`
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::mcp::zotero::notes::{ZoteroNotesCommand, GetNotesArgs};
+//! # use rmcp::handler::server::wrapper::Parameters;
+//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! let cmd = ZoteroNotesCommand::List(serde_json::from_value(serde_json::json!({
+//!     "item_key": "ITEM1234"
+//! }))?);
+//! let result = server.zotero_notes(Parameters(cmd)).await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -21,7 +43,7 @@ use crate::{
 /// Arguments for the `list` action of `zotero_notes`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetNotesArgs {
-    /// Zotero item key ([`ItemKey`]).
+    /// Unique Zotero item key ([`ItemKey`]).
     item_key: ItemKey,
 }
 /// Arguments for the `create` action of `zotero_notes_write`.
@@ -67,6 +89,11 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Dispatches read-only Zotero note commands (`list`, `synthesize`).
+    ///
+    /// Receives [`Parameters<ZoteroNotesCommand>`] and delegates execution to
+    /// either note listing or annotation synthesis handlers.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
@@ -96,6 +123,11 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Dispatches write Zotero note commands (`create`, `annotation`).
+    ///
+    /// Receives [`Parameters<ZoteroNotesWriteCommand>`] and delegates execution
+    /// to either note creation or PDF annotation creation handlers.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
@@ -116,6 +148,9 @@ impl ZoteroMcpServer {
 
 impl ZoteroMcpServer {
     /// Handles Zotero note retrieval tool calls.
+    ///
+    /// Fetches child items using [`ZoteroClient::get_item_children`] and
+    /// filters results to items of type [`ItemType::Note`].
     ///
     /// # Errors
     ///
@@ -139,6 +174,9 @@ impl ZoteroMcpServer {
     }
 
     /// Handles Zotero note creation tool calls.
+    ///
+    /// Creates a child note attached to `args.parent_item_key` via
+    /// [`ZoteroClient::create_note`].
     ///
     /// # Errors
     ///

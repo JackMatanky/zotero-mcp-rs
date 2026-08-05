@@ -1,22 +1,43 @@
 //! Response shapes returned by the Better Notes bridge's HTTP endpoints.
 //!
-//! Main types:
-//! - [`TemplateName`] - Template name newtype
-//! - [`NoteExportFormat`] - Export format (Markdown or HTML)
-//! - [`NoteExportResponse`] - Export result payload
-//! - [`NoteItemResponse`] - Note item with metadata
-//! - [`TemplateResponse`] - Template listing response
-//! - [`RelationsResponse`] - Note relations container
-//! - [`NoteRelations`] - Bidirectional relation links
-//! - [`NoteRelationLink`] - Single relation link
-//! - [`NoteTreeResponse`] - Nested note tree structure
-
+//! This module defines serializable Rust data types for Better Notes requests
+//! and responses. These models cover note exporting, Markdown conversion,
+//! template execution, relation links, and note tree structures used by
+//! [`BetterNotesClient`](crate::better_notes::BetterNotesClient).
+//!
+//! # Main Types
+//!
+//! - [`TemplateName`] - Template name wrapper
+//! - [`NoteExportFormat`] - Export format
+//!   ([`Markdown`](NoteExportFormat::Markdown) or
+//!   [`Html`](NoteExportFormat::Html))
+//! - [`NoteExportResponse`] - Response payload for note export
+//! - [`NoteItemResponse`] - Response payload containing a created note's item
+//!   key
+//! - [`TemplateResponse`] - Response payload for template rendering
+//! - [`RelationsResponse`] - Response payload containing note relations
+//! - [`NoteRelations`] - Container for inbound and outbound relation links
+//! - [`NoteRelationLink`] - Representation of a single directed note link
+//! - [`NoteTreeResponse`] - Response payload for nested note trees
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use zotero_mcp_rs::better_notes::{NoteExportFormat, TemplateName};
+//!
+//! let template = TemplateName::from("default");
+//! assert_eq!(template.as_str(), "default");
+//!
+//! let format = NoteExportFormat::Markdown;
+//! assert_eq!(format.as_str(), "markdown");
+//! ```
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::zotero::ItemKey;
 
-/// Name of a Better Notes template, e.g. `"default"` or a custom template name.
+/// Name of a Better Notes template, such as `"default"` or a custom template
+/// name.
 #[derive(
     Clone,
     Debug,
@@ -84,14 +105,15 @@ impl PartialEq<str> for TemplateName {
 )]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum NoteExportFormat {
-    /// Return Markdown content.
+    /// Markdown format.
     #[default]
     Markdown,
-    /// Return HTML content.
+    /// HTML format.
     Html,
 }
 
 impl NoteExportFormat {
+    /// Returns the lower-case string representation of the export format.
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Markdown => "markdown",
@@ -100,14 +122,14 @@ impl NoteExportFormat {
     }
 }
 
-/// Response body of the note-export endpoint.
+/// Response body returned by the Better Notes note-export endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct NoteExportResponse {
-    /// Exported note content.
+    /// Exported note content formatted as Markdown or HTML.
     pub(crate) content: String,
 }
 
-/// Response body of the note-creation endpoint.
+/// Response body returned by the Better Notes note-creation endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct NoteItemResponse {
     /// Item key of the created note.
@@ -115,21 +137,21 @@ pub(crate) struct NoteItemResponse {
     pub(crate) item_key: ItemKey,
 }
 
-/// Response body of the template-run endpoint.
+/// Response body returned by the Better Notes template-run endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct TemplateResponse {
-    /// Rendered template output.
+    /// Rendered template output string.
     pub(crate) result: String,
 }
 
-/// Response body of the note-relations endpoint.
+/// Response body returned by the Better Notes note-relations endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct RelationsResponse {
-    /// Inbound and outbound note relation linkages.
+    /// Inbound and outbound note relation links.
     pub(crate) relations: NoteRelations,
 }
 
-/// Inbound and outbound note-link relation sets.
+/// Inbound and outbound note-link relation sets for a Zotero note.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct NoteRelations {
     /// Links from this note to other notes.
@@ -138,7 +160,7 @@ pub(crate) struct NoteRelations {
     pub(crate) inbound: Vec<NoteRelationLink>,
 }
 
-/// One directed Better Notes note-link relation.
+/// Single directed Better Notes note-link relation between two notes.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct NoteRelationLink {
@@ -158,13 +180,14 @@ pub(crate) struct NoteRelationLink {
     pub(crate) to_line: Option<u64>,
     /// Target heading section, if the link targets a section.
     pub(crate) to_section: Option<String>,
-    /// Raw `zotero://note/...` URL.
+    /// Raw `zotero://note/...` URL string.
     pub(crate) url: String,
 }
 
-/// Response body of the note-tree endpoint.
+/// Response body returned by the Better Notes note-tree endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct NoteTreeResponse {
-    /// Hierarchical tree structure of notes as JSON.
+    /// Hierarchical tree structure of notes as JSON
+    /// [`Value`](serde_json::Value).
     pub(crate) tree: serde_json::Value,
 }

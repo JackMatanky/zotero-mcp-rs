@@ -1,8 +1,23 @@
-//! MCP tool handler and argument model for Zotero Local API status.
+//! MCP tool handler and argument model for checking Zotero Local API status.
 //!
-//! Main types:
+//! This module provides the `zotero_status` MCP tool and router to verify
+//! Zotero API availability, version information, and connection state via
+//! [`ZoteroClient::check_status`].
+//!
+//! # Main Types
 //! - [`EmptyArgs`] - Arguments for tools that take no parameters
-
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::mcp::zotero::status::EmptyArgs;
+//! # use rmcp::handler::server::wrapper::Parameters;
+//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! let result = server.zotero_status(Parameters(EmptyArgs {})).await?;
+//! # Ok(())
+//! # }
+//! ```
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
     tool_router,
@@ -28,6 +43,12 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Checks Zotero Local API availability, version, and connectivity.
+    ///
+    /// Receives tool call parameters wrapped in [`Parameters<EmptyArgs>`] and
+    /// delegates execution to
+    /// [`zotero_status_impl`](ZoteroMcpServer::zotero_status_impl).
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -42,6 +63,9 @@ impl ZoteroMcpServer {
 
 impl ZoteroMcpServer {
     /// Handles Zotero Local API status tool calls.
+    ///
+    /// Queries local Zotero status using [`ZoteroClient::check_status`] and
+    /// formats the response as a JSON success object.
     ///
     /// # Errors
     ///

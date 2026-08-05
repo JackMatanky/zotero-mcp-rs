@@ -9,6 +9,18 @@
 //! - [`resolve_metadata`]: primary entry point for identifier resolution.
 //! - [`IdentifierKind`]: selector for DOI, arXiv, or ISBN lookup.
 //! - [`ItemDraft`]: typed Zotero item payload for creation.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::metadata::{resolve_metadata, IdentifierKind};
+//! # async fn run(state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
+//! let draft = resolve_metadata(state, IdentifierKind::Doi, "10.1038/s41586-020-2649-2").await?;
+//! println!("Resolved title: {}", draft.title);
+//! # Ok(())
+//! # }
+//! ```
 
 use serde::{Deserialize, Serialize};
 
@@ -28,8 +40,10 @@ use crate::{
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ItemDraft {
+    /// Zotero item type (e.g. journal article, preprint, or book).
     #[serde(rename = "itemType")]
     pub(crate) item_type: ItemType,
+    /// Title of the publication.
     pub(crate) title: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) creators: Vec<ZoteroCreator>,
@@ -60,8 +74,11 @@ pub(crate) struct ItemDraft {
 #[derive(Copy, Clone, Debug, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum IdentifierKind {
+    /// Digital Object Identifier resolved via Crossref.
     Doi,
+    /// arXiv identifier resolved via Semantic Scholar.
     Arxiv,
+    /// International Standard Book Number resolved via Open Library.
     Isbn,
 }
 
@@ -100,7 +117,7 @@ pub(crate) async fn resolve_metadata(
     }
 }
 
-/// Sends a metadata GET request to `url` and decodes the JSON response body.
+/// Fetches JSON metadata from `url` and decodes the response body.
 ///
 /// # Errors
 ///

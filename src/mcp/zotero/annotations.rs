@@ -1,8 +1,24 @@
-//! MCP tool handlers for Zotero PDF annotations and synthesis.
+//! MCP tool handlers for Zotero PDF annotations and annotation synthesis.
 //!
-//! Main types:
+//! This module provides handler implementations for synthesizing PDF
+//! annotations into structured Markdown notes and creating new PDF annotations
+//! on attachment items via [`ZoteroClient`]. # Main Types
 //! - [`SynthesizeAnnotationsArgs`] - Arguments for the `synthesize` action
 //! - [`CreateAnnotationArgs`] - Arguments for the `annotation` action
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::mcp::zotero::annotations::SynthesizeAnnotationsArgs;
+//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = serde_json::from_value(serde_json::json!({
+//!     "item_key": "ITEM1234"
+//! }))?;
+//! let result = server.zotero_synthesize_annotations_impl(args).await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -20,7 +36,7 @@ use crate::{
 /// Arguments for the `synthesize` action of `zotero_notes`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SynthesizeAnnotationsArgs {
-    /// Zotero item key ([`ItemKey`]).
+    /// Unique Zotero item key ([`ItemKey`]).
     item_key: ItemKey,
 }
 /// Arguments for the `annotation` action of `zotero_notes_write`.
@@ -30,11 +46,11 @@ pub(crate) struct CreateAnnotationArgs {
     parent_attachment_key: ItemKey,
     /// Type of annotation ([`AnnotationType`]).
     annotation_type: AnnotationType,
-    /// Selected text (required for highlight/underline, omit for note).
+    /// Selected text (required for highlight/underline, omitted for note).
     text: Option<String>,
     /// Optional user comment attached to the annotation.
     comment: Option<String>,
-    /// CSS-style hex color, e.g. `"#ffd400"`.
+    /// CSS-style hex color code, for example `"#ffd400"`.
     color: Option<String>,
     /// Optional PDF page label where the annotation appears.
     page_label: Option<String>,
@@ -44,6 +60,9 @@ pub(crate) struct CreateAnnotationArgs {
 
 impl ZoteroMcpServer {
     /// Handles Zotero annotation synthesis tool calls.
+    ///
+    /// Synthesizes annotations for the item specified by `args.item_key` using
+    /// [`ZoteroClient::synthesize_annotations`].
     ///
     /// # Errors
     ///
@@ -58,6 +77,9 @@ impl ZoteroMcpServer {
     }
 
     /// Handles Zotero PDF annotation creation tool calls.
+    ///
+    /// Constructs an [`AnnotationDraft`] from `args` and creates the annotation
+    /// via [`ZoteroClient::create_annotation`].
     ///
     /// # Errors
     ///

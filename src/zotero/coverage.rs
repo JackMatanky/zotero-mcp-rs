@@ -1,9 +1,29 @@
-//! Library and collection coverage metrics.
+//! Library and collection coverage metrics for the Zotero Local HTTP API.
 //!
-//! Main types:
-//! - [`LibraryCoverage`] - Aggregate PDF, DOI, and note coverage statistics
-//! - [`LibraryCoveragePage`] - Coverage page with pagination metadata
-//! - [`ItemCoverageFlags`] - Per-item PDF/DOI/note availability flags
+//! Computes aggregate and per-item availability statistics for PDF attachments,
+//! DOIs, and child notes across a user library or specific collection. Called
+//! by MCP tool handlers in `crate::mcp::zotero::coverage`.
+//!
+//! # Main Types
+//!
+//! - [`LibraryCoverage`]: Aggregate PDF, DOI, and note coverage statistics.
+//! - [`LibraryCoveragePage`]: One page of coverage results with pagination
+//!   metadata.
+//! - [`ItemCoverageFlags`]: Per-item PDF, DOI, and note availability
+//!   indicators.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::client::ZoteroClient;
+//! # async fn example(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
+//! let client = ZoteroClient::new(&state);
+//! let page = client.get_library_coverage(None, 0, 50).await?;
+//! println!("Total items: {}", page.coverage.total_items);
+//! # Ok(())
+//! # }
+//! ```
 
 use serde::{Deserialize, Serialize};
 
@@ -23,40 +43,62 @@ use crate::{
     reason = "domain model tracks 3 distinct boolean flags"
 )]
 pub(crate) struct ItemCoverageFlags {
+    /// Whether the item has at least one PDF attachment.
     pub(crate) has_pdf: bool,
+    /// Whether the item has a nonempty DOI field.
     pub(crate) has_doi: bool,
+    /// Whether the item has at least one child note.
     pub(crate) has_notes: bool,
 }
 
-/// Library or collection statistics for PDF, DOI, and note coverage.
+/// Aggregate PDF, DOI, and note coverage statistics for a library or
+/// collection.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct LibraryCoverage {
+    /// Total number of top-level items evaluated.
     pub(crate) total_items: usize,
+    /// Number of items with at least one PDF attachment.
     pub(crate) with_pdf: usize,
+    /// Number of items with a nonempty DOI field.
     pub(crate) with_doi: usize,
+    /// Number of items with at least one child note.
     pub(crate) with_notes: usize,
+    /// Percentage of items with at least one PDF attachment.
     pub(crate) pdf_percentage: f64,
+    /// Percentage of items with a nonempty DOI field.
     pub(crate) doi_percentage: f64,
+    /// Percentage of items with at least one child note.
     pub(crate) notes_percentage: f64,
 }
 
-/// One page of library coverage results plus pagination metadata.
+/// One page of library coverage results alongside pagination metadata.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct LibraryCoveragePage {
+    /// Aggregate coverage statistics for items in this page.
     pub(crate) coverage: LibraryCoverage,
+    /// Pagination metadata describing the current offset, limit, and total
+    /// count.
     pub(crate) pagination: PaginationInfo,
 }
 
 impl ZoteroClient<'_> {
     /// Computes library or optional `collection_key` coverage statistics for
-    /// PDF, DOI, and notes.
+    /// PDF attachments, DOIs, and child notes.
+    ///
+    /// # Arguments
+    ///
+    /// * `collection_key` - Optional collection key to filter coverage metrics;
+    ///   [`None`] evaluates the entire library.
+    /// * `offset` - Zero-based pagination offset.
+    /// * `limit` - Maximum number of library items to evaluate in this page.
     ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    ///   code.
+    /// - [`ZoteroMcpError::Network`] if the request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded.
     pub(crate) async fn get_library_coverage(
         &self,
         collection_key: Option<&CollectionKey>,

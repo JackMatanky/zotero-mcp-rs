@@ -1,10 +1,8 @@
 //! Read-only access to Zotero's local `zotero.sqlite` database.
 //!
-//! Locates the database using the same order as Zotero desktop integrations:
-//!
-//! 1. `ZOTERO_DB_PATH`
-//! 2. The `prefs.js` `dataDir` preference
-//! 3. The per-user default Zotero data directory
+//! Locates the database using the standard Zotero desktop configuration
+//! search order: the `ZOTERO_DB_PATH` environment variable, the `prefs.js`
+//! `dataDir` preference, or the per-user default Zotero data directory.
 //!
 //! The database is opened with `SQLite` `immutable=1` and read-only flags so a
 //! running Zotero instance does not block reads. Queries inspect Zotero's
@@ -14,11 +12,28 @@
 //! Every method is gated at the MCP tool layer by
 //! [`AppState::check_sqlite_access`](crate::state::AppState::check_sqlite_access).
 //!
-//! Main types:
-//! - [`LocalZoteroDb`] - Immutable read-only database handle
-//! - [`FulltextHit`] - Full-text search hit across items
-//! - [`NoteAnnotationHit`] - Note or annotation search hit
-//! - [`HitKind`] - Search hit discriminator (`Note` or `Annotation`)
+//! # Main Types
+//!
+//! - [`LocalZoteroDb`]: Immutable read-only database handle.
+//! - [`FulltextHit`]: Full-text search hit across items.
+//! - [`NoteAnnotationHit`]: Note or annotation search hit.
+//! - [`HitKind`]: Search hit discriminator (`Note` or `Annotation`).
+//!
+//! # Examples
+//!
+//! Opening the local Zotero `SQLite` database and searching full-text:
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::zotero::sqlite::{LocalZoteroDb, find_zotero_db};
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! if let Some(db_path) = find_zotero_db(None) {
+//!     let db = LocalZoteroDb::open(&db_path).await?;
+//!     let hits = db.search_fulltext("retrieval", 10).await?;
+//!     println!("Found {} full-text hits", hits.len());
+//! }
+//! # Ok(())
+//! # }
+//! ```
 
 use std::{
     collections::HashSet,
@@ -44,6 +59,7 @@ const SNIPPET_CHARS: usize = 400;
 /// Opens Zotero's local `SQLite` database in immutable read-only mode.
 #[derive(Clone, Debug)]
 pub(crate) struct LocalZoteroDb {
+    /// Connection pool for executing queries against the `SQLite` database.
     pool: SqlitePool,
 }
 
@@ -69,31 +85,45 @@ pub(crate) enum HitKind {
 /// A single full-text search hit.
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 pub(crate) struct FulltextHit {
+    /// Unique key identifying the matched item.
     pub(crate) key: ItemKey,
+    /// Zotero item type name (for example, `journalArticle`).
     pub(crate) item_type: String,
+    /// Title of the item, if available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) title: Option<String>,
+    /// Digital Object Identifier (DOI) of the item, if available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) doi: Option<String>,
+    /// Formatted string of item creator names.
     pub(crate) creators: String,
+    /// Matched text snippet extracted from full-text indexing.
     pub(crate) snippet: String,
 }
 
 /// A single note or annotation search hit.
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 pub(crate) struct NoteAnnotationHit {
+    /// Discriminator identifying whether the hit is a note or annotation.
     pub(crate) kind: HitKind,
+    /// Unique key identifying the note or annotation item.
     pub(crate) key: ItemKey,
+    /// Plain text content of the note or annotation, if present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) text: Option<String>,
+    /// User comment attached to the annotation, if present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) comment: Option<String>,
+    /// Key of the parent item containing this note or annotation, if present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) parent_key: Option<ItemKey>,
+    /// Title of the parent item, if available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) parent_title: Option<String>,
+    /// Page label or number where the annotation appears, if present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) page_label: Option<String>,
+    /// Highlight or markup color of the annotation, if present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) color: Option<String>,
 }
@@ -108,8 +138,11 @@ impl LocalZoteroDb {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::Sqlite`] if `path` cannot be opened read-only
-    /// - [`ZoteroMcpError::LocalDb`] if the database is not a Zotero database
+    /// - [`Sqlite`]: If `path` cannot be opened read-only or queries fail.
+    /// - [`LocalDb`]: If the database is not a Zotero database.
+    ///
+    /// [`Sqlite`]: ZoteroMcpError::Sqlite
+    /// [`LocalDb`]: ZoteroMcpError::LocalDb
     pub(crate) async fn open(path: &Path) -> Result<Self, ZoteroMcpError> {
         let opts = SqliteConnectOptions::new()
             .filename(path)
@@ -131,8 +164,11 @@ impl LocalZoteroDb {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::Sqlite`] if the schema probe query fails
-    /// - [`ZoteroMcpError::LocalDb`] if the `items` table is missing
+    /// - [`Sqlite`]: If the schema probe query fails.
+    /// - [`LocalDb`]: If the `items` table is missing.
+    ///
+    /// [`Sqlite`]: ZoteroMcpError::Sqlite
+    /// [`LocalDb`]: ZoteroMcpError::LocalDb
     async fn probe_schema(&self) -> Result<(), ZoteroMcpError> {
         let row = sqlx::query(
             "SELECT name FROM sqlite_master WHERE type='table' AND \
@@ -153,7 +189,9 @@ impl LocalZoteroDb {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::Sqlite`] if a query or row read fails
+    /// - [`Sqlite`]: If a query or row read fails.
+    ///
+    /// [`Sqlite`]: ZoteroMcpError::Sqlite
     #[expect(
         clippy::too_many_lines,
         reason = "SQL spans are long; mirrors digest query shape"
@@ -315,7 +353,9 @@ impl LocalZoteroDb {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::Sqlite`] if a query or row read fails
+    /// - [`Sqlite`]: If a query or row read fails.
+    ///
+    /// [`Sqlite`]: ZoteroMcpError::Sqlite
     pub(crate) async fn search_notes_annotations(
         &self,
         query: &str,
@@ -511,7 +551,7 @@ fn read_string_pref(prefs: &Path, key: &str) -> Option<String> {
     })
 }
 
-/// Splits a search query into lowercased, punctuation-stripped, de-duplicated
+/// Splits a search query into lowercased, punctuation-stripped, deduplicated
 /// tokens for matching against Zotero's stored fulltext words.
 fn tokenize_query(query: &str) -> Vec<String> {
     let lowercase = query.to_lowercase();

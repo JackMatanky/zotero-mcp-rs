@@ -1,14 +1,37 @@
 //! MCP tool handlers and argument models for Zotero item relations.
 //!
-//! Covers `zotero_relations` / `zotero_relations_write` grouped-router
-//! actions: listing an item's `dc:relation` links, and bidirectionally
-//! linking or unlinking two items.
+//! Handles `zotero_relations` (read-only) and `zotero_relations_write`
+//! (mutation) grouped-router tool calls. Converts incoming MCP tool parameters
+//! into calls on [`ZoteroClient`] for inspecting `dc:relation` links, adding
+//! bidirectional item relations, and removing existing relations.
 //!
-//! Main types:
-//! - [`ZoteroRelationsCommand`] - Grouped-router command for read-only relation
-//!   actions
-//! - [`ZoteroRelationsWriteCommand`] - Grouped-router command for write
-//!   relation actions
+//! # Main Types
+//!
+//! - [`ZoteroRelationsCommand`]: Grouped-router command for read-only relation
+//!   actions.
+//! - [`ZoteroRelationsWriteCommand`]: Grouped-router command for write relation
+//!   actions.
+//! - [`GetRelatedItemsArgs`]: Arguments for fetching items related to a Zotero
+//!   item key.
+//! - [`AddItemRelationArgs`]: Arguments for linking two Zotero items
+//!   bidirectionally.
+//! - [`RemoveItemRelationArgs`]: Arguments for unlinking two Zotero items.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use rmcp::handler::server::wrapper::Parameters;
+//! # use zotero_mcp_rs::{ZoteroMcpServer, state::AppState};
+//! # use zotero_mcp_rs::mcp::zotero::relations::{ZoteroRelationsCommand, GetRelatedItemsArgs};
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let server = ZoteroMcpServer::new(AppState::from_env());
+//! let args = ZoteroRelationsCommand::Get(GetRelatedItemsArgs {
+//!     item_key: "ITEM0001".into(),
+//! });
+//! let result = server.zotero_relations(Parameters(args)).await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -57,7 +80,7 @@ pub(crate) struct RemoveItemRelationArgs {
 #[schemars(extend("type" = "object"))]
 /// Read commands dispatched by the `zotero_relations` MCP tool router.
 pub(crate) enum ZoteroRelationsCommand {
-    /// Get items related to a given item.
+    /// Get items related to a given item key.
     Get(GetRelatedItemsArgs),
 }
 
@@ -83,6 +106,11 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Dispatches read-only relation tool commands to internal handlers.
+    ///
+    /// Receives parsed `args` wrapped in [`Parameters`], routing the `get`
+    /// action to retrieve items linked to a given Zotero item key.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
@@ -109,6 +137,11 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Dispatches relation mutation tool commands to internal handlers.
+    ///
+    /// Receives parsed `args` wrapped in [`Parameters`], routing `add` or
+    /// `remove` actions to mutate bidirectional Zotero item relations.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
@@ -128,10 +161,11 @@ impl ZoteroMcpServer {
 }
 
 impl ZoteroMcpServer {
-    /// Handles Zotero related-item listing tool calls, returning the items
-    /// linked to `item_key` as `RelatedItem` JSON.
+    /// Handles Zotero related-item listing tool calls.
     ///
-    /// # Errors
+    /// Fetches items linked to `args.item_key` via
+    /// [`ZoteroClient::get_related_items`] and formats the response as JSON
+    /// tool output. # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
     /// failures are returned as MCP error content.
@@ -144,6 +178,9 @@ impl ZoteroMcpServer {
     }
 
     /// Handles Zotero related-item linking tool calls.
+    ///
+    /// Creates a bidirectional link between `args.item_key` and
+    /// `args.related_item_key` via [`ZoteroClient::add_item_relation`].
     ///
     /// # Errors
     ///
@@ -164,6 +201,9 @@ impl ZoteroMcpServer {
     }
 
     /// Handles Zotero related-item unlinking tool calls.
+    ///
+    /// Removes the bidirectional relation between `args.item_key` and
+    /// `args.related_item_key` via [`ZoteroClient::remove_item_relation`].
     ///
     /// # Errors
     ///

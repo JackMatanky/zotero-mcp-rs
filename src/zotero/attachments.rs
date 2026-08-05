@@ -1,6 +1,29 @@
 //! Attachment item operations for the Zotero Local HTTP API.
 //!
-//! No public types — all functionality is exposed as [`ZoteroClient`] methods.
+//! Provides [`ZoteroClient`] methods for linking external files or URLs to
+//! parent library items and importing local files into Zotero's internal
+//! storage via a three-phase upload sequence. Called by attachment tool
+//! handlers in `crate::mcp::zotero::attachments`.
+//!
+//! Provides no public types; all functionality is exposed through
+//! [`ZoteroClient`] methods.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::client::ZoteroClient;
+//! # use zotero_mcp_rs::zotero::ItemKey;
+//! # async fn example(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
+//! let client = ZoteroClient::new(&state);
+//! let parent_key = ItemKey::from("ABCD1234");
+//! let attachment = client
+//!     .attach_file_link(&parent_key, "Sample Document", "/path/to/doc.pdf", None)
+//!     .await?;
+//! println!("Created attachment key: {}", attachment.key);
+//! # Ok(())
+//! # }
+//! ```
 
 use std::{fmt::Write, path::Path};
 
@@ -26,23 +49,24 @@ struct UploadTicket {
 }
 
 impl ZoteroClient<'_> {
-    /// Attaches a linked file to a parent item.
+    /// Attaches a linked file or URL to a parent library item.
     ///
     /// # Arguments
     ///
-    /// * `parent_item_key` - Key of the parent item to attach to
-    /// * `title` - Title for the attachment
-    /// * `file_path_or_url` - File path or URL to link
+    /// * `parent_item_key` - Key of the parent item to attach to.
+    /// * `title` - Display title for the attachment.
+    /// * `file_path_or_url` - Local filepath or web URL to link.
     /// * `content_type` - Optional MIME content type (defaults to
-    ///   `"application/pdf"`)
+    ///   `"application/pdf"`).
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::PermissionDenied`] if write access is disabled.
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    ///   code.
+    /// - [`ZoteroMcpError::Network`] if the request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded.
     pub(crate) async fn attach_file_link(
         &self,
         parent_item_key: &ItemKey,
@@ -69,29 +93,33 @@ impl ZoteroClient<'_> {
         .await
     }
 
-    /// Imports a local file into Zotero storage via the three-phase MD5
-    /// upload and returns the created attachment item.
+    /// Imports a local file into Zotero storage via a three-phase MD5
+    /// upload sequence and returns the created attachment item.
     ///
-    /// If Zotero already has the file (matching MD5), returns the existing
-    /// attachment without re-uploading.
+    /// If Zotero already contains an identical file (matching MD5 checksum),
+    /// this method returns the existing attachment without re-uploading raw
+    /// bytes.
     ///
     /// # Arguments
     ///
     /// * `parent_item_key` - Parent item to attach to; [`None`] creates a
     ///   top-level attachment.
-    /// * `title` - Display title for the attachment
-    /// * `path` - Path to the local file to import
+    /// * `title` - Display title for the attachment.
+    /// * `path` - Path to the local file to import.
     /// * `content_type` - Optional MIME content type (defaults to
-    ///   `"application/pdf"`)
+    ///   `"application/pdf"`).
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::InputRejected`] if the path has no UTF-8 filename
-    /// - [`ZoteroMcpError::Io`] if the file cannot be read
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero rejects any phase
-    /// - [`ZoteroMcpError::Network`] if a request fails at the transport level
-    /// - [`ZoteroMcpError::Json`] if a response cannot be decoded
+    /// - [`ZoteroMcpError::PermissionDenied`] if write access is disabled.
+    /// - [`ZoteroMcpError::InputRejected`] if the filepath has no valid UTF-8
+    ///   filename.
+    /// - [`ZoteroMcpError::Io`] if reading the local file fails.
+    /// - [`ZoteroMcpError::LocalApi`] if Zotero rejects any phase of the
+    ///   upload.
+    /// - [`ZoteroMcpError::Network`] if a request fails at the HTTP transport
+    ///   level.
+    /// - [`ZoteroMcpError::Json`] if a response body cannot be decoded.
     #[allow(dead_code, reason = "wired by MCP handler in Task 3")]
     pub(crate) async fn import_pdf_file(
         &self,

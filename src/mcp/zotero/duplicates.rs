@@ -1,8 +1,25 @@
-//! MCP tool handlers for Zotero duplicate detection.
+//! MCP tool handlers for detecting duplicate items in a Zotero library.
 //!
-//! Main types:
+//! This module provides the execution logic for scanning items across the
+//! library or within a specific collection, delegating duplicate detection
+//! algorithms to [`ZoteroClient::find_duplicates`].
+//!
+//! # Main Types
 //! - [`FindDuplicatesArgs`] - Arguments for the `duplicates` action
-
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::mcp::zotero::duplicates::FindDuplicatesArgs;
+//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = serde_json::from_value(serde_json::json!({
+//!     "collection_key": "COLL1234"
+//! }))?;
+//! let result = server.zotero_find_duplicates_impl(args).await?;
+//! # Ok(())
+//! # }
+//! ```
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -22,6 +39,9 @@ pub(crate) struct FindDuplicatesArgs {
 
 impl ZoteroMcpServer {
     /// Handles Zotero duplicate detection tool calls.
+    ///
+    /// Scans for potential duplicate items in the library or optional
+    /// collection specified by `args` using [`ZoteroClient`].
     ///
     /// # Errors
     ///

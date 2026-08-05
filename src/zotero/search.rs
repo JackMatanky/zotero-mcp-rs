@@ -1,16 +1,41 @@
 //! Search and query operations for the Zotero Local HTTP API.
 //!
-//! Adds [`ZoteroClient`] methods for free-text search, tag search, citation key
-//! lookup, and structured multi-condition search.
+//! Provides [`ZoteroClient`] methods for free-text item search, tag searching,
+//! citation key resolution, and multi-condition structured queries. Used by
+//! MCP tool handlers in `crate::mcp::zotero::search` to execute library
+//! searches against Zotero's local HTTP API endpoints or via client-side
+//! fallback filtering.
 //!
 //! # Key types and operations
 //!
-//! - [`ZoteroClient::search_items`]: free-text search over title, creator,
+//! - [`ZoteroClient::search_items`]: Free-text search over title, creator,
 //!   year, or fulltext.
-//! - [`ZoteroClient::search_by_citation_key`]: lookup by native Zotero citation
-//!   key or legacy Better `BibTeX` metadata.
-//! - [`ZoteroClient::advanced_search`]: structured search with
-//!   [`SearchCondition`], [`SearchField`], and [`SearchOperator`].
+//! - [`ZoteroClient::search_by_tag`]: Filter library items matching a specific
+//!   [`TagName`].
+//! - [`ZoteroClient::search_by_citation_key`]: Look up an item by native Zotero
+//!   citation key or legacy Better `BibTeX` metadata.
+//! - [`ZoteroClient::advanced_search`]: Multi-condition search using
+//!   [`SearchCondition`], [`SearchField`], [`SearchOperator`], and
+//!   [`JoinMode`].
+//! - [`SearchPage`]: Paginated container holding returned items and
+//!   [`PaginationInfo`].
+//!
+//! # Examples
+//!
+//! Performing a free-text item search using [`ZoteroClient`]:
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::zotero::client::ZoteroClient;
+//! # use zotero_mcp_rs::errors::ZoteroMcpError;
+//! # async fn run(client: &ZoteroClient<'_>) -> Result<(), ZoteroMcpError> {
+//! let page = client.search_items("quantum mechanics", None, 0, 10).await?;
+//! println!("Found {} items", page.pagination.total);
+//! for item in page.items {
+//!     println!("- {}", item.data.title.unwrap_or_default());
+//! }
+//! # Ok(())
+//! # }
+//! ```
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -24,52 +49,86 @@ use crate::{
 };
 
 /// Searchable item field in structured searches.
+///
+/// Defines the specific metadata field targeted by a [`SearchCondition`].
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum SearchField {
+    /// Item title metadata.
     Title,
+    /// Creator name (first, last, or single name).
     Creator,
+    /// Full date string.
     Date,
+    /// Publication year component extracted from date metadata.
     Year,
+    /// Zotero item type (e.g. `journalArticle`, `book`).
     ItemType,
+    /// Tag attached to the item.
     Tag,
+    /// Miscellaneous extra metadata field.
     Extra,
+    /// Digital Object Identifier (DOI).
     Doi,
+    /// Custom or unrecognized field name.
     #[serde(untagged)]
     Other(String),
 }
 
 /// Comparison operator in structured searches.
+///
+/// Specifies how a [`SearchCondition`]'s target field is evaluated against its
+/// query value.
 #[derive(
     Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize, JsonSchema,
 )]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum SearchOperator {
+    /// Substring match (case-insensitive).
     #[default]
     Contains,
+    /// Exact match (case-insensitive).
     Is,
+    /// Prefix match (case-insensitive).
     StartsWith,
+    /// Suffix match (case-insensitive).
     EndsWith,
+    /// Inequality match.
     IsNot,
+    /// Negative substring match.
     DoesNotContain,
+    /// Greater-than comparison for numeric or date values.
     IsGreaterThan,
+    /// Less-than comparison for numeric or date values.
     IsLessThan,
+    /// Date comparison matching dates prior to target value.
     IsBefore,
+    /// Date comparison matching dates after target value.
     IsAfter,
+    /// Custom or unrecognized operator string.
     #[serde(untagged)]
     Other(String),
 }
 
 /// Structured search condition matching a specific item field.
+///
+/// Combines a target [`SearchField`], a comparison [`SearchOperator`], and a
+/// search string value.
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub(crate) struct SearchCondition {
+    /// Target metadata field to evaluate.
     pub(crate) field: SearchField,
+    /// Operator used to evaluate the field against `value`.
     #[serde(default)]
     pub(crate) operator: SearchOperator,
+    /// Query string value to match against.
     pub(crate) value: String,
 }
 
-/// How multiple conditions are combined: `all` (AND, default) or `any` (OR).
+/// Logical combination mode for multiple search conditions.
+///
+/// Determines whether all conditions must match ([`JoinMode::All`], logical
+/// AND) or any single condition can match ([`JoinMode::Any`], logical OR).
 #[derive(
     Copy,
     Clone,
@@ -83,25 +142,35 @@ pub(crate) struct SearchCondition {
 )]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum JoinMode {
+    /// Logical AND: all conditions must evaluate to true.
     #[default]
     All,
+    /// Logical OR: at least one condition must evaluate to true.
     Any,
 }
 
-/// Item field to sort results by.
+/// Item field used to order search results.
+///
+/// Specifies which metadata property determines the relative order of returned
+/// items.
 #[derive(
     Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize, JsonSchema,
 )]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum SortField {
+    /// Creation timestamp of the item in the library.
     DateAdded,
+    /// Modification timestamp of the item.
     DateModified,
+    /// Primary title string.
     Title,
+    /// Publication date.
     Date,
+    /// First creator's name.
     Creator,
 }
 
-/// Sort direction.
+/// Direction for ordering search results.
 #[derive(
     Copy,
     Clone,
@@ -115,30 +184,49 @@ pub(crate) enum SortField {
 )]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum SortDirection {
+    /// Ascending order (A to Z, oldest to newest).
     #[default]
     Asc,
+    /// Descending order (Z to A, newest to oldest).
     Desc,
 }
 
-/// Pagination metadata returned with every search result page.
+/// Pagination metadata returned alongside search result pages.
+///
+/// Contains offset, limit, total match count, and a flag indicating whether
+/// additional pages remain.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub(crate) struct PaginationInfo {
+    /// Maximum number of items requested for this page.
     pub(crate) limit: usize,
+    /// 0-based offset into the total result set.
     pub(crate) offset: usize,
+    /// Total number of items matching the search criteria across all pages.
     pub(crate) total: usize,
+    /// Indicates whether additional matching items exist past this page
+    /// (`offset + limit < total`).
     pub(crate) has_more: bool,
 }
 
-/// A page of search results plus its pagination metadata.
+/// Paginated result container wrapping items and pagination metadata.
+///
+/// Pairs a collection of items of type `T` with associated [`PaginationInfo`].
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub(crate) struct SearchPage<T> {
+    /// Items included in this page.
     pub(crate) items: Vec<T>,
+    /// Associated pagination metadata.
     pub(crate) pagination: PaginationInfo,
 }
 
 impl ZoteroClient<'_> {
     /// Searches library items matching `query`, excluding notes, and returns a
     /// paginated page.
+    ///
+    /// Executes a quick search over item title, creator, year, and fulltext
+    /// content. When `collection_key` is provided, restricts the search to
+    /// items within that collection. Returns a [`SearchPage`] containing
+    /// matching [`ZoteroItem`] entries and pagination info.
     ///
     /// # Arguments
     ///
@@ -175,8 +263,11 @@ impl ZoteroClient<'_> {
         Ok(finish_page(page.items, page.total, offset, limit))
     }
 
-    /// Searches items by `tag` name, returning at most `limit` items (excluding
-    /// notes).
+    /// Searches items matching a `tag` name, returning up to `limit` items
+    /// excluding notes.
+    ///
+    /// Queries Zotero for items tagged with `tag`. Note items are excluded from
+    /// the results. Returns a vector of matching [`ZoteroItem`] instances.
     ///
     /// # Errors
     ///
@@ -197,7 +288,12 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Searches items by native or legacy citation key.
+    /// Searches items by native or legacy citation key `citekey`.
+    ///
+    /// Checks returned items for a matching `citekey` in either the native
+    /// `citationKey` field or legacy Better `BibTeX` metadata in the
+    /// `extra` field. Returns `Some(ZoteroItem)` if found, or `None` if no
+    /// matching item exists.
     ///
     /// # Errors
     ///
@@ -233,15 +329,15 @@ impl ZoteroClient<'_> {
 
     /// Executes an advanced multi-condition structured search over item fields.
     ///
-    /// Returns a paginated page. When `join_mode` is `All` and every condition
-    /// is expressible as a Zotero quick-search parameter, the search is pushed
-    /// down to the server; otherwise the whole library is scanned and filtered
-    /// client-side.
+    /// Returns a paginated page. When `join_mode` is [`JoinMode::All`] and
+    /// every condition is expressible as a Zotero quick-search parameter,
+    /// the search is pushed down to the server; otherwise the whole library
+    /// is scanned and filtered client-side.
     ///
     /// # Arguments
     ///
     /// * `conditions` - List of conditions to match against item fields
-    /// * `join_mode` - `All` (AND) or `Any` (OR)
+    /// * `join_mode` - [`JoinMode::All`] (AND) or [`JoinMode::Any`] (OR)
     /// * `sort` - Optional field to sort results by
     /// * `sort_direction` - Sort order for `sort`
     /// * `offset` - 0-based offset into the full result set
@@ -375,7 +471,7 @@ impl ZoteroClient<'_> {
                 "itemType={item_type},-note,-attachment,-annotation"
             ));
         } else {
-            // exclusion only; merged into the same param so the fast path
+            // Exclusion only; merged into the same parameter so the fast path
             // cannot append a second itemType key
             params.push("itemType=-note,-attachment,-annotation".to_owned());
         }

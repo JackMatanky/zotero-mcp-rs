@@ -11,6 +11,19 @@
 //!   [`ZoteroClient::update_collection`]: create, rename, or move collections.
 //! - [`ZoteroClient::manage_collection_items`]: add or remove items using
 //!   [`CollectionItemAction`].
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::client::ZoteroClient;
+//! # async fn run(state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
+//! let client = ZoteroClient::new(state);
+//! let collections = client.get_collections().await?;
+//! println!("Found {} collections", collections.len());
+//! # Ok(())
+//! # }
+//! ```
 
 use serde::{Deserialize, Serialize};
 
@@ -25,19 +38,27 @@ use crate::{
 /// Action for adding or removing items to or from a collection.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub(crate) enum CollectionItemAction {
+    /// Add items to the target collection.
     Add,
+    /// Remove items from the target collection.
     Remove,
 }
 
 impl ZoteroClient<'_> {
     /// Fetches every collection in the library.
     ///
+    /// Returns a vector of [`ZoteroCollection`] records representing the full
+    /// collection hierarchy.
+    ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body cannot be decoded
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(crate) async fn get_collections(
         &self,
     ) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
@@ -45,15 +66,20 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Searches collections by `query`, matching collection names
+    /// Searches collections by matching `query` against collection names
     /// case-insensitively.
+    ///
+    /// Returns matching [`ZoteroCollection`] records from across the library.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body cannot be decoded
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(crate) async fn search_collections(
         &self,
         query: &str,
@@ -67,15 +93,20 @@ impl ZoteroClient<'_> {
         Ok(filtered)
     }
 
-    /// Fetches every item inside the collection identified by
-    /// `collection_key`.
+    /// Fetches every item inside the collection identified by `collection_key`.
+    ///
+    /// Returns a vector of [`ZoteroItem`] records contained within the
+    /// collection.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body cannot be decoded
+    ///
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(crate) async fn get_collection_items(
         &self,
         collection_key: &CollectionKey,
@@ -89,13 +120,20 @@ impl ZoteroClient<'_> {
 
     /// Creates a new collection with `name` and optional `parent_key`.
     ///
+    /// Returns the newly created [`ZoteroCollection`] returned by the Local
+    /// API.
+    ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`PermissionDenied`] if write permission is disabled in configuration
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body cannot be decoded
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(crate) async fn create_collection(
         &self,
         name: &str,
@@ -130,11 +168,15 @@ impl ZoteroClient<'_> {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`PermissionDenied`] if write permission is disabled in configuration
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body cannot be decoded
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(crate) async fn manage_collection_items(
         &self,
         collection_key: &CollectionKey,
@@ -162,16 +204,21 @@ impl ZoteroClient<'_> {
         Ok(())
     }
 
-    /// Permanently deletes the collection identified by `collection_key`. Items
-    /// inside the collection are not deleted.
+    /// Permanently deletes the collection identified by `collection_key`.
+    ///
+    /// Items inside the collection are not deleted.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`PermissionDenied`] if write permission is disabled in configuration
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body cannot be decoded
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(crate) async fn delete_collection(
         &self,
         collection_key: &CollectionKey,
@@ -192,20 +239,25 @@ impl ZoteroClient<'_> {
 
     /// Renames and/or moves a collection identified by `collection_key`.
     ///
+    /// Returns the updated [`ZoteroCollection`] record.
+    ///
     /// # Arguments
     ///
     /// * `collection_key` - Key of the collection to update
     /// * `name` - Optional new collection name
-    /// * `parent_key` - Optional new parent collection key (empty string for
-    ///   top-level)
+    /// * `parent` - Optional new parent collection location
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`PermissionDenied`] if write permission is disabled in configuration
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response body cannot be decoded
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(crate) async fn update_collection(
         &self,
         collection_key: &CollectionKey,

@@ -1,10 +1,15 @@
 //! Zotero Local API client and flat domain layer.
 //!
-//! Provides [`ZoteroClient`] plus domain modules for Zotero keys, controlled
-//! vocabulary types, API objects, resource endpoints, item subdomains,
-//! metadata lookup, derived views, and direct `zotero.sqlite` access.
+//! Provides [`ZoteroClient`] and underlying domain submodules for Zotero key
+//! types, API object shapes, endpoint wrappers, metadata lookup, and direct
+//! `SQLite` access. This module is called by the higher-level MCP tool handlers
+//! in [`crate::mcp`] to interact with Zotero.
 //!
-//! Main types:
+//! For client usage examples, see the [`ZoteroClient`] documentation in
+//! [`client`].
+//!
+//! # Main Types
+//!
 //! - [`ZoteroClient`] - HTTP client for the Zotero Local API
 //! - [`ZoteroItem`] - A single library item
 //! - [`ZoteroCollection`] - A collection hierarchy node

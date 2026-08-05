@@ -1,8 +1,27 @@
-//! Async client for the Better Notes bridge's HTTP companion API.
+//! Async client for the Better Notes plugin's HTTP companion API.
 //!
-//! Main types:
-//! - [`BetterNotesClient`] - HTTP client scoped to a single tool call
-
+//! This module implements [`BetterNotesClient`], an HTTP client wrapper used by
+//! the `better_notes_*` MCP tool handlers in `crate::mcp::better_notes` and
+//! note-rendering paths in `crate::mcp::zotero`. It communicates with the
+//! Better Notes plugin endpoints running inside Zotero, enforcing configured
+//! size constraints and write permissions via [`AppState`].
+//!
+//! # Main Types
+//!
+//! - [`BetterNotesClient`] - Async HTTP client scoped to a single tool call
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::better_notes::BetterNotesClient;
+//! # use zotero_mcp_rs::zotero::ItemKey;
+//! # async fn example(state: &AppState, item_key: &ItemKey) -> Result<(), Box<dyn std::error::Error>> {
+//! let client = BetterNotesClient::new(state);
+//! let markdown = client.export(item_key, None).await?;
+//! # Ok(())
+//! # }
+//! ```
 use serde::Serialize;
 use serde_json::Value;
 
@@ -16,13 +35,18 @@ use crate::{
     zotero::ItemKey,
 };
 
-/// Client for the Better Notes bridge, scoped to a single tool call.
+/// Async HTTP client for the Better Notes companion API, scoped to a single
+/// tool call.
+///
+/// Borrows [`AppState`] to access client configuration, HTTP transport, and
+/// security policies.
 pub(crate) struct BetterNotesClient<'a> {
     state: &'a AppState,
 }
 
 impl<'a> BetterNotesClient<'a> {
-    /// Creates a Better Notes client borrowing shared `state` ([`AppState`]).
+    /// Creates a new [`BetterNotesClient`] borrowing shared `state`
+    /// ([`AppState`]).
     pub(crate) fn new(state: &'a AppState) -> Self {
         Self {
             state,
@@ -32,11 +56,17 @@ impl<'a> BetterNotesClient<'a> {
     /// Exports an existing Zotero note through the Better Notes bridge as
     /// Markdown or HTML.
     ///
+    /// Accepts a target note [`ItemKey`] and optional [`NoteExportFormat`].
+    /// Defaults to Markdown format when unspecified.
+    ///
     /// # Errors
     ///
-    /// - [`BetterNotes`] if the bridge call fails
+    /// - [`BetterNotes`]: HTTP status is non-2xx or bridge endpoint returned an
+    ///   error
+    /// - [`InputRejected`]: Exported HTML text exceeds configured size limits
     ///
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
+    /// [`InputRejected`]: ZoteroMcpError::InputRejected
     pub(crate) async fn export(
         &self,
         item_key: &ItemKey,
@@ -55,19 +85,22 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.content)
     }
 
-    /// Creates a note attached to `parent_key` from `markdown`, returning the
-    /// created note's item key.
+    /// Creates a note attached to `parent_key` from `markdown` content.
     ///
-    /// Mutates the Zotero library; assumes the caller has already enforced
-    /// [`AppState::check_write_permission`], and re-checks it itself before
-    /// issuing the call.
+    /// Accepts an optional parent note [`ItemKey`] and source `markdown` string
+    /// slice. Mutates library state; enforces
+    /// [`AppState::check_write_permission`] and size limits before issuing the
+    /// request.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`] if write operations are disabled
-    /// - [`BetterNotes`] if the bridge call fails
+    /// - [`PermissionDenied`]: Write operations are disabled in [`AppState`]
+    /// - [`InputRejected`]: `markdown` text exceeds configured size limits
+    /// - [`BetterNotes`]: HTTP status is non-2xx or bridge endpoint returned an
+    ///   error
     ///
     /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`InputRejected`]: ZoteroMcpError::InputRejected
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn convert_from_markdown(
         &self,
@@ -95,10 +128,15 @@ impl<'a> BetterNotesClient<'a> {
 
     /// Runs the named Better Notes template `name` against `item_key`.
     ///
+    /// Accepts a [`TemplateName`] and target note [`ItemKey`].
+    ///
     /// # Errors
     ///
-    /// - [`BetterNotes`] if the bridge call fails
+    /// - [`InputRejected`]: `name` length exceeds configured limits
+    /// - [`BetterNotes`]: HTTP status is non-2xx or bridge endpoint returned an
+    ///   error
     ///
+    /// [`InputRejected`]: ZoteroMcpError::InputRejected
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn run_template(
         &self,
@@ -115,12 +153,15 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.result)
     }
 
-    /// Fetches outlinks, backlinks, and other graph relations for
+    /// Fetches outbound links, inbound links, and other graph relations for
     /// `item_key`.
+    ///
+    /// Accepts a note [`ItemKey`].
     ///
     /// # Errors
     ///
-    /// - [`BetterNotes`] if the bridge call fails
+    /// - [`BetterNotes`]: HTTP status is non-2xx or bridge endpoint returned an
+    ///   error
     ///
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn get_relations(
@@ -137,9 +178,12 @@ impl<'a> BetterNotesClient<'a> {
 
     /// Fetches the full Better Notes hierarchy tree rooted at `item_key`.
     ///
+    /// Accepts a note [`ItemKey`] and returns the tree as JSON [`Value`].
+    ///
     /// # Errors
     ///
-    /// - [`BetterNotes`] if the bridge call fails
+    /// - [`BetterNotes`]: HTTP status is non-2xx or bridge endpoint returned an
+    ///   error
     ///
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     pub(crate) async fn get_tree(
@@ -159,9 +203,9 @@ impl<'a> BetterNotesClient<'a> {
     ///
     /// # Errors
     ///
-    /// - [`BetterNotes`] if the HTTP response is non-2xx
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body fails to deserialize as `R`
+    /// - [`BetterNotes`]: HTTP status is non-2xx
+    /// - [`Network`]: Transport or network layer failure from [`reqwest`]
+    /// - [`Json`]: Response body fails to deserialize as `R`
     ///
     /// [`BetterNotes`]: ZoteroMcpError::BetterNotes
     /// [`Network`]: ZoteroMcpError::Network

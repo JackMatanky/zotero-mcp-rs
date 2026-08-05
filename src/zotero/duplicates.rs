@@ -1,8 +1,29 @@
 //! Duplicate item detection for Zotero libraries and collections.
 //!
-//! Main types:
+//! Provides duplicate detection routines that fetch items using
+//! [`ZoteroClient`] and group them in memory by matching DOI or normalized
+//! title strings. This module is called by duplicate detection MCP tool
+//! handlers in `crate::mcp::zotero`.
+//!
+//! # Main Types
+//!
 //! - [`DuplicateGroup`] - Group of items identified as potential duplicates
 //! - [`DuplicateType`] - Duplication criterion (`Doi` or `Title`)
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::errors::ZoteroMcpError;
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::ZoteroClient;
+//! # async fn example() -> Result<(), ZoteroMcpError> {
+//! let state = AppState::from_env();
+//! let client = ZoteroClient::new(&state);
+//! let duplicates = client.find_duplicates(None).await?;
+//! println!("Found {} duplicate groups", duplicates.len());
+//! # Ok(())
+//! # }
+//! ```
 
 use serde::{Deserialize, Serialize};
 
@@ -15,28 +36,34 @@ use crate::{
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum DuplicateType {
+    /// Matched by DOI string.
     Doi,
+    /// Matched by normalized title string.
     Title,
 }
 
 /// Group of items identified as potential duplicates.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct DuplicateGroup {
+    /// Duplication criterion matched (`Doi` or `Title`).
     pub(crate) match_type: DuplicateType,
+    /// Matched DOI or normalized title string.
     pub(crate) match_value: String,
+    /// Item keys belonging to this duplicate group.
     pub(crate) item_keys: Vec<ItemKey>,
 }
 
 impl ZoteroClient<'_> {
-    /// Finds potential duplicate items in the library or optional
+    /// Finds potential duplicate items in the entire library or optional
     /// `collection_key` by matching title or DOI.
     ///
     /// # Errors
     ///
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   code
+    /// - [`ZoteroMcpError::Network`] if the HTTP request fails at the transport
     ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded
     pub(crate) async fn find_duplicates(
         &self,
         collection_key: Option<&CollectionKey>,

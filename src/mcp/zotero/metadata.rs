@@ -1,8 +1,29 @@
 //! MCP tool handlers for Zotero item metadata and metadata lookup.
 //!
-//! Main types:
+//! Provides handlers for retrieving formatted item metadata (in JSON or
+//! `BibTeX` format) and adding new items to a Zotero library by resolving
+//! identifiers such as DOI, arXiv ID, or ISBN.
+//!
+//! # Main Types
+//!
 //! - [`MetadataFormat`] - Output format for item metadata responses (JSON or
 //!   `BibTeX`)
+//! - [`GetItemMetadataArgs`] - Arguments for fetching item metadata
+//! - [`AddByIdentifierArgs`] - Arguments for adding library items by external
+//!   identifier
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::mcp::zotero::metadata::{GetItemMetadataArgs, MetadataFormat};
+//! # use zotero_mcp_rs::zotero::ItemKey;
+//! # async fn run(server: ZoteroMcpServer, key: ItemKey) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = GetItemMetadataArgs::json(key);
+//! let result = server.zotero_get_item_metadata_impl(args).await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
@@ -31,6 +52,7 @@ pub(in crate::mcp::zotero) enum MetadataFormat {
     /// Return item metadata as Better `BibTeX`.
     Bibtex,
 }
+
 /// Arguments for the `metadata` action of `zotero_items`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct GetItemMetadataArgs {
@@ -40,7 +62,9 @@ pub(crate) struct GetItemMetadataArgs {
     /// `"json"`.
     format: Option<MetadataFormat>,
 }
+
 impl GetItemMetadataArgs {
+    /// Constructs metadata request arguments with default JSON format.
     pub(crate) fn json(item_key: ItemKey) -> Self {
         Self {
             item_key,
@@ -62,6 +86,10 @@ pub(crate) struct AddByIdentifierArgs {
 
 impl ZoteroMcpServer {
     /// Handles Zotero item metadata formatting tool calls.
+    ///
+    /// Fetches metadata for an item specified by [`GetItemMetadataArgs`] and
+    /// converts it into the requested [`MetadataFormat`] (JSON or
+    /// `BibTeX`).
     ///
     /// # Errors
     ///
@@ -99,11 +127,11 @@ impl ZoteroMcpServer {
         }
     }
 
-    /// Handles Zotero add-by-identifier tool calls using `args`.
+    /// Handles Zotero add-by-identifier tool calls.
     ///
-    /// Resolves the identifier via a public metadata API and creates the item,
-    /// returning the existing item instead if an exact title match is already
-    /// present in the library.
+    /// Resolves the identifier via a public metadata API using
+    /// [`AddByIdentifierArgs`] and creates the item, returning the existing
+    /// item instead if an exact title match is already present in the library.
     ///
     /// # Errors
     ///

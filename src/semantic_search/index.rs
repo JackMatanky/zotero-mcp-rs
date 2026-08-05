@@ -1,11 +1,32 @@
-//! Whole-library scan that builds/refreshes the semantic index.
+//! Whole-library scanning and semantic index synchronization.
 //!
-//! Main types:
-//! - [`IndexReport`] - Summary of an indexing run (items scanned, errors, etc.)
+//! Scans Zotero library items via [`ZoteroClient`],
+//! extracts indexable text (title, abstract, and attachment fulltext), splits
+//! text into paragraph chunks, generates vector embeddings, and synchronizes
+//! the local [`SemanticIndex`] database.
 //!
-//! Main functions:
-//! - `index_library` - Scan and (re)index the entire Zotero library
-
+//! # Main Types
+//!
+//! - [`IndexReport`] - Summary report of an indexing run.
+//!
+//! # Main Functions
+//!
+//! - [`index_library`] - Scans and synchronizes the entire Zotero library.
+//!
+//! # Examples
+//!
+//! Running a full library index sync:
+//!
+//! ```no_run
+//! use std::sync::Arc;
+//! use zotero_mcp_rs::semantic_search::{index_library, store::SemanticIndex, EmbeddingProvider};
+//! use zotero_mcp_rs::zotero::ZoteroClient;
+//!
+//! # async fn run(client: &ZoteroClient<'_>, index: &SemanticIndex, provider: Arc<dyn EmbeddingProvider>) {
+//! let report = index_library(client, index, &provider, false).await.unwrap();
+//! println!("Indexed {} items", report.items_indexed);
+//! # }
+//! ```
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -31,30 +52,42 @@ enum IndexOutcome {
 /// Summary of an indexing run, reporting items processed and any errors.
 #[derive(Clone, Debug, Default, Serialize)]
 pub(crate) struct IndexReport {
+    /// Total candidate items evaluated during the scan.
     pub(crate) items_scanned: usize,
+    /// Number of items newly indexed or updated.
     pub(crate) items_indexed: usize,
+    /// Number of items skipped because their `dateModified` timestamp was
+    /// unchanged.
     pub(crate) items_skipped_unchanged: usize,
+    /// Number of items skipped due to lacking indexable text content.
     pub(crate) items_skipped_empty: usize,
+    /// Number of stale items removed from the index.
     pub(crate) items_deleted: usize,
+    /// Total number of chunk records written to the database.
     pub(crate) chunks_written: usize,
 }
 
-/// Scans the whole library, (re)indexing items whose `dateModified` changed
-/// since the last index (or all items if `force` is `true`), and deletes
-/// index entries for items no longer present in the library.
+/// Scans the whole library, (re)indexing changed items and deleting removed
+/// items.
 ///
-/// Text source per item: title + `abstractNote` (from item metadata) +
-/// Zotero's own indexed fulltext content of the first attachment child that
-/// has any (`ZoteroClient::get_item_fulltext`) — no local PDF extraction;
-/// this only surfaces content Zotero itself has already indexed.
+/// Re-indexes items whose `dateModified` timestamp changed since the last run
+/// (or all items if `force` is `true`). Text sources per item include title,
+/// abstract note, and Zotero's indexed fulltext of the first attachment child;
+/// no local PDF extraction is performed.
+///
+/// # Arguments
+///
+/// * `client` - Zotero API client instance.
+/// * `index` - Writable semantic search index database handle.
+/// * `provider` - Embedding provider backend.
+/// * `force` - Whether to re-index items regardless of modification timestamp.
 ///
 /// # Errors
 ///
 /// - [`ZoteroMcpError::LocalApi`] / [`ZoteroMcpError::Network`] /
-///   [`ZoteroMcpError::Json`] if the Zotero Local API is unreachable or returns
-///   malformed data
-/// - [`ZoteroMcpError::Sqlite`] if the index database fails
-/// - [`ZoteroMcpError::Embedding`] if embedding generation fails
+///   [`ZoteroMcpError::Json`] if Zotero API requests or responses fail.
+/// - [`ZoteroMcpError::Sqlite`] if index database operations fail.
+/// - [`ZoteroMcpError::Embedding`] if embedding generation fails.
 pub(crate) async fn index_library(
     client: &ZoteroClient<'_>,
     index: &SemanticIndex,
@@ -165,7 +198,7 @@ async fn index_one_item(
 }
 
 /// Assembles the text to index for `item`: title, then abstract, then the
-/// first non-empty Zotero-indexed fulltext among the item's attachment
+/// first nonempty Zotero-indexed fulltext among the item's attachment
 /// children, each on its own paragraph (`\n\n`-joined) so `chunk_text` treats
 /// them as separate paragraphs.
 async fn assemble_item_text(
@@ -232,10 +265,9 @@ mod tests {
     /// Deterministic test [`EmbeddingProvider`]: every text embeds to the
     /// same fixed vector. `index_library`'s tests only assert on
     /// [`IndexReport`] counts, never on similarity scores, so vector
-    /// content is irrelevant — no ONNX/network involved.
+    /// content is irrelevant; no ONNX or network access involved.
     #[derive(Debug)]
     struct FakeProvider;
-
     impl EmbeddingProvider for FakeProvider {
         fn embed(
             &self,

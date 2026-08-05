@@ -1,12 +1,31 @@
 //! MCP tool handlers and argument models for local Zotero `SQLite` search.
 //!
-//! Covers `zotero_sqlite_search` grouped-router actions (gated behind
-//! `ZOTERO_SQLITE_ACCESS=1`): full-text search and note/annotation search
-//! against Zotero's local database.
+//! Exposes the `zotero_sqlite_search` MCP tool router, enabling full-text and
+//! note/annotation search against Zotero's local database (gated behind
+//! `ZOTERO_SQLITE_ACCESS=1`).
 //!
-//! Main types:
+//! # Main Types
+//!
 //! - [`ZoteroSqliteSearchCommand`] - Grouped-router command for `SQLite` search
 //!   actions
+//! - [`FulltextSearchArgs`] - Arguments for full-text `SQLite` database search
+//! - [`SearchNotesAnnotationsArgs`] - Arguments for note and annotation search
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use rmcp::handler::server::wrapper::Parameters;
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::mcp::zotero::sqlite::{ZoteroSqliteSearchCommand, FulltextSearchArgs};
+//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = Parameters(ZoteroSqliteSearchCommand::Fulltext(FulltextSearchArgs {
+//!     query: "borrow checker".to_string(),
+//!     limit: Some(10),
+//! }));
+//! let result = server.zotero_sqlite_search(args).await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
@@ -59,6 +78,12 @@ impl ZoteroMcpServer {
             open_world_hint = false
         )
     )]
+    /// Dispatches local `SQLite` search tool calls.
+    ///
+    /// Accepts a [`Parameters<ZoteroSqliteSearchCommand>`] containing the
+    /// specific action and parameters, routing it to internal search
+    /// handlers.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures.
@@ -80,6 +105,9 @@ impl ZoteroMcpServer {
 impl ZoteroMcpServer {
     /// Handles local full-text search tool calls.
     ///
+    /// Queries the local Zotero `SQLite` database using [`FulltextSearchArgs`]
+    /// parameters and returns matching records as MCP JSON content.
+    ///
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -99,6 +127,10 @@ impl ZoteroMcpServer {
     }
 
     /// Handles local note/annotation search tool calls.
+    ///
+    /// Queries the local Zotero `SQLite` database using
+    /// [`SearchNotesAnnotationsArgs`] parameters and returns matching notes
+    /// or annotations as MCP JSON content.
     ///
     /// # Errors
     ///

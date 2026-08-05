@@ -1,8 +1,29 @@
 //! MCP tool handlers for Zotero attachment items.
 //!
-//! Main types:
+//! This module provides handler implementations for linking external files or
+//! importing local PDF files into a Zotero library, delegating backend file
+//! operations to [`ZoteroClient`].
+//!
+//! # Main Types
 //! - [`AttachFileArgs`] - Arguments for the `attach_file` action
 //! - [`ImportPdfArgs`] - Arguments for the `import_pdf` action
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::ZoteroMcpServer;
+//! # use zotero_mcp_rs::mcp::zotero::attachments::AttachFileArgs;
+//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = serde_json::from_value(serde_json::json!({
+//!     "parent_item_key": "ITEM1234",
+//!     "title": "Main Manuscript",
+//!     "path_or_url": "/path/to/paper.pdf",
+//!     "content_type": "application/pdf"
+//! }))?;
+//! let result = server.zotero_attach_file_impl(args).await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use std::path::Path;
 
@@ -46,6 +67,8 @@ pub(crate) struct ImportPdfArgs {
 impl ZoteroMcpServer {
     /// Handles Zotero linked-file attachment tool calls.
     ///
+    /// Links an external filepath or URL specified by `args` to the parent item
+    /// using [`ZoteroClient::attach_file_link`].
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
@@ -69,6 +92,8 @@ impl ZoteroMcpServer {
 
     /// Handles Zotero PDF import tool calls.
     ///
+    /// Validates the PDF filepath against permitted bridge roots before
+    /// importing the PDF using [`ZoteroClient::import_pdf_file`].
     /// # Errors
     ///
     /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend

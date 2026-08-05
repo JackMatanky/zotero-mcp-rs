@@ -1,30 +1,47 @@
 //! MCP tool handlers and argument models for Zotero operations.
 //!
-//! Each sibling module owns one flat Zotero domain exposed to MCP clients:
-//! - `status`: `zotero_status`
-//! - `items`: `zotero_items` / `zotero_items_write` core item lifecycle plus
-//!   compatibility dispatch
-//! - `metadata`: `metadata` / `add_by_identifier` actions of `zotero_items` /
-//!   `zotero_items_write`
-//! - `collections`: `zotero_collections` / `zotero_collections_write`
-//! - `notes`: `zotero_notes` / `zotero_notes_write` note list/create plus
-//!   compatibility dispatch
-//! - `annotations`: `synthesize` action of `zotero_notes` and `annotation`
-//!   action of `zotero_notes_write`
-//! - `attachments`: `attach_file` and `import_pdf` actions of
-//!   `zotero_items_write`
-//! - `fulltext`: `fulltext` action of `zotero_items`
-//! - `tags`: `zotero_tags` / `zotero_tags_write`
-//! - `relations`: `zotero_relations` / `zotero_relations_write`
-//! - `search`: `zotero_search` item/tag/citation-key/advanced search plus
-//!   compatibility dispatch
-//! - `duplicates`: `duplicates` action of `zotero_search`
-//! - `coverage`: `coverage` action of `zotero_search`
-//! - `sqlite`: `zotero_sqlite_search`
-//! - `pdf`: `zotero_pdf`
+//! Each submodule implements tool routers and request payload types for a
+//! specific Zotero domain, bridging incoming MCP requests to the underlying
+//! Zotero client API.
 //!
-//! Main types: defined in sibling modules — see per-module docs.
-
+//! # Submodules
+//!
+//! - [`annotations`]: Synthesize and annotation action handlers
+//!   (`zotero_notes`, `zotero_notes_write`).
+//! - [`attachments`]: Attachment file import action handlers
+//!   (`zotero_items_write`).
+//! - [`collections`]: Collection management tool handlers
+//!   (`zotero_collections`, `zotero_collections_write`).
+//! - [`coverage`]: Search coverage inspection handler (`zotero_search`).
+//! - [`duplicates`]: Duplicate item detection handler (`zotero_search`).
+//! - [`fulltext`]: Full-text content retrieval handler (`zotero_items`).
+//! - [`items`]: Core item lifecycle handlers and compatibility dispatch
+//!   (`zotero_items`, `zotero_items_write`).
+//! - [`metadata`]: Item metadata retrieval and identifier lookup handlers
+//!   (`zotero_items`, `zotero_items_write`).
+//! - [`notes`]: Note listing and creation handlers (`zotero_notes`,
+//!   `zotero_notes_write`).
+//! - [`pdf`]: PDF retrieval and text extraction handler (`zotero_pdf`).
+//! - [`relations`]: Related item relationship handlers (`zotero_relations`,
+//!   `zotero_relations_write`).
+//! - [`search`]: Item, tag, citation key, and advanced search handlers
+//!   (`zotero_search`).
+//! - [`sqlite`]: Local `SQLite` database search handler
+//!   (`zotero_sqlite_search`).
+//! - [`status`]: Zotero API connection status handler (`zotero_status`).
+//! - [`tags`]: Tag management handlers (`zotero_tags`, `zotero_tags_write`).
+//!
+//! # Main Types
+//!
+//! - [`GetItemMetadataArgs`]: Arguments for item metadata retrieval.
+//! - [`SearchItemsArgs`]: Arguments for Zotero item search.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::mcp::zotero::SearchItemsArgs;
+//! let args = SearchItemsArgs::for_connector("rust".to_string());
+//! ```
 mod annotations;
 mod attachments;
 mod collections;

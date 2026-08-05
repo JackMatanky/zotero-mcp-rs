@@ -13,7 +13,21 @@
 //! [`ZoteroClient::get_related_items`] resolves relation URIs to items.
 //! [`ZoteroClient::add_item_relation`] and
 //! [`ZoteroClient::remove_item_relation`] patch both endpoints of a link.
-
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::client::ZoteroClient;
+//! # use zotero_mcp_rs::zotero::ItemKey;
+//! # async fn run(state: &AppState, key_a: &ItemKey, key_b: &ItemKey) -> Result<(), Box<dyn std::error::Error>> {
+//! let client = ZoteroClient::new(state);
+//! client.add_item_relation(key_a, key_b).await?;
+//! let related = client.get_related_items(key_a).await?;
+//! println!("Item has {} relations", related.len());
+//! # Ok(())
+//! # }
+//! ```
 use std::collections::BTreeSet;
 
 use serde::Serialize;
@@ -26,25 +40,33 @@ use crate::{
 /// A single item linked to another via a `dc:relation` URI.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) struct RelatedItem {
+    /// Item key of the related item.
     pub(crate) key: ItemKey,
+    /// Optional item title.
     pub(crate) title: Option<String>,
+    /// Item type of the related item.
     pub(crate) item_type: ItemType,
 }
 
 impl ZoteroClient<'_> {
     /// Fetches the items linked to `item_key` via `dc:relation`.
     ///
-    /// Relation values that do not carry a Zotero item key are skipped, as are
-    /// keys the Local API 404s on (e.g. group-library items invisible to the
-    /// `/users/0` client).
+    /// Returns a vector of [`RelatedItem`] structures for all resolved relation
+    /// URIs. Relation values that do not carry a Zotero item key are
+    /// skipped, as are keys the Local API 404s on (e.g. group library items
+    /// invisible to the `/users/0` client).
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::NotFound`] if `item_key` does not exist
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`NotFound`] if `item_key` does not exist
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response cannot be decoded
+    ///
+    /// [`NotFound`]: ZoteroMcpError::NotFound
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(crate) async fn get_related_items(
         &self,
         item_key: &ItemKey,
@@ -77,13 +99,19 @@ impl ZoteroClient<'_> {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::InputRejected`] if `a` and `b` are the same item
-    /// - [`ZoteroMcpError::NotFound`] if either item does not exist
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`PermissionDenied`] if write permission is disabled in configuration
+    /// - [`InputRejected`] if `a` and `b` are the same item key
+    /// - [`NotFound`] if either item does not exist
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response cannot be decoded
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`InputRejected`]: ZoteroMcpError::InputRejected
+    /// [`NotFound`]: ZoteroMcpError::NotFound
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(crate) async fn add_item_relation(
         &self,
         a: &ItemKey,
@@ -135,12 +163,17 @@ impl ZoteroClient<'_> {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroMcpError::NotFound`] if either item does not exist
-    /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`PermissionDenied`] if write permission is disabled in configuration
+    /// - [`NotFound`] if either item does not exist
+    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
+    /// - [`Network`] if the request fails at the transport level
+    /// - [`Json`] if the response cannot be decoded
+    ///
+    /// [`PermissionDenied`]: ZoteroMcpError::PermissionDenied
+    /// [`NotFound`]: ZoteroMcpError::NotFound
+    /// [`LocalApi`]: ZoteroMcpError::LocalApi
+    /// [`Network`]: ZoteroMcpError::Network
+    /// [`Json`]: ZoteroMcpError::Json
     pub(crate) async fn remove_item_relation(
         &self,
         a: &ItemKey,
@@ -202,6 +235,12 @@ pub(crate) fn parse_relation_keys(
 ///
 /// `dc:relation` is always written as an array (the canonical multi-value form
 /// per zotero/dataserver#74), even when it holds a single or zero URIs.
+///
+/// # Arguments
+///
+/// * `current` - Current `relations` JSON map from the item payload
+/// * `add` - Slice of relation URIs to add
+/// * `remove` - Slice of relation URIs to remove
 pub(crate) fn apply_relations(
     current: &serde_json::Value,
     add: &[RelationUri],

@@ -1,13 +1,21 @@
 //! Connector-compatible MCP `search` and `fetch` tools.
 //!
-//! This module provides simplified, high-level compatibility wrappers (`search`
-//! and `fetch`) for MCP clients expecting browser-connector style item
-//! retrieval.
+//! Provides simplified, high-level compatibility wrappers (`search` and
+//! `fetch`) for MCP clients expecting browser-connector style item retrieval.
 //!
-//! Tools:
-//! - `search`: Performs general item searches ([`SearchArgs`])
-//! - `fetch`: Retrieves item metadata by identifier ([`FetchArgs`])
-
+//! # Main Types
+//!
+//! - [`SearchArgs`]: Arguments for the connector-compatible `search` tool.
+//! - [`FetchArgs`]: Arguments for the connector-compatible `fetch` tool.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::mcp::connector_tools::SearchArgs;
+//! let args = SearchArgs {
+//!     query: "rust".to_string(),
+//! };
+//! ```
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
     tool_router,

@@ -1,6 +1,26 @@
 //! Note item operations for the Zotero Local HTTP API.
 //!
-//! No types defined — functionality is exposed via [`ZoteroClient`] methods.
+//! Provides methods on [`ZoteroClient`] for creating child note items attached
+//! to library items. This module is called by note MCP tool handlers in
+//! `crate::mcp::zotero`.
+//!
+//! No types defined; functionality is exposed via [`ZoteroClient`] methods.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use zotero_mcp_rs::errors::ZoteroMcpError;
+//! # use zotero_mcp_rs::state::AppState;
+//! # use zotero_mcp_rs::zotero::{ItemKey, ZoteroClient};
+//! # async fn example() -> Result<(), ZoteroMcpError> {
+//! let state = AppState::from_env();
+//! let client = ZoteroClient::new(&state);
+//! let parent_key = ItemKey::from("PARENT01");
+//! let note = client.create_note(&parent_key, "<p>Meeting notes</p>").await?;
+//! println!("Created note item: {}", note.key);
+//! # Ok(())
+//! # }
+//! ```
 
 use crate::{
     errors::ZoteroMcpError,
@@ -13,11 +33,13 @@ impl ZoteroClient<'_> {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroMcpError::PermissionDenied`] if writes are disabled
+    /// - [`ZoteroMcpError::PermissionDenied`] if write operations are disabled
+    ///   in application state
     /// - [`ZoteroMcpError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroMcpError::Network`] if the request fails at the transport
+    ///   code
+    /// - [`ZoteroMcpError::Network`] if the HTTP request fails at the transport
     ///   level
-    /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
+    /// - [`ZoteroMcpError::Json`] if the response body cannot be decoded
     pub(crate) async fn create_note(
         &self,
         parent_item_key: &ItemKey,
