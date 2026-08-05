@@ -40,21 +40,11 @@ pub fn update(entity: Entity) -> Result<Entity, EntityError> {
 /// See [`crate::validation::user`] for validation rules.
 ```
 
-With link definition:
-
-```rust
-/// See [`validation::user`] for validation rules.
-///
-/// [`validation::user`]: crate::validation::user
-```
-
 **Standard library:**
 
 ```rust
 /// Returns a [`Vec`] of [`HashMap`] entries.
-/// Uses [`swap_remove`] for efficient removal.
-///
-/// [`swap_remove`]: Vec::swap_remove
+/// Uses [`Vec::swap_remove`] for efficient removal.
 ```
 
 **Trait methods:**
@@ -68,9 +58,7 @@ With link definition:
 ```rust
 /// # Errors
 ///
-/// - [`NotFound`] if entity doesn't exist
-///
-/// [`NotFound`]: EntityError::NotFound
+/// - [`EntityError::NotFound`] if entity doesn't exist
 ```
 
 ---
@@ -224,10 +212,8 @@ Document performance characteristics when relevant:
 /// This operation has O(n) complexity where n is the total number of
 /// entities. Uses pagination internally with 100-item pages.
 ///
-/// For large result sets, consider using [`get_entities_stream`] which
+/// For large result sets, consider using [`Self::get_entities_stream`] which
 /// provides incremental results with O(1) memory usage.
-///
-/// [`get_entities_stream`]: Self::get_entities_stream
 ```
 
 ---
@@ -273,9 +259,9 @@ pub async fn process_async(&self, entity: Entity) -> Result<ProcessResult, Error
 ///
 /// # Errors
 ///
-/// - [`ValidationError`] if properties don't match schema
-/// - [`TypeNotFound`] if entity type doesn't exist
-/// - [`DatabaseError`] if storage operation fails
+/// - [`EntityError::Validation`] if properties don't match schema
+/// - [`EntityError::TypeNotFound`] if entity type doesn't exist
+/// - [`EntityError::Database`] if storage operation fails
 ///
 /// # Examples
 ///
@@ -301,10 +287,6 @@ pub async fn process_async(&self, entity: Entity) -> Result<ProcessResult, Error
 /// # Ok(())
 /// # }
 /// ```
-///
-/// [`ValidationError`]: EntityError::Validation
-/// [`TypeNotFound`]: EntityError::TypeNotFound
-/// [`DatabaseError`]: EntityError::Database
 pub fn create_entity(
     &mut self,
     type_id: EntityTypeId,
