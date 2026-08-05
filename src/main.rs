@@ -19,6 +19,7 @@
 mod better_bibtex;
 mod better_notes;
 mod errors;
+#[macro_use]
 mod macros;
 mod mcp;
 mod pdf;

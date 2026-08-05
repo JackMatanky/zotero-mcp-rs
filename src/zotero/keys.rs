@@ -29,125 +29,36 @@
 //! let parsed_key = ItemKey::try_from(&relation_uri).unwrap();
 //! assert_eq!(parsed_key, item_key);
 //! ```
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// Generates a [`String`]-backed identifier newtype.
-///
-/// The generated type supports the conversions and comparisons needed for
-/// domain keys: [`std::fmt::Display`], [`From<String>`], [`From<&str>`],
-/// [`AsRef<str>`], and equality against plain strings.
-macro_rules! string_key {
-    ($name:ident, $doc:expr) => {
-        #[doc = $doc]
-        #[derive(
-            Clone,
-            Debug,
-            Default,
-            Eq,
-            Hash,
-            Ord,
-            PartialEq,
-            PartialOrd,
-            Deserialize,
-            Serialize,
-        )]
-        #[serde(transparent)]
-        pub(crate) struct $name(pub(crate) String);
-
-        impl $name {
-            #[inline]
-            /// Returns the inner string slice.
-            pub(crate) fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl std::fmt::Display for $name {
-            #[inline]
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(&self.0)
-            }
-        }
-
-        impl From<String> for $name {
-            #[inline]
-            fn from(value: String) -> Self {
-                Self(value)
-            }
-        }
-
-        impl From<&str> for $name {
-            #[inline]
-            fn from(value: &str) -> Self {
-                Self(value.to_owned())
-            }
-        }
-
-        impl AsRef<str> for $name {
-            #[inline]
-            fn as_ref(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl PartialEq<str> for $name {
-            #[inline]
-            fn eq(&self, other: &str) -> bool {
-                self.0 == other
-            }
-        }
-
-        impl PartialEq<&str> for $name {
-            #[inline]
-            fn eq(&self, other: &&str) -> bool {
-                self.0 == *other
-            }
-        }
-
-        impl PartialEq<$name> for str {
-            #[inline]
-            fn eq(&self, other: &$name) -> bool {
-                self == other.0.as_str()
-            }
-        }
-
-        impl schemars::JsonSchema for $name {
-            fn schema_name() -> std::borrow::Cow<'static, str> {
-                stringify!($name).into()
-            }
-
-            fn json_schema(
-                generator: &mut schemars::SchemaGenerator,
-            ) -> schemars::Schema {
-                String::json_schema(generator)
-            }
-        }
-    };
-}
-
-string_key!(
+string_newtype!(
     ItemKey,
     "Zotero item key: an 8-character alphanumeric identifier unique within a \
      library. Distinct from [`CollectionKey`] to prevent the two from being \
-     transposed at call sites."
+     transposed at call sites.",
+    json
 );
-string_key!(
+string_newtype!(
     CollectionKey,
     "Zotero collection key: an 8-character alphanumeric identifier unique \
      within a library. Distinct from [`ItemKey`] to prevent the two from \
-     being transposed at call sites."
+     being transposed at call sites.",
+    json
 );
-string_key!(
+string_newtype!(
     TagName,
     "Zotero tag name: wrapper for tag name strings to prevent transposition \
-     with free-text query strings or keys."
+     with free-text query strings or keys.",
+    json
 );
-string_key!(
+string_newtype!(
     CitationKey,
     "Zotero citation key: wrapper for citation keys to enforce type safety \
-     and key semantics across search and item metadata."
+     and key semantics across search and item metadata.",
+    json
 );
-string_key!(
+string_newtype!(
     RelationUri,
     "Zotero relation URI: an item URI stored as a value in an item's \
      `relations` map, of the form `http://zotero.org/users/0/items/{KEY}` or \
@@ -155,7 +66,8 @@ string_key!(
      URI strings Zotero writes for relations: [`From<&ItemKey>`](ItemKey) \
      builds a `/users/0` URI on write, while \
      [`ItemKey::try_from`](ItemKey) recovers the trailing key on read, \
-     regardless of the URI prefix."
+     regardless of the URI prefix.",
+    json
 );
 
 /// Prefix used when constructing item relation URIs to write back to Zotero,
