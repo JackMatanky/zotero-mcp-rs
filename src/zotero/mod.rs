@@ -22,7 +22,6 @@
 
 mod client;
 mod collections;
-mod coverage;
 mod duplicates;
 mod items;
 mod keys;
