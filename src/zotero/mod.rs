@@ -26,7 +26,6 @@ mod client;
 mod collections;
 mod coverage;
 mod duplicates;
-mod fulltext;
 mod items;
 mod keys;
 pub(crate) mod metadata;
