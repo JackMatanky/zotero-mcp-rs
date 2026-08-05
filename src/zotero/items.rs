@@ -58,7 +58,6 @@ impl TrashAction {
 
 /// Phase-1 response payload from Zotero's file-upload endpoint.
 #[derive(Deserialize)]
-#[allow(dead_code, reason = "used after Task 3 wires the MCP handler")]
 struct UploadTicket {
     /// Signed upload URL to `POST` the raw file bytes to.
     url: String,
@@ -376,7 +375,6 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Network`] if a request fails at the HTTP transport
     ///   level.
     /// - [`ZoteroMcpError::Json`] if a response body cannot be decoded.
-    #[allow(dead_code, reason = "wired by MCP handler in Task 3")]
     pub(crate) async fn import_pdf_file(
         &self,
         parent_item_key: Option<&ItemKey>,
