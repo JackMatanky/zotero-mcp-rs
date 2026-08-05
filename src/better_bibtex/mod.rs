@@ -6,6 +6,7 @@
 //! add auto-exports, and scan `LaTeX` `.aux` files.
 //!
 //! See [`BetterBibtexClient`] for example usage.
+
 mod client;
 mod models;
 
