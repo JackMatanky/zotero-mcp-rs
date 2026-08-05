@@ -36,11 +36,11 @@ use crate::{mcp::catalog::is_tool_visible, state::AppState};
 
 const SERVER_INSTRUCTIONS: &str =
     "Call zotero_discover first to find Zotero tools, resources, prompts, env \
-     gates, and examples. Use zotero://... resources for read-only object \
-     retrieval, including zotero://items/{item_key}. search and fetch are \
-     connector compatibility tools. Write tools require \
-     ZOTERO_WRITE_ENABLED=1. SQLite tools require ZOTERO_SQLITE_ACCESS=1. \
-     Semantic search tools require ZOTERO_SEMANTIC_SEARCH=1.";
+     gates, and examples. Prefer zotero://... resources for read-only object \
+     retrieval (e.g., zotero://items/{item_key}) to save context tokens. \
+     Write tools require ZOTERO_WRITE_ENABLED=1. SQLite tools require \
+     ZOTERO_SQLITE_ACCESS=1. Semantic search tools require \
+     ZOTERO_SEMANTIC_SEARCH=1.";
 
 /// Holds shared [`AppState`] and implements [`ServerHandler`].
 pub(crate) struct ZoteroMcpServer {
@@ -63,6 +63,18 @@ impl ZoteroMcpServer {
         let mut tools = Self::tool_router().list_all();
         tools.retain(|tool| Self::is_visible_tool(state, tool.name.as_ref()));
         tools
+    }
+
+    /// Returns the list tools result with caching metadata.
+    pub(crate) fn list_tools_impl(
+        state: &AppState,
+    ) -> rmcp::model::ListToolsResult {
+        let mut res = rmcp::model::ListToolsResult::with_all_items(
+            Self::visible_tools_for_state(state),
+        );
+        res.ttl_ms = Some(300_000);
+        res.cache_scope = Some(rmcp::model::CacheScope::Private);
+        res
     }
 
     /// Returns `true` if `tool_name` is visible given the environment state.
@@ -95,6 +107,7 @@ impl ServerHandler for ZoteroMcpServer {
                 .enable_tools()
                 .enable_resources()
                 .enable_prompts()
+                .enable_tool_list_changed()
                 .build(),
         )
         // 2025-06-18 is the first revision defining `title` on tools,
@@ -113,9 +126,15 @@ impl ServerHandler for ZoteroMcpServer {
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> impl Future<Output = Result<rmcp::model::ListToolsResult, rmcp::ErrorData>>
     {
-        std::future::ready(Ok(rmcp::model::ListToolsResult::with_all_items(
-            Self::visible_tools_for_state(&self.state),
-        )))
+        std::future::ready(Ok(Self::list_tools_impl(&self.state)))
+    }
+
+    fn get_tool(&self, name: &str) -> Option<rmcp::model::Tool> {
+        if Self::is_visible_tool(&self.state, name) {
+            Self::tool_router().get(name).cloned()
+        } else {
+            None
+        }
     }
 
     async fn call_tool(
@@ -206,7 +225,8 @@ mod tests {
             assert_eq!(info.server_info.name, "zotero-mcp-rs");
             assert_eq!(info.server_info.version, env!("CARGO_PKG_VERSION"));
             assert_eq!(info.server_info.title.as_deref(), Some("Zotero"));
-            assert!(info.capabilities.tools.is_some());
+            let tools_cap = info.capabilities.tools.expect("tools capability");
+            assert_eq!(tools_cap.list_changed, Some(true));
             assert!(info.capabilities.resources.is_some());
             assert!(info.capabilities.prompts.is_some());
         }
@@ -235,6 +255,42 @@ mod tests {
             assert!(instructions.contains("zotero_discover"));
             assert!(instructions.contains("zotero://items/{item_key}"));
             assert!(instructions.contains("ZOTERO_WRITE_ENABLED"));
+        }
+        #[test]
+        fn returns_tool_for_visible_name_and_none_for_hidden_or_unknown() {
+            let mut state = AppState::from_env();
+            state.write_enabled = false;
+            let server = ZoteroMcpServer::new(state);
+
+            assert!(server.get_tool("zotero_items").is_some());
+            assert!(server.get_tool("zotero_items_write").is_none());
+            assert!(server.get_tool("nonexistent_tool").is_none());
+        }
+
+        #[test]
+        fn list_primitives_include_caching_metadata() {
+            let state = AppState::from_env();
+
+            let tools_res = ZoteroMcpServer::list_tools_impl(&state);
+            assert_eq!(tools_res.ttl_ms, Some(300_000));
+            assert_eq!(
+                tools_res.cache_scope,
+                Some(rmcp::model::CacheScope::Private)
+            );
+
+            let resources_res = ZoteroMcpServer::list_resources_impl();
+            assert_eq!(resources_res.ttl_ms, Some(300_000));
+            assert_eq!(
+                resources_res.cache_scope,
+                Some(rmcp::model::CacheScope::Private)
+            );
+
+            let templates_res = ZoteroMcpServer::list_resource_templates_impl();
+            assert_eq!(templates_res.ttl_ms, Some(300_000));
+            assert_eq!(
+                templates_res.cache_scope,
+                Some(rmcp::model::CacheScope::Private)
+            );
         }
 
         #[test]
@@ -325,14 +381,13 @@ mod tests {
             state.write_enabled = false;
             state.sqlite_access = false;
             state.semantic_search_enabled = false;
+            state.connector_compat = false;
 
             let names = visible_tool_names(&state);
 
             assert_eq!(names, [
                 "better_bibtex",
                 "better_notes",
-                "fetch",
-                "search",
                 "zotero_collections",
                 "zotero_discover",
                 "zotero_items",
@@ -343,9 +398,22 @@ mod tests {
                 "zotero_status",
                 "zotero_tags",
             ]);
+            assert!(!names.contains(&"fetch".to_owned()));
+            assert!(!names.contains(&"search".to_owned()));
             assert!(!names.contains(&"zotero_get_item".to_owned()));
             assert!(!names.contains(&"zotero_create_note".to_owned()));
             assert!(!names.contains(&"zotero_fulltext_search".to_owned()));
+        }
+
+        #[test]
+        fn visible_tools_includes_connector_compat_when_enabled() {
+            let mut state = AppState::from_env();
+            state.connector_compat = true;
+
+            let names = visible_tool_names(&state);
+
+            assert!(names.contains(&"fetch".to_owned()));
+            assert!(names.contains(&"search".to_owned()));
         }
 
         #[test]

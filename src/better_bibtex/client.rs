@@ -15,12 +15,15 @@
 //! ```no_run
 //! # use zotero_mcp_rs::better_bibtex::BetterBibtexClient;
 //! # use zotero_mcp_rs::state::AppState;
-//! # async fn example(state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn example(
+//! #     state: &AppState,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
 //! let client = BetterBibtexClient::new(state);
 //! let search_results = client.search(&"author:smith".into()).await?;
 //! # Ok(())
 //! # }
 //! ```
+
 use std::path::Path;
 
 use serde::Serialize;
@@ -375,6 +378,7 @@ mod tests {
                 semantic_db_path: None,
                 semantic_index: Arc::new(OnceCell::new()),
                 embedding_provider: Arc::new(OnceCell::new()),
+                connector_compat: false,
                 security: SecurityConfig::default(),
             }
         }

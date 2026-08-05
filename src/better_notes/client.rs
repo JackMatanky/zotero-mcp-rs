@@ -16,12 +16,16 @@
 //! # use zotero_mcp_rs::state::AppState;
 //! # use zotero_mcp_rs::better_notes::BetterNotesClient;
 //! # use zotero_mcp_rs::zotero::ItemKey;
-//! # async fn example(state: &AppState, item_key: &ItemKey) -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn example(
+//! #     state: &AppState,
+//! #     item_key: &ItemKey,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
 //! let client = BetterNotesClient::new(state);
 //! let markdown = client.export(item_key, None).await?;
 //! # Ok(())
 //! # }
 //! ```
+
 use serde::Serialize;
 use serde_json::Value;
 
@@ -281,6 +285,7 @@ mod tests {
                 semantic_db_path: None,
                 semantic_index: Arc::new(OnceCell::new()),
                 embedding_provider: Arc::new(OnceCell::new()),
+                connector_compat: false,
                 security: SecurityConfig::default(),
             }
         }

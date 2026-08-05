@@ -17,12 +17,15 @@
 //! ```no_run
 //! # use zotero_mcp_rs::state::AppState;
 //! # use zotero_mcp_rs::ZoteroMcpServer;
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn example() -> Result<(), Box<
+//! #     dyn std::error::Error,
+//! # >> {
 //! let state = AppState::from_env();
 //! let server = ZoteroMcpServer::new(state);
 //! # Ok(())
 //! # }
 //! ```
+
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
     tool_router,
@@ -90,6 +93,9 @@ pub(crate) enum EnvGate {
     /// Requires `ZOTERO_SEMANTIC_SEARCH=1` for semantic tools.
     #[serde(rename = "ZOTERO_SEMANTIC_SEARCH")]
     SemanticSearchEnabled,
+    /// Requires `ZOTERO_CONNECTOR_COMPAT=1` for single-purpose connector tools.
+    #[serde(rename = "ZOTERO_CONNECTOR_COMPAT")]
+    ConnectorCompat,
 }
 
 /// Metadata for a single discoverable MCP primitive.
@@ -104,7 +110,7 @@ struct PrimitiveInfo {
     summary: &'static str,
     /// Example invocation shown in discovery output.
     example: Option<&'static str>,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     search_text: &'static str,
 }
 
@@ -113,7 +119,7 @@ static PRIMITIVES: &[PrimitiveInfo] = &[
         name: "search",
         kind: PrimitiveKind::Tool,
         domain: PrimitiveDomain::Search,
-        requires: &[],
+        requires: &[EnvGate::ConnectorCompat],
         summary: "Connector compatibility: search Zotero items by query",
         example: Some(r#"{"query":"rust"}"#),
         search_text: "search connector compatibility zotero items query",
@@ -122,7 +128,7 @@ static PRIMITIVES: &[PrimitiveInfo] = &[
         name: "fetch",
         kind: PrimitiveKind::Tool,
         domain: PrimitiveDomain::Items,
-        requires: &[],
+        requires: &[EnvGate::ConnectorCompat],
         summary: "Connector compatibility: get Zotero item metadata by key",
         example: Some(r#"{"id":"ITEMKEY"}"#),
         search_text: "fetch connector compatibility zotero item metadata key",
@@ -340,6 +346,7 @@ pub(crate) fn is_tool_visible(state: &AppState, name: &str) -> bool {
         EnvGate::WriteEnabled => state.write_enabled,
         EnvGate::SqliteAccess => state.sqlite_access,
         EnvGate::SemanticSearchEnabled => state.semantic_search_enabled,
+        EnvGate::ConnectorCompat => state.connector_compat,
     })
 }
 
@@ -373,6 +380,7 @@ impl ZoteroMcpServer {
             EnvGate::SemanticSearchEnabled => {
                 self.state.semantic_search_enabled
             }
+            EnvGate::ConnectorCompat => self.state.connector_compat,
         })
     }
 
@@ -414,5 +422,23 @@ impl ZoteroMcpServer {
         Parameters(args): Parameters<DiscoverArgs>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         Ok(self.zotero_discover_impl(&args))
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn omits_search_text_from_serialized_payload() {
+        let server = ZoteroMcpServer::new(AppState::from_env());
+        let res = server.zotero_discover_impl(&DiscoverArgs {
+            query: Some("items".to_owned()),
+            domain: None,
+            include_disabled: None,
+        });
+
+        let json =
+            serde_json::to_string(&res).expect("serialize discovery response");
+        assert!(!json.contains("search_text"));
     }
 }

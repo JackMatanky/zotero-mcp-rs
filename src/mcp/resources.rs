@@ -42,6 +42,7 @@
 //! # Ok(())
 //! # }
 //! ```
+
 use rmcp::model::{
     GetPromptResult, PromptMessage, ReadResourceResult, ResourceContents, Role,
 };
@@ -124,11 +125,14 @@ impl ZoteroMcpServer {
             .with_title("Zotero Tags")
             .with_description("List of all tags in Zotero library")
             .with_mime_type("application/json");
-        rmcp::model::ListResourcesResult::with_all_items(vec![
+        let mut res = rmcp::model::ListResourcesResult::with_all_items(vec![
             collections,
             recent_items,
             tags,
-        ])
+        ]);
+        res.ttl_ms = Some(300_000);
+        res.cache_scope = Some(rmcp::model::CacheScope::Private);
+        res
     }
 
     /// Lists MCP resource templates available for parameterized reads as a
@@ -139,50 +143,55 @@ impl ZoteroMcpServer {
     /// relations, collection details, and collection items.
     pub(crate) fn list_resource_templates_impl()
     -> rmcp::model::ListResourceTemplatesResult {
-        rmcp::model::ListResourceTemplatesResult::with_all_items(vec![
-            resource_template(
-                "zotero://items/{item_key}",
-                "item",
-                "Zotero Item",
-                "Read one Zotero item by key",
-            ),
-            text_resource_template(
-                "zotero://items/{item_key}/fulltext",
-                "item_fulltext",
-                "Zotero Item Full Text",
-                "Read Zotero's indexed full text for an item",
-            ),
-            resource_template(
-                "zotero://items/{item_key}/children",
-                "item_children",
-                "Zotero Item Children",
-                "Read child notes, attachments, and annotations for an item",
-            ),
-            resource_template(
-                "zotero://items/{item_key}/notes",
-                "item_notes",
-                "Zotero Item Notes",
-                "Read child notes for an item",
-            ),
-            resource_template(
-                "zotero://items/{item_key}/relations",
-                "item_relations",
-                "Zotero Item Relations",
-                "Read related items for an item",
-            ),
-            resource_template(
-                "zotero://collections/{collection_key}",
-                "collection",
-                "Zotero Collection",
-                "Read one Zotero collection by key",
-            ),
-            resource_template(
-                "zotero://collections/{collection_key}/items",
-                "collection_items",
-                "Zotero Collection Items",
-                "Read items in a collection",
-            ),
-        ])
+        let mut res =
+            rmcp::model::ListResourceTemplatesResult::with_all_items(vec![
+                resource_template(
+                    "zotero://items/{item_key}",
+                    "item",
+                    "Zotero Item",
+                    "Read one Zotero item by key",
+                ),
+                text_resource_template(
+                    "zotero://items/{item_key}/fulltext",
+                    "item_fulltext",
+                    "Zotero Item Full Text",
+                    "Read Zotero's indexed full text for an item",
+                ),
+                resource_template(
+                    "zotero://items/{item_key}/children",
+                    "item_children",
+                    "Zotero Item Children",
+                    "Read child notes, attachments, and annotations for an \
+                     item",
+                ),
+                resource_template(
+                    "zotero://items/{item_key}/notes",
+                    "item_notes",
+                    "Zotero Item Notes",
+                    "Read child notes for an item",
+                ),
+                resource_template(
+                    "zotero://items/{item_key}/relations",
+                    "item_relations",
+                    "Zotero Item Relations",
+                    "Read related items for an item",
+                ),
+                resource_template(
+                    "zotero://collections/{collection_key}",
+                    "collection",
+                    "Zotero Collection",
+                    "Read one Zotero collection by key",
+                ),
+                resource_template(
+                    "zotero://collections/{collection_key}/items",
+                    "collection_items",
+                    "Zotero Collection Items",
+                    "Read items in a collection",
+                ),
+            ]);
+        res.ttl_ms = Some(300_000);
+        res.cache_scope = Some(rmcp::model::CacheScope::Private);
+        res
     }
 
     /// Reads a single MCP resource identified by `uri`.

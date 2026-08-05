@@ -54,8 +54,9 @@ pub(crate) struct CachedLocalZoteroDb {
 #[derive(Clone, Debug)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "three independent env-var permission gates \
-              (write/sqlite/semantic), not combinatorial UI state"
+    reason = "four independent env-var feature gates \
+              (write/sqlite/semantic/connector_compat), not combinatorial UI \
+              state"
 )]
 pub(crate) struct AppState {
     /// Shared [`Client`] connection pool.
@@ -94,6 +95,10 @@ pub(crate) struct AppState {
     pub(crate) semantic_index: Arc<OnceCell<SemanticIndex>>,
     /// Cached embedding provider, loaded lazily on first use.
     pub(crate) embedding_provider: Arc<OnceCell<Arc<dyn EmbeddingProvider>>>,
+    /// Whether single-purpose connector compatibility tools (`search`,
+    /// `fetch`) are enabled. Defaults to false; enable by setting
+    /// `ZOTERO_CONNECTOR_COMPAT`.
+    pub(crate) connector_compat: bool,
 }
 
 impl AppState {
@@ -151,6 +156,8 @@ impl AppState {
             .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
         let semantic_db_path =
             env::var_os("ZOTERO_SEMANTIC_DB_PATH").map(PathBuf::from);
+        let connector_compat = env::var("ZOTERO_CONNECTOR_COMPAT")
+            .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
 
         Self {
             client,
@@ -169,6 +176,7 @@ impl AppState {
             semantic_db_path,
             semantic_index: Arc::new(OnceCell::new()),
             embedding_provider: Arc::new(OnceCell::new()),
+            connector_compat,
         }
     }
 
@@ -578,6 +586,7 @@ mod tests {
                 semantic_db_path: None,
                 semantic_index: Arc::new(OnceCell::new()),
                 embedding_provider: Arc::new(OnceCell::new()),
+                connector_compat: false,
                 security: SecurityConfig::default(),
             }
         }
