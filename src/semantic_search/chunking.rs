@@ -37,7 +37,6 @@
 /// let chunks = chunk_text(text, 25);
 /// assert_eq!(chunks, vec!["Short paragraph.", "Another paragraph."]);
 /// ```
-
 pub(crate) fn chunk_text(text: &str, max_chars: usize) -> Vec<String> {
     let paragraphs: Vec<&str> =
         text.split("\n\n").map(str::trim).filter(|p| !p.is_empty()).collect();

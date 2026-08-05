@@ -1,8 +1,8 @@
 //! MCP tool handlers and argument models for Zotero library search.
 //!
 //! Exposes the `zotero_search` MCP tool router, allowing clients to search
-//! items by full text, tag, citation key, or structured multi-condition
-//! queries.
+//! items by full text, tag, citation key, structured multi-condition
+//! queries, duplicate detection, and library coverage analysis.
 //!
 //! # Main Types
 //!
@@ -11,6 +11,8 @@
 //! - [`SearchByCitationKeyArgs`] - Arguments for searching items by citation
 //!   key
 //! - [`AdvancedSearchArgs`] - Arguments for structured multi-condition search
+//! - [`FindDuplicatesArgs`] - Arguments for duplicate detection action
+//! - [`LibraryCoverageArgs`] - Arguments for library coverage metrics action
 //!
 //! # Examples
 //!
@@ -39,14 +41,6 @@ use rmcp::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-/// Arguments for the connector-compatible `search` tool.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct ConnectorSearchArgs {
-    /// Search query string matched against title, creator, or metadata
-    /// fields.
-    pub(crate) query: String,
-}
-
 use super::tags::SearchByTagArgs;
 use crate::{
     ZoteroMcpServer,
@@ -56,6 +50,14 @@ use crate::{
         SortField, ZoteroClient,
     },
 };
+
+/// Arguments for the connector-compatible `search` tool.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct ConnectorSearchArgs {
+    /// Search query string matched against title, creator, or metadata
+    /// fields.
+    pub(crate) query: String,
+}
 
 /// Arguments for the `items` action of `zotero_search`.
 #[derive(Deserialize, JsonSchema)]
@@ -110,6 +112,24 @@ pub(crate) struct AdvancedSearchArgs {
     limit: Option<usize>,
 }
 
+/// Arguments for the `duplicates` action of `zotero_search`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct FindDuplicatesArgs {
+    /// Optional collection key ([`CollectionKey`]) to scope duplicate search.
+    collection_key: Option<CollectionKey>,
+}
+
+/// Arguments for the `coverage` action of `zotero_search`.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct LibraryCoverageArgs {
+    /// Optional collection key ([`CollectionKey`]) to scope coverage analysis.
+    collection_key: Option<CollectionKey>,
+    /// Zero-based offset into the item set (default: 0).
+    start: Option<usize>,
+    /// Maximum number of items to analyze (default: 100, max: 500).
+    limit: Option<usize>,
+}
+
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case")]
 #[schemars(extend("type" = "object"))]
@@ -124,9 +144,9 @@ pub(crate) enum ZoteroSearchCommand {
     /// Run a structured search with multiple conditions.
     Advanced(AdvancedSearchArgs),
     /// Find potential duplicate items in a library.
-    Duplicates(crate::mcp::zotero::duplicates::FindDuplicatesArgs),
+    Duplicates(FindDuplicatesArgs),
     /// Report coverage statistics for a library.
-    Coverage(crate::mcp::zotero::coverage::LibraryCoverageArgs),
+    Coverage(LibraryCoverageArgs),
 }
 
 #[tool_router(router = search_router, vis = "pub(crate)")]
@@ -279,6 +299,52 @@ impl ZoteroMcpServer {
                 .await,
         ))
     }
+
+    /// Handles Zotero duplicate detection tool calls.
+    ///
+    /// Scans for potential duplicate items in the library or optional
+    /// collection specified by `args` using [`ZoteroClient`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(in crate::mcp::zotero) async fn zotero_find_duplicates_impl(
+        &self,
+        args: FindDuplicatesArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client.find_duplicates(args.collection_key.as_ref()).await,
+        ))
+    }
+
+    /// Handles Zotero library coverage analysis tool calls.
+    ///
+    /// Analyzes library coverage metrics for the requested range using
+    /// [`ZoteroClient`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`rmcp::ErrorData`] for protocol-level failures. Backend
+    /// failures are returned as MCP error content.
+    pub(in crate::mcp::zotero) async fn zotero_library_coverage_impl(
+        &self,
+        args: LibraryCoverageArgs,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let offset = args.start.unwrap_or(0);
+        let limit = args.limit.unwrap_or(100).min(500);
+        let client = ZoteroClient::new(&self.state);
+        Ok(json_result(
+            client
+                .get_library_coverage(
+                    args.collection_key.as_ref(),
+                    offset,
+                    limit,
+                )
+                .await,
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -312,6 +378,54 @@ mod tests {
                 }))
                 .await
                 .expect("search succeeded");
+
+            assert_eq!(res.is_error, Some(false));
+        }
+    }
+
+    mod duplicates {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn find_duplicates_returns_success() {
+            let base = mock_server(vec![http_response("200 OK", "[]")]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            let res = server
+                .zotero_find_duplicates_impl(FindDuplicatesArgs {
+                    collection_key: None,
+                })
+                .await
+                .expect("duplicates succeeded");
+
+            assert_eq!(res.is_error, Some(false));
+        }
+    }
+
+    mod coverage {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn library_coverage_returns_success() {
+            let base = mock_server(vec![http_response_with_headers(
+                "200 OK",
+                &[("Total-Results", "0")],
+                "[]",
+            )]);
+            let server = ZoteroMcpServer::new(zotero_state(base));
+
+            let res = server
+                .zotero_library_coverage_impl(LibraryCoverageArgs {
+                    collection_key: None,
+                    start: Some(0),
+                    limit: Some(10),
+                })
+                .await
+                .expect("coverage succeeded");
 
             assert_eq!(res.is_error, Some(false));
         }

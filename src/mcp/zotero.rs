@@ -6,26 +6,18 @@
 //!
 //! # Submodules
 //!
-//! - [`annotations`]: Synthesize and annotation action handlers
-//!   (`zotero_notes`, `zotero_notes_write`).
-//! - [`attachments`]: Attachment file import action handlers
-//!   (`zotero_items_write`).
 //! - [`collections`]: Collection management tool handlers
 //!   (`zotero_collections`, `zotero_collections_write`).
-//! - [`coverage`]: Search coverage inspection handler (`zotero_search`).
-//! - [`duplicates`]: Duplicate item detection handler (`zotero_search`).
-//! - [`fulltext`]: Full-text content retrieval handler (`zotero_items`).
-//! - [`items`]: Core item lifecycle handlers and compatibility dispatch
-//!   (`zotero_items`, `zotero_items_write`).
-//! - [`metadata`]: Item metadata retrieval and identifier lookup handlers
-//!   (`zotero_items`, `zotero_items_write`).
-//! - [`notes`]: Note listing and creation handlers (`zotero_notes`,
-//!   `zotero_notes_write`).
-//! - [`pdf`]: PDF retrieval and text extraction handler (`zotero_pdf`).
+//! - [`items`]: Core item lifecycle handlers, metadata, attachments, fulltext,
+//!   and compatibility dispatch (`zotero_items`, `zotero_items_write`).
+//! - [`notes`]: Note listing, creation, and PDF annotation synthesis handlers
+//!   (`zotero_notes`, `zotero_notes_write`).
+//! - [`pdf`]: PDF retrieval, security path validation, and text extraction
+//!   handlers (`zotero_pdf`).
 //! - [`relations`]: Related item relationship handlers (`zotero_relations`,
 //!   `zotero_relations_write`).
-//! - [`search`]: Item, tag, citation key, and advanced search handlers
-//!   (`zotero_search`).
+//! - [`search`]: Item, tag, citation key, advanced, duplicate, and coverage
+//!   search handlers (`zotero_search`).
 //! - [`sqlite`]: Local `SQLite` database search handler
 //!   (`zotero_sqlite_search`).
 //! - [`status`]: Zotero API connection status handler (`zotero_status`).
@@ -33,7 +25,7 @@
 //!
 //! # Main Types
 //!
-//! - [`GetItemMetadataArgs`](metadata::GetItemMetadataArgs): Arguments for item
+//! - [`GetItemMetadataArgs`](items::GetItemMetadataArgs): Arguments for item
 //!   metadata retrieval.
 //! - [`SearchItemsArgs`](search::SearchItemsArgs): Arguments for Zotero item
 //!   search.
@@ -45,14 +37,8 @@
 //! let args = SearchItemsArgs::for_connector("rust".to_string());
 //! ```
 
-mod annotations;
-mod attachments;
 mod collections;
-mod coverage;
-mod duplicates;
-mod fulltext;
 mod items;
-mod metadata;
 mod notes;
 pub(crate) use notes::filter_notes;
 mod pdf;
@@ -73,6 +59,7 @@ mod fixtures {
     use serde_json::json;
 
     use crate::{security::SecurityConfig, state::AppState};
+
     pub(in crate::mcp::zotero) fn zotero_state(
         zotero_api_url: String,
     ) -> AppState {

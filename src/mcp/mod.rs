@@ -12,13 +12,12 @@
 //! - [`better_notes`]: Tools for Better Notes plugin integration (export,
 //!   import, templates, trees).
 //! - [`catalog`]: Tool, resource, and prompt capability catalog and discovery.
-//! - [`pdf`]: PDF path resolution and security policy enforcement.
 //! - [`resources`]: Resource and prompt definitions (`zotero://...`).
 //! - [`semantic_search`]: Local embedding index and search
 //!   (`zotero_semantic_search`).
 //! - [`server`]: Main server struct definition and tool routing logic.
 //! - [`zotero`]: Core Zotero Local API tools (read, write, collections, tags,
-//!   annotations).
+//!   pdf, notes, search).
 //!
 //! # Examples
 //!
@@ -35,7 +34,6 @@
 mod better_bibtex;
 mod better_notes;
 mod catalog;
-mod pdf;
 mod resources;
 mod semantic_search;
 mod server;
