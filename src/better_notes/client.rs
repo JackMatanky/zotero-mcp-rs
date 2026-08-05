@@ -271,6 +271,7 @@ mod tests {
         ) -> AppState {
             AppState {
                 client: Client::new(),
+                security: SecurityConfig::default(),
                 zotero_api_url: String::new(),
                 better_bibtex_url: String::new(),
                 better_notes_url,
@@ -279,14 +280,13 @@ mod tests {
                 open_library_url: String::new(),
                 write_enabled,
                 sqlite_access: false,
+                semantic_search_enabled: false,
+                connector_compat: false,
                 zotero_db_path: None,
                 local_zotero_db: AppState::local_zotero_db_cache(),
-                semantic_search_enabled: false,
                 semantic_db_path: None,
                 semantic_index: Arc::new(OnceCell::new()),
                 embedding_provider: Arc::new(OnceCell::new()),
-                connector_compat: false,
-                security: SecurityConfig::default(),
             }
         }
 

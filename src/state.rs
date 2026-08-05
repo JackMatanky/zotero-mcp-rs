@@ -59,8 +59,13 @@ pub(crate) struct CachedLocalZoteroDb {
               state"
 )]
 pub(crate) struct AppState {
+    // Infrastructure & Security Profile
     /// Shared [`Client`] connection pool.
     pub(crate) client: Client,
+    /// Security profile, path allowlists, and parser size caps.
+    pub(crate) security: SecurityConfig,
+
+    // Backend Base URLs
     /// Base URL for the Zotero Local HTTP API.
     pub(crate) zotero_api_url: String,
     /// Base URL for the Better `BibTeX` JSON-RPC endpoint.
@@ -73,32 +78,34 @@ pub(crate) struct AppState {
     pub(crate) semantic_scholar_url: String,
     /// Base URL for the Open Library Books API (ISBN resolution).
     pub(crate) open_library_url: String,
-    /// Security profile, path allowlists, and parser size caps.
-    pub(crate) security: SecurityConfig,
+
+    // Feature Gates & Permission Flags
     /// Whether write/mutation operations are allowed. Defaults to read-only;
     /// enable by setting `ZOTERO_WRITE_ENABLED`.
     pub(crate) write_enabled: bool,
     /// Whether direct read access to the local Zotero `SQLite` database is
     /// allowed. Defaults to false; enable by setting `ZOTERO_SQLITE_ACCESS`.
     pub(crate) sqlite_access: bool,
+    /// Whether local semantic-search indexing/querying is allowed. Defaults
+    /// to false; enable by setting `ZOTERO_SEMANTIC_SEARCH`.
+    pub(crate) semantic_search_enabled: bool,
+    /// Whether single-purpose connector compatibility tools (`search`,
+    /// `fetch`) are enabled. Defaults to false; enable by setting
+    /// `ZOTERO_CONNECTOR_COMPAT`.
+    pub(crate) connector_compat: bool,
+
+    // Local Storage & Cached Handles
     /// Optional direct path to `zotero.sqlite` for local database reads.
     pub(crate) zotero_db_path: Option<PathBuf>,
     /// Cached read-only local database handle shared across `SQLite` tool
     /// calls.
     pub(crate) local_zotero_db: Arc<OnceCell<CachedLocalZoteroDb>>,
-    /// Whether local semantic-search indexing/querying is allowed. Defaults
-    /// to false; enable by setting `ZOTERO_SEMANTIC_SEARCH`.
-    pub(crate) semantic_search_enabled: bool,
     /// Optional direct path to the semantic search `SQLite` index file.
     pub(crate) semantic_db_path: Option<PathBuf>,
     /// Cached semantic index handle, opened lazily on first use.
     pub(crate) semantic_index: Arc<OnceCell<SemanticIndex>>,
     /// Cached embedding provider, loaded lazily on first use.
     pub(crate) embedding_provider: Arc<OnceCell<Arc<dyn EmbeddingProvider>>>,
-    /// Whether single-purpose connector compatibility tools (`search`,
-    /// `fetch`) are enabled. Defaults to false; enable by setting
-    /// `ZOTERO_CONNECTOR_COMPAT`.
-    pub(crate) connector_compat: bool,
 }
 
 impl AppState {
@@ -167,22 +174,22 @@ impl AppState {
 
         Self {
             client,
+            security: SecurityConfig::from_env(),
             zotero_api_url,
             better_bibtex_url,
             better_notes_url,
             crossref_url,
             semantic_scholar_url,
             open_library_url,
-            security: SecurityConfig::from_env(),
             write_enabled,
             sqlite_access,
+            semantic_search_enabled,
+            connector_compat,
             zotero_db_path,
             local_zotero_db: Self::local_zotero_db_cache(),
-            semantic_search_enabled,
             semantic_db_path,
             semantic_index: Arc::new(OnceCell::new()),
             embedding_provider: Arc::new(OnceCell::new()),
-            connector_compat,
         }
     }
 
@@ -579,6 +586,7 @@ mod tests {
         pub(super) fn test_state(write_enabled: bool) -> AppState {
             AppState {
                 client: Client::new(),
+                security: SecurityConfig::default(),
                 zotero_api_url: String::new(),
                 better_bibtex_url: String::new(),
                 better_notes_url: String::new(),
@@ -587,14 +595,13 @@ mod tests {
                 open_library_url: String::new(),
                 write_enabled,
                 sqlite_access: false,
+                semantic_search_enabled: false,
+                connector_compat: false,
                 zotero_db_path: None,
                 local_zotero_db: AppState::local_zotero_db_cache(),
-                semantic_search_enabled: false,
                 semantic_db_path: None,
                 semantic_index: Arc::new(OnceCell::new()),
                 embedding_provider: Arc::new(OnceCell::new()),
-                connector_compat: false,
-                security: SecurityConfig::default(),
             }
         }
 

@@ -51,18 +51,23 @@ pub(crate) enum SecurityProfile {
 /// Security configuration parameters controlling path access and size limits.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct SecurityConfig {
+    // Security Profile & Path Feature Flags
     /// Active security profile.
     pub(crate) profile: SecurityProfile,
     /// Whether direct file paths are enabled.
     pub(crate) direct_file_paths: bool,
     /// Whether file path checking is enabled.
     pub(crate) file_paths_enabled: bool,
+
+    // Allowed Directory Paths
     /// Allowed directories for reading files.
     pub(crate) allowed_read_dirs: Vec<PathBuf>,
     /// Allowed directories for auxiliary tools.
     pub(crate) allowed_aux_dirs: Vec<PathBuf>,
     /// Allowed directories for export files.
     pub(crate) allowed_export_dirs: Vec<PathBuf>,
+
+    // Payload & Input Size Caps
     /// Maximum allowed PDF size in bytes.
     pub(crate) max_pdf_bytes: u64,
     /// Maximum allowed HTTP response body size in bytes.
