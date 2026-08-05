@@ -38,8 +38,13 @@ use crate::{ZoteroMcpServer, state::AppState};
 /// Arguments for the `zotero_discover` tool.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct DiscoverArgs {
+    /// Optional search term matched against primitive names, summaries, and
+    /// tags.
     pub(crate) query: Option<String>,
+    /// Optional domain filter to restrict results to one functional domain.
     pub(crate) domain: Option<PrimitiveDomain>,
+    /// Whether to include disabled primitives in the response (defaults to
+    /// `false`).
     pub(crate) include_disabled: Option<bool>,
 }
 
@@ -110,6 +115,8 @@ struct PrimitiveInfo {
     summary: &'static str,
     /// Example invocation shown in discovery output.
     example: Option<&'static str>,
+    /// Internal search text used for filtering discovery results, omitted from
+    /// JSON output.
     #[serde(skip)]
     search_text: &'static str,
 }
@@ -338,6 +345,9 @@ pub(crate) fn is_write_tool(name: &str) -> bool {
 
 /// Returns `true` if `name` is currently advertised to MCP clients given
 /// `state`'s feature gates.
+///
+/// Evaluates environment gates specified for `name` in the primitive catalog
+/// against the provided [`AppState`].
 pub(crate) fn is_tool_visible(state: &AppState, name: &str) -> bool {
     let Some(gates) = tool_gates(name) else {
         return false;
@@ -414,9 +424,11 @@ impl ZoteroMcpServer {
         )
     )]
     /// Discovers Zotero capabilities matching the given query and filters.
+    ///
     /// # Errors
     ///
-    /// Returns [`rmcp::ErrorData`] for protocol-level failures.
+    /// Returns [`rmcp::ErrorData`] if response serialization fails or
+    /// protocol-level errors occur.
     pub(crate) async fn zotero_discover(
         &self,
         Parameters(args): Parameters<DiscoverArgs>,

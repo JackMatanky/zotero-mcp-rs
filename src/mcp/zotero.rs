@@ -33,13 +33,15 @@
 //!
 //! # Main Types
 //!
-//! - [`GetItemMetadataArgs`]: Arguments for item metadata retrieval.
-//! - [`SearchItemsArgs`]: Arguments for Zotero item search.
+//! - [`GetItemMetadataArgs`](metadata::GetItemMetadataArgs): Arguments for item
+//!   metadata retrieval.
+//! - [`SearchItemsArgs`](search::SearchItemsArgs): Arguments for Zotero item
+//!   search.
 //!
 //! # Examples
 //!
 //! ```no_run
-//! # use zotero_mcp_rs::mcp::zotero::SearchItemsArgs;
+//! # use zotero_mcp_rs::mcp::zotero::search::SearchItemsArgs;
 //! let args = SearchItemsArgs::for_connector("rust".to_string());
 //! ```
 mod annotations;

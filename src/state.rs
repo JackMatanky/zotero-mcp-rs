@@ -104,19 +104,25 @@ pub(crate) struct AppState {
 impl AppState {
     /// Builds an [`AppState`] from environment variables.
     ///
-    /// Reads `ZOTERO_API_URL`, `BETTER_BIBTEX_URL`, `BETTER_NOTES_URL`,
-    /// `CROSSREF_URL`, `SEMANTIC_SCHOLAR_URL`, and `OPEN_LIBRARY_URL` for the
-    /// backend URLs (defaulting to standard local Zotero plugin ports or public
-    /// endpoints when unset), and `ZOTERO_WRITE_ENABLED` (`"1"` or `"true"`,
-    /// case-insensitive) to opt into write operations (read-only by default).
-    /// `ZOTERO_SQLITE_ACCESS` (`"1"` or `"true"`, case-insensitive) likewise
-    /// gates direct reads of the local Zotero `SQLite` database (disabled by
-    /// default). `ZOTERO_DB_PATH` optionally points directly to `zotero.sqlite`
-    /// when `SQLite` access is enabled. `ZOTERO_SEMANTIC_SEARCH` (`"1"` or
-    /// `"true"`, case-insensitive) likewise gates local semantic-search
-    /// indexing/querying (disabled by default). `ZOTERO_SEMANTIC_DB_PATH`
-    /// optionally points directly to the semantic search index `SQLite` file
-    /// when enabled.
+    /// Reads backend URLs and feature gate configuration from the environment:
+    ///
+    /// * `ZOTERO_API_URL`: Base URL for Zotero Local HTTP API (default `http://127.0.0.1:23119/api`).
+    /// * `BETTER_BIBTEX_URL`: Base URL for Better `BibTeX` JSON-RPC (default `http://127.0.0.1:23119/better-bibtex/json-rpc`).
+    /// * `BETTER_NOTES_URL`: Base URL for Better Notes bridge (default `http://127.0.0.1:23119/better-notes`).
+    /// * `CROSSREF_URL`: Base URL for `CrossRef` Works API (default `https://api.crossref.org`).
+    /// * `SEMANTIC_SCHOLAR_URL`: Base URL for Semantic Scholar API (default `https://api.semanticscholar.org`).
+    /// * `OPEN_LIBRARY_URL`: Base URL for Open Library Books API (default `https://openlibrary.org`).
+    /// * `ZOTERO_WRITE_ENABLED`: Enables write operations when set to `"1"` or
+    ///   `"true"` (default `false`).
+    /// * `ZOTERO_SQLITE_ACCESS`: Enables direct local `SQLite` database reads
+    ///   when set to `"1"` or `"true"` (default `false`).
+    /// * `ZOTERO_DB_PATH`: Optional explicit path to `zotero.sqlite`.
+    /// * `ZOTERO_SEMANTIC_SEARCH`: Enables local semantic search indexing when
+    ///   set to `"1"` or `"true"` (default `false`).
+    /// * `ZOTERO_SEMANTIC_DB_PATH`: Optional explicit path to semantic search
+    ///   index database.
+    /// * `ZOTERO_CONNECTOR_COMPAT`: Enables single-purpose connector tools
+    ///   (`search`, `fetch`) when set to `"1"` or `"true"` (default `false`).
     ///
     /// Returns the constructed [`AppState`].
     pub(crate) fn from_env() -> Self {
@@ -222,6 +228,7 @@ impl AppState {
         }
     }
 
+    /// Returns an uninitialized cached handle for local Zotero `SQLite` access.
     pub(crate) fn local_zotero_db_cache() -> Arc<OnceCell<CachedLocalZoteroDb>>
     {
         Arc::new(OnceCell::new())

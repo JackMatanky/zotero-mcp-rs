@@ -65,7 +65,9 @@ impl ZoteroMcpServer {
         tools
     }
 
-    /// Returns the list tools result with caching metadata.
+    /// Returns visible tools wrapped in a
+    /// [`ListToolsResult`](rmcp::model::ListToolsResult) with 5-minute private
+    /// caching metadata.
     pub(crate) fn list_tools_impl(
         state: &AppState,
     ) -> rmcp::model::ListToolsResult {
@@ -77,11 +79,13 @@ impl ZoteroMcpServer {
         res
     }
 
-    /// Returns `true` if `tool_name` is visible given the environment state.
+    /// Returns `true` if `name` is visible given the environment state.
     fn is_visible_tool(state: &AppState, name: &str) -> bool {
         is_tool_visible(state, name)
     }
 
+    /// Constructs the merged tool router dispatch table for all tool domain
+    /// modules.
     fn tool_router() -> rmcp::handler::server::router::tool::ToolRouter<Self> {
         let mut router = Self::catalog_router();
         router.merge(Self::status_router());

@@ -103,11 +103,11 @@ fn text_resource_template(
 }
 
 impl ZoteroMcpServer {
-    /// Lists MCP static resources exposed by the server as a
-    /// [`ListResourcesResult`](rmcp::model::ListResourcesResult).
+    /// Lists static MCP resources exposed by the server with caching metadata.
     ///
     /// Returns resources for `zotero://collections`, `zotero://items/recent`,
-    /// and `zotero://tags`.
+    /// and `zotero://tags`, attaching a 5-minute private cache header (`ttl_ms
+    /// = 300_000`).
     pub(crate) fn list_resources_impl() -> rmcp::model::ListResourcesResult {
         let collections =
             rmcp::model::Resource::new("zotero://collections", "collections")
@@ -135,12 +135,12 @@ impl ZoteroMcpServer {
         res
     }
 
-    /// Lists MCP resource templates available for parameterized reads as a
-    /// [`ListResourceTemplatesResult`](rmcp::model::ListResourceTemplatesResult).
-    ///
+    /// Lists parameterized MCP resource templates exposed by the server with
+    /// caching metadata.
     ///
     /// Returns templates for item details, full text, children, notes,
-    /// relations, collection details, and collection items.
+    /// relations, collection details, and collection items, attaching a
+    /// 5-minute private cache header (`ttl_ms = 300_000`).
     pub(crate) fn list_resource_templates_impl()
     -> rmcp::model::ListResourceTemplatesResult {
         let mut res =
