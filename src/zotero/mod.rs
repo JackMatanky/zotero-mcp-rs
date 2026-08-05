@@ -20,7 +20,6 @@
 //! - [`AnnotationType`] - PDF annotation kind
 //! - [`LocalZoteroDb`] - Read-only `zotero.sqlite` access
 
-mod annotations;
 mod client;
 mod collections;
 mod coverage;
@@ -36,7 +35,6 @@ mod sqlite;
 mod tags;
 mod types;
 
-pub(crate) use annotations::{AnnotationDraft, AnnotationPosition};
 pub(crate) use client::ZoteroClient;
 pub(crate) use collections::CollectionItemAction;
 pub(crate) use items::TrashAction;
@@ -44,6 +42,7 @@ pub(crate) use keys::{
     CitationKey, CollectionKey, ItemKey, LibraryVersion, TagName,
 };
 pub(crate) use metadata::IdentifierKind;
+pub(crate) use notes::{AnnotationDraft, AnnotationPosition};
 pub(crate) use objects::{ZoteroCollection, ZoteroItem};
 pub(crate) use search::{
     JoinMode, SearchCondition, SearchField, SearchOperator, SortDirection,
