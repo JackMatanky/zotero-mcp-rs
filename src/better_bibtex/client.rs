@@ -4,7 +4,8 @@
 //! mapping, and security permission checks for all Better `BibTeX` operations.
 //! Used by MCP tool handlers in `crate::mcp::better_bibtex`.
 //!
-//! Main types:
+//! # Main types:
+//!
 //! - [`BetterBibtexClient`] - JSON-RPC client borrowing [`AppState`]
 //!
 //! [`AppState`]: crate::state::AppState

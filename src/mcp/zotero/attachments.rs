@@ -5,6 +5,7 @@
 //! operations to [`ZoteroClient`].
 //!
 //! # Main Types
+//!
 //! - [`AttachFileArgs`] - Arguments for the `attach_file` action
 //! - [`ImportPdfArgs`] - Arguments for the `import_pdf` action
 //!

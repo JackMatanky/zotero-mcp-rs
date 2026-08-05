@@ -5,6 +5,7 @@
 //! [`ZoteroClient::get_item_fulltext`].
 //!
 //! # Main Types
+//!
 //! - [`GetItemFulltextArgs`] - Arguments for the `fulltext` action
 //!
 //! # Examples

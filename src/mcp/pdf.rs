@@ -5,7 +5,8 @@
 //! companion bridge endpoints to discover valid Zotero storage directories and
 //! validates target paths against security configuration limits.
 //!
-//! Main types:
+//! # Main types:
+//!
 //! - [`ResolvedPdfPath`] - Resolved filesystem path for a Zotero PDF attachment
 //! - [`BridgePdfRoot`] - Bridge file-roots response for Zotero storage
 //!   validation

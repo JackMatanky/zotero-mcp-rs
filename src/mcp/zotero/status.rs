@@ -5,6 +5,7 @@
 //! [`ZoteroClient::check_status`].
 //!
 //! # Main Types
+//!
 //! - [`EmptyArgs`] - Arguments for tools that take no parameters
 //!
 //! # Examples

@@ -7,7 +7,8 @@
 //! Tools are routed using the `#[tool_router]` macro, delegating logic to the
 //! underlying Zotero Local API, Better `BibTeX`, and Better Notes handlers.
 //!
-//! Main types:
+//! # Main types:
+//!
 //! - [`ZoteroMcpServer`] - Shared state holder and `ServerHandler`
 //!   implementation
 //!

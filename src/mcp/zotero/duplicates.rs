@@ -5,6 +5,7 @@
 //! algorithms to [`ZoteroClient::find_duplicates`].
 //!
 //! # Main Types
+//!
 //! - [`FindDuplicatesArgs`] - Arguments for the `duplicates` action
 //!
 //! # Examples

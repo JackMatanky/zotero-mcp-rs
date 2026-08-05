@@ -2,7 +2,10 @@
 //!
 //! This module provides handler implementations for synthesizing PDF
 //! annotations into structured Markdown notes and creating new PDF annotations
-//! on attachment items via [`ZoteroClient`]. # Main Types
+//! on attachment items via [`ZoteroClient`].
+//!
+//! # Main Types
+//!
 //! - [`SynthesizeAnnotationsArgs`] - Arguments for the `synthesize` action
 //! - [`CreateAnnotationArgs`] - Arguments for the `annotation` action
 //!

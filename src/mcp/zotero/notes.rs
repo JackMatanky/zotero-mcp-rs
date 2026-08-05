@@ -5,6 +5,7 @@
 //! note creation, and PDF annotation handlers.
 //!
 //! # Main Types
+//!
 //! - [`ZoteroNotesCommand`] - Grouped-router command for read-only note actions
 //! - [`ZoteroNotesWriteCommand`] - Grouped-router command for write note
 //!   actions

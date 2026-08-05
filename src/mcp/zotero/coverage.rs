@@ -5,6 +5,7 @@
 //! [`ZoteroClient::get_library_coverage`].
 //!
 //! # Main Types
+//!
 //! - [`LibraryCoverageArgs`] - Arguments for the `coverage` action
 //!
 //! # Examples
