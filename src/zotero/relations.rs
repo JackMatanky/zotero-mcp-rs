@@ -20,7 +20,11 @@
 //! # use zotero_mcp_rs::state::AppState;
 //! # use zotero_mcp_rs::zotero::client::ZoteroClient;
 //! # use zotero_mcp_rs::zotero::ItemKey;
-//! # async fn run(state: &AppState, key_a: &ItemKey, key_b: &ItemKey) -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn run(
+//! #     state: &AppState,
+//! #     key_a: &ItemKey,
+//! #     key_b: &ItemKey,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
 //! let client = ZoteroClient::new(state);
 //! client.add_item_relation(key_a, key_b).await?;
 //! let related = client.get_related_items(key_a).await?;
@@ -28,6 +32,7 @@
 //! # Ok(())
 //! # }
 //! ```
+
 use std::collections::BTreeSet;
 
 use serde::Serialize;

@@ -1,11 +1,12 @@
 //! Local PDF extraction backing the `zotero_read_pdf_pages` and
 //! `zotero_get_pdf_outline` tools.
 //!
-//! Wraps the [`pdf_extract`] crate to pull plain text out of a PDF file on
-//! disk (with optional page-range filtering) and [`lopdf`] to read its
-//! bookmark outline (table of contents).
+//! Wraps the [`pdf_extract`] crate to pull plain text out of a PDF file on disk
+//! (with optional page-range filtering) and [`lopdf`] to read its bookmark
+//! outline (table of contents).
 //!
-//! Main functions:
+//! # Main Functions:
+//!
 //! - [`extract_pdf_pages`] - Extract text from PDF pages
 //! - [`extract_pdf_outline`] - Read bookmark/table-of-contents outline
 //!
@@ -30,10 +31,9 @@ use crate::errors::ZoteroMcpError;
 /// `page_numbers`.
 ///
 /// `pdf-extract` delimits pages with a form-feed (`\x0C`) character in its
-/// output. When `page_numbers` is [`Some`], only the matching 1-based pages
-/// are kept, rejoined with `\x0C`; when it's [`None`], the full extracted text
-/// is returned unmodified. An empty `page_numbers` slice returns an empty
-/// string.
+/// output. When `page_numbers` is [`Some`], only the matching 1-based pages are
+/// kept, rejoined with `\x0C`; when it's [`None`], the full extracted text is
+/// returned unmodified. An empty `page_numbers` slice returns an empty string.
 ///
 /// # Arguments
 ///

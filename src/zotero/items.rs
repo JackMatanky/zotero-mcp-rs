@@ -90,8 +90,8 @@ impl ZoteroClient<'_> {
     }
 
     /// Fetches every top-level library item (notes excluded), paginating
-    /// through the whole library with a stable date-modified ordering so
-    /// page boundaries are deterministic.
+    /// through the whole library with a stable date-modified ordering so page
+    /// boundaries are deterministic.
     ///
     /// # Errors
     ///
@@ -348,8 +348,8 @@ impl ZoteroClient<'_> {
         .await
     }
 
-    /// Imports a local file into Zotero storage via a three-phase MD5
-    /// upload sequence and returns the created attachment item.
+    /// Imports a local file into Zotero storage via a three-phase MD5 upload
+    /// sequence and returns the created attachment item.
     ///
     /// If Zotero already contains an identical file (matching MD5 checksum),
     /// this method returns the existing attachment without re-uploading raw

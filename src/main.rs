@@ -4,8 +4,8 @@
 //! Local HTTP API, the Better `BibTeX` JSON-RPC API, and the Better Notes
 //! companion bridge. Communicates with MCP clients over standard input and
 //! output (stdio) using JSON-RPC ([`rmcp::transport::stdio`]); all diagnostic
-//! logging is routed to standard error so it never corrupts the stdio
-//! protocol stream.
+//! logging is routed to standard error so it never corrupts the stdio protocol
+//! stream.
 //!
 //! # Examples
 //!

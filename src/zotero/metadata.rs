@@ -14,9 +14,18 @@
 //!
 //! ```no_run
 //! # use zotero_mcp_rs::state::AppState;
-//! # use zotero_mcp_rs::zotero::metadata::{resolve_metadata, IdentifierKind};
-//! # async fn run(state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
-//! let draft = resolve_metadata(state, IdentifierKind::Doi, "10.1038/s41586-020-2649-2").await?;
+//! # use zotero_mcp_rs::zotero::metadata::{
+//! #     resolve_metadata, IdentifierKind,
+//! # };
+//! # async fn run(
+//! #     state: &AppState,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
+//! let draft = resolve_metadata(
+//!     state,
+//!     IdentifierKind::Doi,
+//!     "10.1038/s41586-020-2649-2",
+//! )
+//! .await?;
 //! println!("Resolved title: {}", draft.title);
 //! # Ok(())
 //! # }

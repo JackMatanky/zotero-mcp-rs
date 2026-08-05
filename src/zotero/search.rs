@@ -27,7 +27,9 @@
 //! ```no_run
 //! # use zotero_mcp_rs::zotero::client::ZoteroClient;
 //! # use zotero_mcp_rs::errors::ZoteroMcpError;
-//! # async fn run(client: &ZoteroClient<'_>) -> Result<(), ZoteroMcpError> {
+//! # async fn run(
+//! #     client: &ZoteroClient<'_>,
+//! # ) -> Result<(), ZoteroMcpError> {
 //! let page = client.search_items("quantum mechanics", None, 0, 10).await?;
 //! println!("Found {} items", page.pagination.total);
 //! for item in page.items {

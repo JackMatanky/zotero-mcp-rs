@@ -3,8 +3,8 @@
 //! [`AppState`] bundles the configured backend URLs and a shared
 //! [`reqwest::Client`], plus the write-permission gate that every mutating
 //! operation checks before touching the Zotero library. This module also
-//! provides [`AppState::send_with_retry`], the single retry policy used by
-//! all three backend clients.
+//! provides [`AppState::send_with_retry`], the single retry policy used by all
+//! three backend clients.
 //!
 //! # Examples
 //!
@@ -101,17 +101,17 @@ impl AppState {
     ///
     /// Reads `ZOTERO_API_URL`, `BETTER_BIBTEX_URL`, `BETTER_NOTES_URL`,
     /// `CROSSREF_URL`, `SEMANTIC_SCHOLAR_URL`, and `OPEN_LIBRARY_URL` for the
-    /// backend URLs (defaulting to standard local Zotero plugin ports or
-    /// public endpoints when unset), and `ZOTERO_WRITE_ENABLED` (`"1"` or
-    /// `"true"`, case-insensitive) to opt into write operations (read-only by
-    /// default). `ZOTERO_SQLITE_ACCESS` (`"1"` or `"true"`, case-insensitive)
-    /// likewise gates direct reads of the local Zotero `SQLite` database
-    /// (disabled by default). `ZOTERO_DB_PATH` optionally points directly to
-    /// `zotero.sqlite` when `SQLite` access is enabled.
-    /// `ZOTERO_SEMANTIC_SEARCH` (`"1"` or `"true"`, case-insensitive)
-    /// likewise gates local semantic-search indexing/querying (disabled by
-    /// default). `ZOTERO_SEMANTIC_DB_PATH` optionally points directly to the
-    /// semantic search index `SQLite` file when enabled.
+    /// backend URLs (defaulting to standard local Zotero plugin ports or public
+    /// endpoints when unset), and `ZOTERO_WRITE_ENABLED` (`"1"` or `"true"`,
+    /// case-insensitive) to opt into write operations (read-only by default).
+    /// `ZOTERO_SQLITE_ACCESS` (`"1"` or `"true"`, case-insensitive) likewise
+    /// gates direct reads of the local Zotero `SQLite` database (disabled by
+    /// default). `ZOTERO_DB_PATH` optionally points directly to `zotero.sqlite`
+    /// when `SQLite` access is enabled. `ZOTERO_SEMANTIC_SEARCH` (`"1"` or
+    /// `"true"`, case-insensitive) likewise gates local semantic-search
+    /// indexing/querying (disabled by default). `ZOTERO_SEMANTIC_DB_PATH`
+    /// optionally points directly to the semantic search index `SQLite` file
+    /// when enabled.
     ///
     /// Returns the constructed [`AppState`].
     pub(crate) fn from_env() -> Self {
@@ -305,8 +305,8 @@ impl AppState {
             .await
     }
 
-    /// Returns the cached embedding provider, loading the local ONNX model
-    /// on first use.
+    /// Returns the cached embedding provider, loading the local ONNX model on
+    /// first use.
     ///
     /// # Errors
     ///
@@ -350,8 +350,7 @@ impl AppState {
         self.security.check_direct_file_paths_enabled()
     }
 
-    /// Validates that a path exists and falls under one of the allowed
-    /// `roots`.
+    /// Validates that a path exists and falls under one of the allowed `roots`.
     ///
     /// # Arguments
     ///
@@ -465,8 +464,8 @@ impl AppState {
     ///
     /// Retries on `5xx` responses, HTTP 429, timeouts, and connect errors, up
     /// to [`RETRY_MAX_ATTEMPTS`] attempts total, doubling the delay from
-    /// [`RETRY_BASE_DELAY`] and capping it at [`RETRY_MAX_DELAY`]. Returns
-    /// the first [`Response`] that isn't a transient failure, or the final
+    /// [`RETRY_BASE_DELAY`] and capping it at [`RETRY_MAX_DELAY`]. Returns the
+    /// first [`Response`] that isn't a transient failure, or the final
     /// attempt's outcome once retries are exhausted.
     ///
     /// # Errors

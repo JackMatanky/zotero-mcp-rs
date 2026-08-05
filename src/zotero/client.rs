@@ -66,8 +66,8 @@ impl<'a> ZoteroClient<'a> {
     /// Probes the Zotero Local API for availability.
     ///
     /// Issues a lightweight `items?limit=1` request. Connection and HTTP status
-    /// failures are captured in the returned [`LocalApiStatus::error`]
-    /// field rather than being propagated as an error.
+    /// failures are captured in the returned [`LocalApiStatus::error`] field
+    /// rather than being propagated as an error.
     pub(crate) async fn check_status(&self) -> LocalApiStatus {
         let url =
             format!("{}/users/0/items?limit=1", self.state.zotero_api_url);

@@ -1,6 +1,7 @@
 //! Security profiles, path allowlists, and input size constraints.
 //!
-//! Main types:
+//! # Main Types:
+//!
 //! - [`SecurityProfile`] - Supported security profiles (Default, Workspace,
 //!   `TrustedLocal`, `Hardened`)
 //! - [`SecurityConfig`] - Path allowlists and size limits
@@ -238,8 +239,7 @@ impl SecurityConfig {
         }
     }
 
-    /// Validates that a path exists and falls under one of the allowed
-    /// `roots`.
+    /// Validates that a path exists and falls under one of the allowed `roots`.
     ///
     /// # Arguments
     ///

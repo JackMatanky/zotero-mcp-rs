@@ -17,7 +17,9 @@
 //! ```no_run
 //! # use zotero_mcp_rs::state::AppState;
 //! # use zotero_mcp_rs::zotero::client::ZoteroClient;
-//! # async fn run(state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn run(
+//! #     state: &AppState,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
 //! let client = ZoteroClient::new(state);
 //! let collections = client.get_collections().await?;
 //! println!("Found {} collections", collections.len());
