@@ -37,7 +37,7 @@ use serde::Deserialize;
 use crate::{
     ZoteroMcpServer,
     mcp::{json_result, json_success, text_error},
-    zotero::{ItemKey, ItemType, ZoteroClient},
+    zotero::{ItemKey, ItemType, ZoteroClient, ZoteroItem},
 };
 
 /// Arguments for the `list` action of `zotero_notes`.
@@ -146,6 +146,14 @@ impl ZoteroMcpServer {
     }
 }
 
+/// Filters child items to only those with `ItemType::Note`.
+pub(crate) fn filter_notes(children: Vec<ZoteroItem>) -> Vec<ZoteroItem> {
+    children
+        .into_iter()
+        .filter(|child| child.data.item_type == ItemType::Note)
+        .collect()
+}
+
 impl ZoteroMcpServer {
     /// Handles Zotero note retrieval tool calls.
     ///
@@ -162,13 +170,7 @@ impl ZoteroMcpServer {
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
         match client.get_item_children(&args.item_key).await {
-            Ok(children) => {
-                let notes: Vec<_> = children
-                    .into_iter()
-                    .filter(|c| c.data.item_type == ItemType::Note)
-                    .collect();
-                Ok(json_success(&notes))
-            }
+            Ok(children) => Ok(json_success(&filter_notes(children))),
             Err(e) => Ok(text_error(&e)),
         }
     }

@@ -50,7 +50,7 @@ use serde::Serialize;
 use crate::{
     ZoteroMcpServer,
     errors::ZoteroMcpError,
-    zotero::{CollectionKey, ItemKey, ItemType, ZoteroClient, ZoteroItem},
+    zotero::{CollectionKey, ItemKey, ZoteroClient},
 };
 
 /// Builds a resource template where `name` is the programmatic identifier and
@@ -99,17 +99,6 @@ fn text_resource_template(
         .with_title(title)
         .with_description(description)
         .with_mime_type("text/plain")
-}
-
-/// Filters child items to only note items.
-///
-/// Takes a vector of child [`ZoteroItem`] objects and returns only those items
-/// whose `item_type` is [`ItemType::Note`].
-fn note_children(children: Vec<ZoteroItem>) -> Vec<ZoteroItem> {
-    children
-        .into_iter()
-        .filter(|child| child.data.item_type == ItemType::Note)
-        .collect()
 }
 
 impl ZoteroMcpServer {
@@ -395,10 +384,11 @@ async fn read_item_resource(
             .get_item_children(&item_key)
             .await
             .map(|children| json_resource(uri, &children)),
-        Some("notes") => client
-            .get_item_children(&item_key)
-            .await
-            .map(|children| json_resource(uri, &note_children(children))),
+        Some("notes") => {
+            client.get_item_children(&item_key).await.map(|children| {
+                json_resource(uri, &super::zotero::filter_notes(children))
+            })
+        }
         Some("fulltext") => client
             .get_item_fulltext(&item_key)
             .await

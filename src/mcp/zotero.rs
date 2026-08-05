@@ -51,6 +51,7 @@ mod fulltext;
 mod items;
 mod metadata;
 mod notes;
+pub(crate) use notes::filter_notes;
 mod pdf;
 mod relations;
 mod search;
