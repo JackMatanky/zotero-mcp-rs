@@ -86,7 +86,8 @@ impl ZoteroClient<'_> {
         let url = format!(
             "{}/users/0/items?limit={}&sort=dateModified&direction=desc&\
              itemType=-note",
-            self.state.zotero_api_url, limit
+            self.state.zotero_api_url(),
+            limit
         );
         self.get_json(&url).await
     }
@@ -107,7 +108,7 @@ impl ZoteroClient<'_> {
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/items?itemType=-note&sort=dateModified&direction=desc",
-            self.state.zotero_api_url
+            self.state.zotero_api_url()
         );
         self.get_all_json(&url, 100).await
     }
@@ -126,10 +127,13 @@ impl ZoteroClient<'_> {
         &self,
         item_key: &ItemKey,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
-        let url =
-            format!("{}/users/0/items/{}", self.state.zotero_api_url, item_key);
+        let url = format!(
+            "{}/users/0/items/{}",
+            self.state.zotero_api_url(),
+            item_key
+        );
         let resp =
-            self.state.send_with_retry(self.state.client.get(&url)).await?;
+            self.state.send_with_retry(self.state.client().get(&url)).await?;
         if resp.status() == StatusCode::NOT_FOUND {
             return Err(ZoteroMcpError::NotFound(format!("Item {item_key}")));
         }
@@ -152,7 +156,8 @@ impl ZoteroClient<'_> {
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/items/top?limit={}",
-            self.state.zotero_api_url, limit
+            self.state.zotero_api_url(),
+            limit
         );
         let items: Vec<ZoteroItem> = self.get_json(&url).await?;
         Ok(items
@@ -176,7 +181,8 @@ impl ZoteroClient<'_> {
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/items/{}/children",
-            self.state.zotero_api_url, item_key
+            self.state.zotero_api_url(),
+            item_key
         );
         self.get_json(&url).await
     }
@@ -198,11 +204,14 @@ impl ZoteroClient<'_> {
         fields: serde_json::Value,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let url =
-            format!("{}/users/0/items/{}", self.state.zotero_api_url, item_key);
+        let url = format!(
+            "{}/users/0/items/{}",
+            self.state.zotero_api_url(),
+            item_key
+        );
         let resp = self
             .state
-            .send_with_retry(self.state.client.patch(&url).json(&fields))
+            .send_with_retry(self.state.client().patch(&url).json(&fields))
             .await?;
         let resp = self.ensure_success(resp).await?;
         match resp.json::<ZoteroItem>().await {
@@ -228,8 +237,11 @@ impl ZoteroClient<'_> {
     ) -> Result<(), ZoteroMcpError> {
         self.state.check_write_permission()?;
         let item = self.get_item(item_key).await?;
-        let url =
-            format!("{}/users/0/items/{}", self.state.zotero_api_url, item_key);
+        let url = format!(
+            "{}/users/0/items/{}",
+            self.state.zotero_api_url(),
+            item_key
+        );
         self.delete(&url, item.version).await
     }
 
@@ -274,7 +286,7 @@ impl ZoteroClient<'_> {
         draft: ItemDraft,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let url = format!("{}/users/0/items", self.state.zotero_api_url);
+        let url = format!("{}/users/0/items", self.state.zotero_api_url());
         self.post_json_first(&url, &vec![draft], "Created item array was empty")
             .await
     }
@@ -295,7 +307,8 @@ impl ZoteroClient<'_> {
     ) -> Result<String, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/items/{}/fulltext",
-            self.state.zotero_api_url, item_key
+            self.state.zotero_api_url(),
+            item_key
         );
         let val: serde_json::Value = self.get_json(&url).await?;
         let content = val
@@ -332,7 +345,7 @@ impl ZoteroClient<'_> {
         content_type: Option<&str>,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let url = format!("{}/users/0/items", self.state.zotero_api_url);
+        let url = format!("{}/users/0/items", self.state.zotero_api_url());
         let payload = serde_json::json!([{
             "itemType": ItemType::Attachment,
             "parentItem": parent_item_key,
@@ -421,7 +434,8 @@ impl ZoteroClient<'_> {
         if let Some(parent) = parent_item_key {
             attachment.insert("parentItem".into(), json!(parent));
         }
-        let create_url = format!("{}/users/0/items", self.state.zotero_api_url);
+        let create_url =
+            format!("{}/users/0/items", self.state.zotero_api_url());
         let item: ZoteroItem = self
             .post_json_first(
                 &create_url,
@@ -432,13 +446,14 @@ impl ZoteroClient<'_> {
 
         let file_url = format!(
             "{}/users/0/items/{}/file",
-            self.state.zotero_api_url, item.data.key
+            self.state.zotero_api_url(),
+            item.data.key
         );
         let filesize_text = bytes.len().to_string();
         let mtime_text = modified_ms.to_string();
         let resp = self
             .state
-            .client
+            .client()
             .post(&file_url)
             .form(&[
                 ("md5", md5.as_str()),
@@ -458,7 +473,7 @@ impl ZoteroClient<'_> {
         let ticket: UploadTicket = serde_json::from_value(body)?;
 
         let upload =
-            self.state.client.post(&ticket.url).body(bytes).send().await?;
+            self.state.client().post(&ticket.url).body(bytes).send().await?;
         if upload.status().as_u16() != 201 {
             return Err(ZoteroMcpError::LocalApi {
                 status: upload.status().as_u16(),
@@ -468,7 +483,7 @@ impl ZoteroClient<'_> {
 
         let finalize = self
             .state
-            .client
+            .client()
             .post(&file_url)
             .form(&[("upload", ticket.upload_key.as_str())])
             .header("If-None-Match", "*")
@@ -493,16 +508,9 @@ mod tests {
     };
 
     fn state(zotero_api_url: impl AsRef<str>, write_enabled: bool) -> AppState {
-        AppState {
-            zotero_api_url: zotero_api_url.as_ref().to_owned(),
-            better_bibtex_url: String::new(),
-            better_notes_url: String::new(),
-            crossref_url: String::new(),
-            semantic_scholar_url: String::new(),
-            open_library_url: String::new(),
-            write_enabled,
-            ..AppState::from_env()
-        }
+        AppState::test_default()
+            .with_zotero_api_url(zotero_api_url.as_ref())
+            .with_write_enabled(write_enabled)
     }
 
     fn item_json(
@@ -758,11 +766,9 @@ mod tests {
             zotero_api_url: impl AsRef<str>,
             write_enabled: bool,
         ) -> AppState {
-            AppState {
-                zotero_api_url: zotero_api_url.as_ref().to_owned(),
-                write_enabled,
-                ..AppState::from_env()
-            }
+            AppState::test_default()
+                .with_zotero_api_url(zotero_api_url.as_ref())
+                .with_write_enabled(write_enabled)
         }
 
         fn created_attachment() -> String {

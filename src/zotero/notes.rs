@@ -104,7 +104,7 @@ impl ZoteroClient<'_> {
         note_content: &str,
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let url = format!("{}/users/0/items", self.state.zotero_api_url);
+        let url = format!("{}/users/0/items", self.state.zotero_api_url());
         let payload = serde_json::json!([{
             "itemType": ItemType::Note,
             "parentItem": parent_item_key,
@@ -130,7 +130,7 @@ impl ZoteroClient<'_> {
     ) -> Result<ZoteroItem, ZoteroMcpError> {
         self.state.check_write_permission()?;
         let position = draft.position.as_zotero_string();
-        let url = format!("{}/users/0/items", self.state.zotero_api_url);
+        let url = format!("{}/users/0/items", self.state.zotero_api_url());
         let payload = serde_json::json!([{
             "itemType": ItemType::Annotation,
             "parentItem": draft.parent_attachment_key,
@@ -266,11 +266,9 @@ mod tests {
     };
 
     fn state(zotero_api_url: impl AsRef<str>, write_enabled: bool) -> AppState {
-        AppState {
-            zotero_api_url: zotero_api_url.as_ref().to_owned(),
-            write_enabled,
-            ..AppState::from_env()
-        }
+        AppState::test_default()
+            .with_zotero_api_url(zotero_api_url.as_ref())
+            .with_write_enabled(write_enabled)
     }
 
     #[tokio::test]

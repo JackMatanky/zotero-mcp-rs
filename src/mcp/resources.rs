@@ -502,16 +502,9 @@ mod tests {
         use super::AppState;
 
         pub(super) fn zotero_state(zotero_api_url: String) -> AppState {
-            AppState {
-                zotero_api_url,
-                better_bibtex_url: String::new(),
-                better_notes_url: String::new(),
-                crossref_url: String::new(),
-                semantic_scholar_url: String::new(),
-                open_library_url: String::new(),
-                write_enabled: true,
-                ..AppState::from_env()
-            }
+            AppState::test_default()
+                .with_zotero_api_url(zotero_api_url)
+                .with_write_enabled(true)
         }
 
         pub(super) fn http_response(status: &str, body: &str) -> String {

@@ -338,7 +338,10 @@ fn tool_gates(name: &str) -> Option<&'static [EnvGate]> {
 
 /// Returns `true` if `name` is a write (mutating) tool gated behind
 /// `ZOTERO_WRITE_ENABLED`.
-#[allow(dead_code, reason = "used in tests; kept as public API for callers")]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "public-to-crate helper used in tests")
+)]
 pub(crate) fn is_write_tool(name: &str) -> bool {
     tool_gates(name).is_some_and(|gates| gates.contains(&EnvGate::WriteEnabled))
 }
@@ -353,10 +356,10 @@ pub(crate) fn is_tool_visible(state: &AppState, name: &str) -> bool {
         return false;
     };
     gates.iter().all(|gate| match gate {
-        EnvGate::WriteEnabled => state.write_enabled,
-        EnvGate::SqliteAccess => state.sqlite_access,
-        EnvGate::SemanticSearchEnabled => state.semantic_search_enabled,
-        EnvGate::ConnectorCompat => state.connector_compat,
+        EnvGate::WriteEnabled => state.is_write_enabled(),
+        EnvGate::SqliteAccess => state.is_sqlite_access_enabled(),
+        EnvGate::SemanticSearchEnabled => state.is_semantic_search_enabled(),
+        EnvGate::ConnectorCompat => state.is_connector_compat_enabled(),
     })
 }
 
@@ -385,12 +388,14 @@ impl ZoteroMcpServer {
     /// Returns `true` if all env gates for `primitive` are satisfied.
     fn is_primitive_enabled(&self, primitive: PrimitiveInfo) -> bool {
         primitive.requires.iter().all(|gate| match gate {
-            EnvGate::WriteEnabled => self.state.write_enabled,
-            EnvGate::SqliteAccess => self.state.sqlite_access,
+            EnvGate::WriteEnabled => self.state.is_write_enabled(),
+            EnvGate::SqliteAccess => self.state.is_sqlite_access_enabled(),
             EnvGate::SemanticSearchEnabled => {
-                self.state.semantic_search_enabled
+                self.state.is_semantic_search_enabled()
             }
-            EnvGate::ConnectorCompat => self.state.connector_compat,
+            EnvGate::ConnectorCompat => {
+                self.state.is_connector_compat_enabled()
+            }
         })
     }
 

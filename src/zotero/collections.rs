@@ -64,7 +64,8 @@ impl ZoteroClient<'_> {
     pub(crate) async fn get_collections(
         &self,
     ) -> Result<Vec<ZoteroCollection>, ZoteroMcpError> {
-        let url = format!("{}/users/0/collections", self.state.zotero_api_url);
+        let url =
+            format!("{}/users/0/collections", self.state.zotero_api_url());
         self.get_json(&url).await
     }
 
@@ -115,7 +116,8 @@ impl ZoteroClient<'_> {
     ) -> Result<Vec<ZoteroItem>, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/collections/{}/items",
-            self.state.zotero_api_url, collection_key
+            self.state.zotero_api_url(),
+            collection_key
         );
         self.get_json(&url).await
     }
@@ -142,7 +144,8 @@ impl ZoteroClient<'_> {
         parent_key: Option<&CollectionKey>,
     ) -> Result<ZoteroCollection, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        let url = format!("{}/users/0/collections", self.state.zotero_api_url);
+        let url =
+            format!("{}/users/0/collections", self.state.zotero_api_url());
         let parent_val = parent_key.map_or(CollectionParent::TopLevel, |key| {
             CollectionParent::Parent(key.clone())
         });
@@ -188,17 +191,18 @@ impl ZoteroClient<'_> {
         self.state.check_write_permission()?;
         let url = format!(
             "{}/users/0/collections/{}/items",
-            self.state.zotero_api_url, collection_key
+            self.state.zotero_api_url(),
+            collection_key
         );
         let body_str =
             item_keys.iter().map(ItemKey::as_str).collect::<Vec<_>>().join(" ");
 
         let req = match action {
             CollectionItemAction::Remove => {
-                self.state.client.delete(&url).body(body_str)
+                self.state.client().delete(&url).body(body_str)
             }
             CollectionItemAction::Add => {
-                self.state.client.post(&url).body(body_str)
+                self.state.client().post(&url).body(body_str)
             }
         };
 
@@ -228,11 +232,14 @@ impl ZoteroClient<'_> {
         self.state.check_write_permission()?;
         let url = format!(
             "{}/users/0/collections/{}",
-            self.state.zotero_api_url, collection_key
+            self.state.zotero_api_url(),
+            collection_key
         );
         let resp = self
             .ensure_success(
-                self.state.send_with_retry(self.state.client.get(&url)).await?,
+                self.state
+                    .send_with_retry(self.state.client().get(&url))
+                    .await?,
             )
             .await?;
         let collection: ZoteroCollection = resp.json().await?;
@@ -269,11 +276,14 @@ impl ZoteroClient<'_> {
         self.state.check_write_permission()?;
         let url = format!(
             "{}/users/0/collections/{}",
-            self.state.zotero_api_url, collection_key
+            self.state.zotero_api_url(),
+            collection_key
         );
         let resp = self
             .ensure_success(
-                self.state.send_with_retry(self.state.client.get(&url)).await?,
+                self.state
+                    .send_with_retry(self.state.client().get(&url))
+                    .await?,
             )
             .await?;
         let current: ZoteroCollection = resp.json().await?;
@@ -291,14 +301,16 @@ impl ZoteroClient<'_> {
 
         let put_resp = self
             .state
-            .send_with_retry(self.state.client.put(&url).json(&payload))
+            .send_with_retry(self.state.client().put(&url).json(&payload))
             .await?;
         let put_resp = self.ensure_success(put_resp).await?;
         if let Ok(collection) = put_resp.json::<ZoteroCollection>().await {
             Ok(collection)
         } else {
-            let refetch =
-                self.state.send_with_retry(self.state.client.get(&url)).await?;
+            let refetch = self
+                .state
+                .send_with_retry(self.state.client().get(&url))
+                .await?;
             Ok(self.ensure_success(refetch).await?.json().await?)
         }
     }
@@ -320,11 +332,9 @@ mod tests {
     };
 
     fn state(zotero_api_url: impl AsRef<str>, write_enabled: bool) -> AppState {
-        AppState {
-            zotero_api_url: zotero_api_url.as_ref().to_owned(),
-            write_enabled,
-            ..AppState::from_env()
-        }
+        AppState::test_default()
+            .with_zotero_api_url(zotero_api_url.as_ref())
+            .with_write_enabled(write_enabled)
     }
 
     fn collection_json(

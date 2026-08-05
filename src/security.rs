@@ -34,7 +34,7 @@ const HARDENED_MAX_MARKDOWN_BYTES: usize = 512 * 1024;
 const HARDENED_MAX_HTML_BYTES: usize = 512 * 1024;
 
 /// Security profiles supported by the Zotero MCP server.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SecurityProfile {
     /// Default profile: conservative read-only access.
     Default,
@@ -53,31 +53,31 @@ pub(crate) enum SecurityProfile {
 pub(crate) struct SecurityConfig {
     // Security Profile & Path Feature Flags
     /// Active security profile.
-    pub(crate) profile: SecurityProfile,
+    profile: SecurityProfile,
     /// Whether direct file paths are enabled.
-    pub(crate) direct_file_paths: bool,
+    direct_file_paths: bool,
     /// Whether file path checking is enabled.
-    pub(crate) file_paths_enabled: bool,
+    file_paths_enabled: bool,
 
     // Allowed Directory Paths
     /// Allowed directories for reading files.
-    pub(crate) allowed_read_dirs: Vec<PathBuf>,
+    allowed_read_dirs: Vec<PathBuf>,
     /// Allowed directories for auxiliary tools.
-    pub(crate) allowed_aux_dirs: Vec<PathBuf>,
+    allowed_aux_dirs: Vec<PathBuf>,
     /// Allowed directories for export files.
-    pub(crate) allowed_export_dirs: Vec<PathBuf>,
+    allowed_export_dirs: Vec<PathBuf>,
 
     // Payload & Input Size Caps
     /// Maximum allowed PDF size in bytes.
-    pub(crate) max_pdf_bytes: u64,
+    max_pdf_bytes: u64,
     /// Maximum allowed HTTP response body size in bytes.
-    pub(crate) max_http_body_bytes: usize,
+    max_http_body_bytes: usize,
     /// Maximum allowed Markdown size in bytes.
-    pub(crate) max_markdown_bytes: usize,
+    max_markdown_bytes: usize,
     /// Maximum allowed HTML size in bytes.
-    pub(crate) max_html_bytes: usize,
+    max_html_bytes: usize,
     /// Maximum allowed template name size in bytes.
-    pub(crate) max_template_name_bytes: usize,
+    max_template_name_bytes: usize,
 }
 
 impl Default for SecurityConfig {
@@ -232,7 +232,7 @@ impl SecurityConfig {
     pub(crate) fn check_direct_file_paths_enabled(
         &self,
     ) -> Result<(), ZoteroMcpError> {
-        if self.direct_file_paths {
+        if self.is_direct_file_paths_enabled() {
             Ok(())
         } else {
             Err(ZoteroMcpError::InputRejected(
@@ -398,7 +398,6 @@ impl SecurityConfig {
     /// - [`InputRejected`] if size exceeds configured maximum limit
     ///
     /// [`InputRejected`]: ZoteroMcpError::InputRejected
-    #[allow(dead_code, reason = "HTML cap is enforced in the Zotero bridge")]
     pub(crate) fn check_html_size(
         &self,
         html: &str,
@@ -419,6 +418,158 @@ impl SecurityConfig {
         name: &str,
     ) -> Result<(), ZoteroMcpError> {
         check_text_size(name, self.max_template_name_bytes, "template name")
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "public-to-crate API encapsulation")
+    )]
+    pub(crate) fn profile(&self) -> SecurityProfile {
+        self.profile
+    }
+
+    /// Returns whether direct file paths are enabled.
+    pub(crate) fn is_direct_file_paths_enabled(&self) -> bool {
+        self.direct_file_paths
+    }
+
+    /// Returns whether file path checking is enabled.
+    pub(crate) fn is_file_paths_enabled(&self) -> bool {
+        self.file_paths_enabled
+    }
+
+    /// Returns the list of allowed directories for reading files.
+    pub(crate) fn allowed_read_dirs(&self) -> &[PathBuf] {
+        &self.allowed_read_dirs
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "public-to-crate API encapsulation")
+    )]
+    pub(crate) fn allowed_aux_dirs(&self) -> &[PathBuf] {
+        &self.allowed_aux_dirs
+    }
+
+    /// Returns the list of allowed directories for export files.
+    pub(crate) fn allowed_export_dirs(&self) -> &[PathBuf] {
+        &self.allowed_export_dirs
+    }
+
+    /// Returns maximum allowed PDF size in bytes.
+    pub(crate) fn max_pdf_bytes(&self) -> u64 {
+        self.max_pdf_bytes
+    }
+
+    /// Returns maximum allowed HTTP response body size in bytes.
+    pub(crate) fn max_http_body_bytes(&self) -> usize {
+        self.max_http_body_bytes
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "public-to-crate API encapsulation")
+    )]
+    pub(crate) fn max_markdown_bytes(&self) -> usize {
+        self.max_markdown_bytes
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "public-to-crate API encapsulation")
+    )]
+    pub(crate) fn max_html_bytes(&self) -> usize {
+        self.max_html_bytes
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "public-to-crate API encapsulation")
+    )]
+    pub(crate) fn max_template_name_bytes(&self) -> usize {
+        self.max_template_name_bytes
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "public-to-crate API encapsulation")
+    )]
+    pub(crate) fn check_export_path(
+        &self,
+        path: &Path,
+    ) -> Result<PathBuf, ZoteroMcpError> {
+        if !self.is_file_paths_enabled() {
+            return Err(ZoteroMcpError::InputRejected(
+                "File path features are disabled; set \
+                 ZOTERO_MCP_PROFILE=workspace or \
+                 ZOTERO_FILE_PATHS_ENABLED=true"
+                    .to_owned(),
+            ));
+        }
+        self.check_output_path(
+            path,
+            &self.allowed_export_dirs,
+            "auto-export output",
+        )
+    }
+
+    /// Validates an AUX path, ensuring file path features are enabled.
+    pub(crate) fn check_aux_path(
+        &self,
+        path: &Path,
+    ) -> Result<PathBuf, ZoteroMcpError> {
+        if !self.is_file_paths_enabled() {
+            return Err(ZoteroMcpError::InputRejected(
+                "File path features are disabled; set \
+                 ZOTERO_MCP_PROFILE=workspace or \
+                 ZOTERO_FILE_PATHS_ENABLED=true"
+                    .to_owned(),
+            ));
+        }
+        self.check_existing_read_path(path, &self.allowed_aux_dirs, "AUX scan")
+    }
+}
+
+#[cfg(test)]
+impl SecurityConfig {
+    pub(crate) fn set_direct_file_paths_enabled(&mut self, enabled: bool) {
+        self.direct_file_paths = enabled;
+    }
+
+    pub(crate) fn set_file_paths_enabled(&mut self, enabled: bool) {
+        self.file_paths_enabled = enabled;
+    }
+
+    pub(crate) fn set_allowed_read_dirs(&mut self, dirs: Vec<PathBuf>) {
+        self.allowed_read_dirs = dirs;
+    }
+
+    pub(crate) fn set_allowed_export_dirs(&mut self, dirs: Vec<PathBuf>) {
+        self.allowed_export_dirs = dirs;
+    }
+
+    pub(crate) fn set_allowed_aux_dirs(&mut self, dirs: Vec<PathBuf>) {
+        self.allowed_aux_dirs = dirs;
+    }
+
+    pub(crate) fn set_max_pdf_bytes(&mut self, max: u64) {
+        self.max_pdf_bytes = max;
+    }
+
+    pub(crate) fn set_max_http_body_bytes(&mut self, max: usize) {
+        self.max_http_body_bytes = max;
+    }
+
+    pub(crate) fn set_max_markdown_bytes(&mut self, max: usize) {
+        self.max_markdown_bytes = max;
+    }
+
+    pub(crate) fn set_max_html_bytes(&mut self, max: usize) {
+        self.max_html_bytes = max;
+    }
+
+    pub(crate) fn set_max_template_name_bytes(&mut self, max: usize) {
+        self.max_template_name_bytes = max;
     }
 }
 
@@ -489,6 +640,42 @@ mod tests {
             current_dir,
             home_dir,
         )
+    }
+
+    #[test]
+    fn verifies_security_config_getters_and_setters() {
+        let mut config = SecurityConfig::default();
+        assert_eq!(config.profile(), SecurityProfile::Default);
+        assert_eq!(config.is_direct_file_paths_enabled(), false);
+        assert_eq!(config.is_file_paths_enabled(), false);
+        assert!(config.allowed_read_dirs().is_empty());
+        assert!(config.allowed_aux_dirs().is_empty());
+        assert!(config.allowed_export_dirs().is_empty());
+        assert_eq!(config.max_pdf_bytes(), 50 * 1024 * 1024);
+        assert_eq!(config.max_http_body_bytes(), 10 * 1024 * 1024);
+        assert_eq!(config.max_markdown_bytes(), 2 * 1024 * 1024);
+        assert_eq!(config.max_html_bytes(), 2 * 1024 * 1024);
+        assert_eq!(config.max_template_name_bytes(), 128);
+
+        config.set_file_paths_enabled(true);
+        config.set_allowed_read_dirs(vec![PathBuf::from("/read")]);
+        config.set_allowed_aux_dirs(vec![PathBuf::from("/aux")]);
+        config.set_allowed_export_dirs(vec![PathBuf::from("/export")]);
+        config.set_max_pdf_bytes(100);
+        config.set_max_http_body_bytes(200);
+        config.set_max_markdown_bytes(300);
+        config.set_max_html_bytes(400);
+        config.set_max_template_name_bytes(50);
+
+        assert_eq!(config.is_file_paths_enabled(), true);
+        assert_eq!(config.allowed_read_dirs(), &[PathBuf::from("/read")]);
+        assert_eq!(config.allowed_aux_dirs(), &[PathBuf::from("/aux")]);
+        assert_eq!(config.allowed_export_dirs(), &[PathBuf::from("/export")]);
+        assert_eq!(config.max_pdf_bytes(), 100);
+        assert_eq!(config.max_http_body_bytes(), 200);
+        assert_eq!(config.max_markdown_bytes(), 300);
+        assert_eq!(config.max_html_bytes(), 400);
+        assert_eq!(config.max_template_name_bytes(), 50);
     }
 
     #[test]

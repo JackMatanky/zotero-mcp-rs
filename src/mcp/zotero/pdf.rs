@@ -224,12 +224,12 @@ impl ZoteroMcpServer {
     ) -> Vec<BridgePdfRoot> {
         let url = format!(
             "{}{}",
-            self.state.better_notes_url.trim_end_matches('/'),
+            self.state.better_notes_url().trim_end_matches('/'),
             BRIDGE_FILE_ROOTS_PATH
         );
         let resp = match self
             .state
-            .client
+            .client()
             .post(url)
             .json(&serde_json::json!({}))
             .send()
@@ -242,7 +242,7 @@ impl ZoteroMcpServer {
             .state
             .read_limited_text(
                 resp,
-                self.state.security.max_http_body_bytes,
+                self.state.security().max_http_body_bytes(),
                 "file roots response",
             )
             .await
@@ -295,8 +295,12 @@ impl ZoteroMcpServer {
         direct_input: bool,
     ) -> Result<PathBuf, ZoteroMcpError> {
         let bridge_paths = bridge_roots.iter().map(|root| &root.path);
-        let roots =
-            self.state.security.allowed_read_dirs.iter().chain(bridge_paths);
+        let roots = self
+            .state
+            .security()
+            .allowed_read_dirs()
+            .iter()
+            .chain(bridge_paths);
         match self.state.check_existing_read_path(path, roots, "PDF read") {
             Ok(checked) => {
                 self.state.check_pdf_file(&checked)?;
@@ -306,7 +310,7 @@ impl ZoteroMcpServer {
                 self.state.check_direct_file_paths_enabled()?;
                 let checked = self.state.check_existing_read_path(
                     path,
-                    &self.state.security.allowed_read_dirs,
+                    self.state.security().allowed_read_dirs(),
                     "PDF read",
                 )?;
                 self.state.check_pdf_file(&checked)?;
@@ -433,7 +437,9 @@ impl ZoteroMcpServer {
 
         match found_path {
             Some(path) => Ok(text_success(path)),
-            None => Ok(text_error("No PDF attachment found for item")),
+            None => Ok(text_error(&ZoteroMcpError::NotFound(
+                "No PDF attachment found for item".to_owned(),
+            ))),
         }
     }
 
@@ -511,7 +517,7 @@ impl ZoteroMcpServer {
         Ok(json_result(extract_pdf_pages(
             &pdf_path,
             pages_ref,
-            self.state.security.max_pdf_bytes,
+            self.state.security().max_pdf_bytes(),
         )))
     }
 
@@ -532,7 +538,7 @@ impl ZoteroMcpServer {
         };
         Ok(json_result(extract_pdf_outline(
             &pdf_path,
-            self.state.security.max_pdf_bytes,
+            self.state.security().max_pdf_bytes(),
         )))
     }
 }
@@ -767,10 +773,10 @@ mod tests {
             // Arrange
             let temp =
                 tempfile::Builder::new().suffix(".pdf").tempfile().unwrap();
-            let server = ZoteroMcpServer::new(AppState {
-                security: security_with_pdf_limit(1024),
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::from_env()
+                    .with_security(security_with_pdf_limit(1024)),
+            );
 
             // Act
             let res = server
@@ -801,11 +807,11 @@ mod tests {
             });
             let bridge_base =
                 mock_server(vec![http_response("200 OK", &body.to_string())]);
-            let server = ZoteroMcpServer::new(AppState {
-                better_notes_url: bridge_base,
-                security: security_with_pdf_limit(1024),
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::from_env()
+                    .with_better_notes_url(bridge_base)
+                    .with_security(security_with_pdf_limit(1024)),
+            );
 
             // Act
             let res = server
@@ -836,11 +842,11 @@ mod tests {
             });
             let bridge_base =
                 mock_server(vec![http_response("200 OK", &body.to_string())]);
-            let server = ZoteroMcpServer::new(AppState {
-                better_notes_url: bridge_base,
-                security: security_with_pdf_limit(1024),
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::from_env()
+                    .with_better_notes_url(bridge_base)
+                    .with_security(security_with_pdf_limit(1024)),
+            );
 
             // Act
             let res = server
@@ -863,16 +869,19 @@ mod tests {
             let root = tempfile::TempDir::new().unwrap();
             let pdf = root.path().join("bad.pdf");
             std::fs::write(&pdf, b"not a pdf").unwrap();
-            let security = SecurityConfig {
-                direct_file_paths: true,
-                allowed_read_dirs: vec![root.path().canonicalize().unwrap()],
-                ..SecurityConfig::default()
-            };
-            let server = ZoteroMcpServer::new(AppState {
-                better_notes_url: "http://127.0.0.1:9/better-notes".to_owned(),
-                security,
-                ..AppState::from_env()
-            });
+            let mut security = SecurityConfig::from_env();
+            security.set_direct_file_paths_enabled(true);
+            security.set_file_paths_enabled(true);
+            security.set_allowed_read_dirs(vec![
+                root.path().canonicalize().unwrap(),
+            ]);
+            let server = ZoteroMcpServer::new(
+                AppState::from_env()
+                    .with_better_notes_url(
+                        "http://127.0.0.1:9/better-notes".to_owned(),
+                    )
+                    .with_security(security),
+            );
 
             // Act
             let res = server
@@ -895,15 +904,15 @@ mod tests {
             let outside = tempfile::TempDir::new().unwrap();
             let pdf = outside.path().join("bad.pdf");
             std::fs::write(&pdf, b"not a pdf").unwrap();
-            let security = SecurityConfig {
-                direct_file_paths: true,
-                allowed_read_dirs: vec![allowed.path().canonicalize().unwrap()],
-                ..SecurityConfig::default()
-            };
-            let server = ZoteroMcpServer::new(AppState {
-                security,
-                ..AppState::from_env()
-            });
+            let mut security = SecurityConfig::from_env();
+            security.set_direct_file_paths_enabled(true);
+            security.set_file_paths_enabled(true);
+            security.set_allowed_read_dirs(vec![
+                allowed.path().canonicalize().unwrap(),
+            ]);
+            let server = ZoteroMcpServer::new(
+                AppState::from_env().with_security(security),
+            );
 
             // Act
             let res = server
@@ -947,12 +956,14 @@ mod tests {
                 },
             }]);
             let zotero_base = zotero_pdf_server(&children);
-            let server = ZoteroMcpServer::new(AppState {
-                zotero_api_url: zotero_base,
-                better_notes_url: "http://127.0.0.1:9/better-notes".to_owned(),
-                security: security_with_pdf_limit(1024),
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::from_env()
+                    .with_zotero_api_url(zotero_base)
+                    .with_better_notes_url(
+                        "http://127.0.0.1:9/better-notes".to_owned(),
+                    )
+                    .with_security(security_with_pdf_limit(1024)),
+            );
 
             // Act
             let res = server
@@ -988,12 +999,12 @@ mod tests {
             }]);
             let zotero_base = zotero_pdf_server(&children);
             let bridge_base = bridge_pdf_root("attanger-dest", root.path());
-            let server = ZoteroMcpServer::new(AppState {
-                zotero_api_url: zotero_base,
-                better_notes_url: bridge_base,
-                security: security_with_pdf_limit(1024),
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::from_env()
+                    .with_zotero_api_url(zotero_base)
+                    .with_better_notes_url(bridge_base)
+                    .with_security(security_with_pdf_limit(1024)),
+            );
 
             // Act
             let res = server
@@ -1030,12 +1041,12 @@ mod tests {
             }]);
             let zotero_base = zotero_pdf_server(&children);
             let bridge_base = bridge_pdf_root("attanger-dest", root.path());
-            let server = ZoteroMcpServer::new(AppState {
-                zotero_api_url: zotero_base,
-                better_notes_url: bridge_base,
-                security: security_with_pdf_limit(1024),
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::from_env()
+                    .with_zotero_api_url(zotero_base)
+                    .with_better_notes_url(bridge_base)
+                    .with_security(security_with_pdf_limit(1024)),
+            );
 
             // Act
             let res = server
@@ -1074,12 +1085,12 @@ mod tests {
             let zotero_base = zotero_pdf_server(&children);
             let bridge_base =
                 bridge_pdf_root("zotero-linked-base", base.path());
-            let server = ZoteroMcpServer::new(AppState {
-                zotero_api_url: zotero_base,
-                better_notes_url: bridge_base,
-                security: security_with_pdf_limit(1024),
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::from_env()
+                    .with_zotero_api_url(zotero_base)
+                    .with_better_notes_url(bridge_base)
+                    .with_security(security_with_pdf_limit(1024)),
+            );
 
             // Act
             let res = server
@@ -1106,10 +1117,10 @@ mod tests {
             // Arrange
             let temp =
                 tempfile::Builder::new().suffix(".pdf").tempfile().unwrap();
-            let server = ZoteroMcpServer::new(AppState {
-                security: security_with_pdf_limit(1024),
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::from_env()
+                    .with_security(security_with_pdf_limit(1024)),
+            );
 
             // Act
             let res = server
@@ -1130,15 +1141,15 @@ mod tests {
             let root = tempfile::TempDir::new().unwrap();
             let pdf = root.path().join("outline.pdf");
             crate::pdf::write_pdf_with_outline(&pdf);
-            let security = SecurityConfig {
-                direct_file_paths: true,
-                allowed_read_dirs: vec![root.path().canonicalize().unwrap()],
-                ..SecurityConfig::default()
-            };
-            let server = ZoteroMcpServer::new(AppState {
-                security,
-                ..AppState::from_env()
-            });
+            let mut security = SecurityConfig::from_env();
+            security.set_direct_file_paths_enabled(true);
+            security.set_file_paths_enabled(true);
+            security.set_allowed_read_dirs(vec![
+                root.path().canonicalize().unwrap(),
+            ]);
+            let server = ZoteroMcpServer::new(
+                AppState::from_env().with_security(security),
+            );
 
             // Act
             let res = server
@@ -1161,15 +1172,15 @@ mod tests {
             let root = tempfile::TempDir::new().unwrap();
             let pdf = root.path().join("plain.pdf");
             crate::pdf::write_pdf_without_outline(&pdf);
-            let security = SecurityConfig {
-                direct_file_paths: true,
-                allowed_read_dirs: vec![root.path().canonicalize().unwrap()],
-                ..SecurityConfig::default()
-            };
-            let server = ZoteroMcpServer::new(AppState {
-                security,
-                ..AppState::from_env()
-            });
+            let mut security = SecurityConfig::from_env();
+            security.set_direct_file_paths_enabled(true);
+            security.set_file_paths_enabled(true);
+            security.set_allowed_read_dirs(vec![
+                root.path().canonicalize().unwrap(),
+            ]);
+            let server = ZoteroMcpServer::new(
+                AppState::from_env().with_security(security),
+            );
 
             // Act
             let res = server
@@ -1212,12 +1223,14 @@ mod tests {
                 },
             }]);
             let zotero_base = zotero_pdf_server(&children);
-            let server = ZoteroMcpServer::new(AppState {
-                zotero_api_url: zotero_base,
-                better_notes_url: "http://127.0.0.1:9/better-notes".to_owned(),
-                security: security_with_pdf_limit(1024 * 1024),
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::from_env()
+                    .with_zotero_api_url(zotero_base)
+                    .with_better_notes_url(
+                        "http://127.0.0.1:9/better-notes".to_owned(),
+                    )
+                    .with_security(security_with_pdf_limit(1024 * 1024)),
+            );
 
             // Act
             let res = server

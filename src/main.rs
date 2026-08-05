@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState::from_env();
     tracing::info!(
         "Starting zotero-mcp-rs server (write_enabled={})",
-        state.write_enabled
+        state.is_write_enabled()
     );
 
     let server = ZoteroMcpServer::new(state);

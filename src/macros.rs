@@ -34,12 +34,11 @@ macro_rules! string_newtype {
             $($extra,)*
         )]
         #[serde(transparent)]
-        pub(crate) struct $name(pub(crate) String);
+        pub(crate) struct $name(String);
 
         impl $name {
             /// Returns the inner string slice.
             #[inline]
-            #[allow(dead_code, reason = "not all newtypes need as_str immediately")]
             pub(crate) fn as_str(&self) -> &str {
                 &self.0
             }
@@ -76,21 +75,20 @@ macro_rules! string_newtype {
         impl PartialEq<str> for $name {
             #[inline]
             fn eq(&self, other: &str) -> bool {
-                self.0 == other
+                self.as_str() == other
             }
         }
-
         impl PartialEq<&str> for $name {
             #[inline]
             fn eq(&self, other: &&str) -> bool {
-                self.0 == *other
+                self.as_str() == *other
             }
         }
 
         impl PartialEq<$name> for str {
             #[inline]
             fn eq(&self, other: &$name) -> bool {
-                self == other.0.as_str()
+                self == other.as_str()
             }
         }
     };

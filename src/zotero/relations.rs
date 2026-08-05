@@ -251,8 +251,10 @@ pub(crate) fn apply_relations(
     add: &[RelationUri],
     remove: &[RelationUri],
 ) -> serde_json::Value {
-    let mut uris: BTreeSet<String> =
-        parse_relation_keys(current).into_iter().map(|u| u.0).collect();
+    let mut uris: BTreeSet<String> = parse_relation_keys(current)
+        .into_iter()
+        .map(|u| u.as_str().to_owned())
+        .collect();
     for uri in add {
         uris.insert(uri.as_str().to_owned());
     }
@@ -442,16 +444,9 @@ mod tests {
             zotero_api_url: impl AsRef<str>,
             write_enabled: bool,
         ) -> AppState {
-            AppState {
-                zotero_api_url: zotero_api_url.as_ref().to_owned(),
-                better_bibtex_url: String::new(),
-                better_notes_url: String::new(),
-                crossref_url: String::new(),
-                semantic_scholar_url: String::new(),
-                open_library_url: String::new(),
-                write_enabled,
-                ..AppState::from_env()
-            }
+            AppState::test_default()
+                .with_zotero_api_url(zotero_api_url.as_ref())
+                .with_write_enabled(write_enabled)
         }
 
         /// Serializes a minimal [`ZoteroItem`]-shaped JSON response body for

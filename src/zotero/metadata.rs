@@ -139,7 +139,7 @@ async fn fetch_json(
     state: &AppState,
     url: &str,
 ) -> Result<serde_json::Value, ZoteroMcpError> {
-    let resp = state.send_with_retry(state.client.get(url)).await?;
+    let resp = state.send_with_retry(state.client().get(url)).await?;
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
         return Err(ZoteroMcpError::NotFound(format!(
             "No metadata found for {url}"
@@ -154,7 +154,7 @@ async fn fetch_json(
     let body = state
         .read_limited_text(
             resp,
-            state.security.max_http_body_bytes,
+            state.security().max_http_body_bytes(),
             "metadata response",
         )
         .await?;
@@ -197,7 +197,7 @@ async fn resolve_doi(
     doi: &str,
 ) -> Result<ItemDraft, ZoteroMcpError> {
     let url =
-        format!("{}/works/{}", state.crossref_url, urlencoding::encode(doi));
+        format!("{}/works/{}", state.crossref_url(), urlencoding::encode(doi));
     let body = fetch_json(state, &url).await?;
     let msg = body.get("message").cloned().unwrap_or_default();
     let title = str_at(&msg, &["title", "0"]).unwrap_or_default().to_owned();
@@ -241,7 +241,8 @@ async fn resolve_arxiv(
     let url = format!(
         "{}/graph/v1/paper/arXiv:{}?fields=title,authors,year,abstract,\
          externalIds,venue",
-        state.semantic_scholar_url, arxiv_id
+        state.semantic_scholar_url(),
+        arxiv_id
     );
     let body = fetch_json(state, &url).await?;
     let title = str_at(&body, &["title"]).unwrap_or_default().to_owned();
@@ -287,7 +288,8 @@ async fn resolve_isbn(
 ) -> Result<ItemDraft, ZoteroMcpError> {
     let url = format!(
         "{}/api/books?bibkeys=ISBN:{}&jscmd=data&format=json",
-        state.open_library_url, isbn
+        state.open_library_url(),
+        isbn
     );
     let body = fetch_json(state, &url).await?;
     let key = format!("ISBN:{isbn}");
@@ -341,12 +343,10 @@ mod tests {
         semantic_scholar: impl Into<String>,
         open_library: impl Into<String>,
     ) -> AppState {
-        AppState {
-            crossref_url: crossref.into(),
-            semantic_scholar_url: semantic_scholar.into(),
-            open_library_url: open_library.into(),
-            ..AppState::from_env()
-        }
+        AppState::test_default()
+            .with_crossref_url(crossref)
+            .with_semantic_scholar_url(semantic_scholar)
+            .with_open_library_url(open_library)
     }
 
     mod resolve_doi {
@@ -431,7 +431,7 @@ mod tests {
             )]);
             let base = server.url();
             let mut state = state_with(base, String::new(), String::new());
-            state.security.max_http_body_bytes = 3;
+            state.security_mut().set_max_http_body_bytes(3);
 
             let err = resolve_metadata(&state, IdentifierKind::Doi, "10.1/xyz")
                 .await
@@ -574,7 +574,7 @@ mod tests {
             )]);
             let base = server.url();
             let mut state = state_with(String::new(), String::new(), base);
-            state.security.max_http_body_bytes = 3;
+            state.security_mut().set_max_http_body_bytes(3);
 
             let err =
                 resolve_metadata(&state, IdentifierKind::Isbn, "9780134685991")

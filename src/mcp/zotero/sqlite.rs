@@ -170,9 +170,8 @@ mod tests {
 
         #[tokio::test]
         async fn fulltext_tool_returns_gate_error_when_disabled() {
-            let mut state = zotero_state(String::new());
-            state.sqlite_access = false;
-            let server = ZoteroMcpServer::new(state.clone());
+            let state = zotero_state(String::new()).with_sqlite_access(false);
+            let server = ZoteroMcpServer::new(state);
             let res = server
                 .zotero_fulltext_search_impl(FulltextSearchArgs {
                     query: "borrow".to_owned(),
@@ -190,9 +189,9 @@ mod tests {
             let db_path = dir.path().join("zotero.sqlite");
             seed_db(&db_path).await.unwrap();
 
-            let mut state = zotero_state(String::new());
-            state.sqlite_access = true;
-            state.zotero_db_path = Some(db_path);
+            let state = zotero_state(String::new())
+                .with_sqlite_access(true)
+                .with_zotero_db_path(Some(db_path));
             let server = ZoteroMcpServer::new(state);
             let res = server
                 .zotero_fulltext_search_impl(FulltextSearchArgs {
@@ -213,9 +212,9 @@ mod tests {
             let previous = std::env::var_os("ZOTERO_DB_PATH");
             std::env::remove_var("ZOTERO_DB_PATH");
 
-            let mut state = zotero_state(String::new());
-            state.sqlite_access = true;
-            state.zotero_db_path = Some(db_path);
+            let state = zotero_state(String::new())
+                .with_sqlite_access(true)
+                .with_zotero_db_path(Some(db_path));
             let server = ZoteroMcpServer::new(state);
             let res = server
                 .zotero_fulltext_search_impl(FulltextSearchArgs {

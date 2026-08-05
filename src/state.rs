@@ -61,51 +61,51 @@ pub(crate) struct CachedLocalZoteroDb {
 pub(crate) struct AppState {
     // Infrastructure & Security Profile
     /// Shared [`Client`] connection pool.
-    pub(crate) client: Client,
+    client: Client,
     /// Security profile, path allowlists, and parser size caps.
-    pub(crate) security: SecurityConfig,
+    security: SecurityConfig,
 
     // Backend Base URLs
     /// Base URL for the Zotero Local HTTP API.
-    pub(crate) zotero_api_url: String,
+    zotero_api_url: String,
     /// Base URL for the Better `BibTeX` JSON-RPC endpoint.
-    pub(crate) better_bibtex_url: String,
+    better_bibtex_url: String,
     /// Base URL for the Better Notes companion bridge endpoint.
-    pub(crate) better_notes_url: String,
+    better_notes_url: String,
     /// Base URL for the `CrossRef` Works API (DOI resolution).
-    pub(crate) crossref_url: String,
+    crossref_url: String,
     /// Base URL for the Semantic Scholar Graph API (arXiv ID resolution).
-    pub(crate) semantic_scholar_url: String,
+    semantic_scholar_url: String,
     /// Base URL for the Open Library Books API (ISBN resolution).
-    pub(crate) open_library_url: String,
+    open_library_url: String,
 
     // Feature Gates & Permission Flags
     /// Whether write/mutation operations are allowed. Defaults to read-only;
     /// enable by setting `ZOTERO_WRITE_ENABLED`.
-    pub(crate) write_enabled: bool,
+    write_enabled: bool,
     /// Whether direct read access to the local Zotero `SQLite` database is
     /// allowed. Defaults to false; enable by setting `ZOTERO_SQLITE_ACCESS`.
-    pub(crate) sqlite_access: bool,
+    sqlite_access: bool,
     /// Whether local semantic-search indexing/querying is allowed. Defaults
     /// to false; enable by setting `ZOTERO_SEMANTIC_SEARCH`.
-    pub(crate) semantic_search_enabled: bool,
+    semantic_search_enabled: bool,
     /// Whether single-purpose connector compatibility tools (`search`,
     /// `fetch`) are enabled. Defaults to false; enable by setting
     /// `ZOTERO_CONNECTOR_COMPAT`.
-    pub(crate) connector_compat: bool,
+    connector_compat: bool,
 
     // Local Storage & Cached Handles
     /// Optional direct path to `zotero.sqlite` for local database reads.
-    pub(crate) zotero_db_path: Option<PathBuf>,
+    zotero_db_path: Option<PathBuf>,
     /// Cached read-only local database handle shared across `SQLite` tool
     /// calls.
-    pub(crate) local_zotero_db: Arc<OnceCell<CachedLocalZoteroDb>>,
+    local_zotero_db: Arc<OnceCell<CachedLocalZoteroDb>>,
     /// Optional direct path to the semantic search `SQLite` index file.
-    pub(crate) semantic_db_path: Option<PathBuf>,
+    semantic_db_path: Option<PathBuf>,
     /// Cached semantic index handle, opened lazily on first use.
-    pub(crate) semantic_index: Arc<OnceCell<SemanticIndex>>,
+    semantic_index: Arc<OnceCell<SemanticIndex>>,
     /// Cached embedding provider, loaded lazily on first use.
-    pub(crate) embedding_provider: Arc<OnceCell<Arc<dyn EmbeddingProvider>>>,
+    embedding_provider: Arc<OnceCell<Arc<dyn EmbeddingProvider>>>,
 }
 
 impl AppState {
@@ -256,7 +256,7 @@ impl AppState {
         &self,
     ) -> Result<&LocalZoteroDb, ZoteroMcpError> {
         self.check_sqlite_access()?;
-        let override_path = self.zotero_db_path.clone();
+        let override_path = self.zotero_db_path().map(Path::to_path_buf);
         let cached = self
             .local_zotero_db
             .get_or_try_init(|| async move {
@@ -273,7 +273,7 @@ impl AppState {
                 })
             })
             .await?;
-        if cached.override_path == self.zotero_db_path {
+        if cached.override_path.as_deref() == self.zotero_db_path() {
             Ok(&cached.db)
         } else {
             Err(ZoteroMcpError::LocalDb(
@@ -413,6 +413,7 @@ impl AppState {
     ///   allowed `roots`
     ///
     /// [`InputRejected`]: ZoteroMcpError::InputRejected
+    /// Validates that an output `path` target directory is allowed for writes.
     pub(crate) fn check_output_path(
         &self,
         path: &Path,
@@ -554,6 +555,222 @@ impl AppState {
             ))
         })
     }
+
+    /// Returns a reference to the shared [`Client`] connection pool.
+    pub(crate) fn client(&self) -> &Client {
+        &self.client
+    }
+
+    /// Returns a reference to the [`SecurityConfig`].
+    pub(crate) fn security(&self) -> &SecurityConfig {
+        &self.security
+    }
+
+    /// Returns the Zotero Local HTTP API base URL.
+    pub(crate) fn zotero_api_url(&self) -> &str {
+        &self.zotero_api_url
+    }
+
+    /// Returns the Better `BibTeX` JSON-RPC base URL.
+    pub(crate) fn better_bibtex_url(&self) -> &str {
+        &self.better_bibtex_url
+    }
+
+    /// Returns the Better Notes bridge base URL.
+    pub(crate) fn better_notes_url(&self) -> &str {
+        &self.better_notes_url
+    }
+
+    /// Returns the `CrossRef` Works API base URL.
+    pub(crate) fn crossref_url(&self) -> &str {
+        &self.crossref_url
+    }
+
+    /// Returns the Semantic Scholar API base URL.
+    pub(crate) fn semantic_scholar_url(&self) -> &str {
+        &self.semantic_scholar_url
+    }
+
+    /// Returns the Open Library Books API base URL.
+    pub(crate) fn open_library_url(&self) -> &str {
+        &self.open_library_url
+    }
+
+    /// Returns `true` if write operations are enabled.
+    pub(crate) fn is_write_enabled(&self) -> bool {
+        self.write_enabled
+    }
+
+    /// Returns `true` if local `SQLite` database read access is enabled.
+    pub(crate) fn is_sqlite_access_enabled(&self) -> bool {
+        self.sqlite_access
+    }
+
+    /// Returns `true` if local semantic search features are enabled.
+    pub(crate) fn is_semantic_search_enabled(&self) -> bool {
+        self.semantic_search_enabled
+    }
+
+    /// Returns `true` if single-purpose connector tools are enabled.
+    pub(crate) fn is_connector_compat_enabled(&self) -> bool {
+        self.connector_compat
+    }
+
+    /// Returns the optional explicit path to `zotero.sqlite`.
+    pub(crate) fn zotero_db_path(&self) -> Option<&Path> {
+        self.zotero_db_path.as_deref()
+    }
+
+    /// Checks that export output `path` is allowed by security policy.
+    pub(crate) fn check_export_path(
+        &self,
+        path: &Path,
+    ) -> Result<PathBuf, ZoteroMcpError> {
+        if !self.security.is_file_paths_enabled() {
+            return Err(ZoteroMcpError::InputRejected(
+                "File path features are disabled; set \
+                 ZOTERO_MCP_PROFILE=workspace or \
+                 ZOTERO_FILE_PATHS_ENABLED=true"
+                    .to_owned(),
+            ));
+        }
+        self.check_output_path(
+            path,
+            self.security.allowed_export_dirs(),
+            "auto-export output",
+        )
+    }
+
+    /// Checks that AUX file `path` is allowed by security policy.
+    pub(crate) fn check_aux_path(
+        &self,
+        path: &Path,
+    ) -> Result<PathBuf, ZoteroMcpError> {
+        self.security.check_aux_path(path)
+    }
+}
+
+#[cfg(test)]
+impl AppState {
+    pub(crate) fn test_default() -> Self {
+        Self {
+            client: Client::new(),
+            security: SecurityConfig::default(),
+            zotero_api_url: String::new(),
+            better_bibtex_url: String::new(),
+            better_notes_url: String::new(),
+            crossref_url: String::new(),
+            semantic_scholar_url: String::new(),
+            open_library_url: String::new(),
+            write_enabled: false,
+            sqlite_access: false,
+            semantic_search_enabled: false,
+            connector_compat: false,
+            zotero_db_path: None,
+            local_zotero_db: Self::local_zotero_db_cache(),
+            semantic_db_path: None,
+            semantic_index: Arc::new(OnceCell::new()),
+            embedding_provider: Arc::new(OnceCell::new()),
+        }
+    }
+
+    pub(crate) fn with_zotero_api_url(
+        mut self,
+        url: impl Into<String>,
+    ) -> Self {
+        self.zotero_api_url = url.into();
+        self
+    }
+
+    pub(crate) fn with_better_bibtex_url(
+        mut self,
+        url: impl Into<String>,
+    ) -> Self {
+        self.better_bibtex_url = url.into();
+        self
+    }
+
+    pub(crate) fn with_better_notes_url(
+        mut self,
+        url: impl Into<String>,
+    ) -> Self {
+        self.better_notes_url = url.into();
+        self
+    }
+
+    pub(crate) fn with_crossref_url(mut self, url: impl Into<String>) -> Self {
+        self.crossref_url = url.into();
+        self
+    }
+
+    pub(crate) fn with_semantic_scholar_url(
+        mut self,
+        url: impl Into<String>,
+    ) -> Self {
+        self.semantic_scholar_url = url.into();
+        self
+    }
+
+    pub(crate) fn with_open_library_url(
+        mut self,
+        url: impl Into<String>,
+    ) -> Self {
+        self.open_library_url = url.into();
+        self
+    }
+
+    pub(crate) fn with_write_enabled(mut self, enabled: bool) -> Self {
+        self.write_enabled = enabled;
+        self
+    }
+
+    pub(crate) fn with_sqlite_access(mut self, enabled: bool) -> Self {
+        self.sqlite_access = enabled;
+        self
+    }
+
+    pub(crate) fn with_connector_compat(mut self, enabled: bool) -> Self {
+        self.connector_compat = enabled;
+        self
+    }
+
+    pub(crate) fn with_zotero_db_path(mut self, path: Option<PathBuf>) -> Self {
+        self.zotero_db_path = path;
+        self
+    }
+
+    pub(crate) fn with_semantic_search_enabled(
+        mut self,
+        enabled: bool,
+    ) -> Self {
+        self.semantic_search_enabled = enabled;
+        self
+    }
+
+    pub(crate) fn with_semantic_db_path(
+        mut self,
+        path: Option<PathBuf>,
+    ) -> Self {
+        self.semantic_db_path = path;
+        self
+    }
+
+    pub(crate) fn with_embedding_provider(
+        mut self,
+        provider: Arc<dyn EmbeddingProvider>,
+    ) -> Self {
+        self.embedding_provider = Arc::new(OnceCell::new_with(Some(provider)));
+        self
+    }
+
+    pub(crate) fn with_security(mut self, security: SecurityConfig) -> Self {
+        self.security = security;
+        self
+    }
+
+    pub(crate) fn security_mut(&mut self) -> &mut SecurityConfig {
+        &mut self.security
+    }
 }
 
 fn is_transient_status(status: StatusCode) -> bool {
@@ -572,37 +789,31 @@ mod tests {
         use std::{
             io::{Read, Write},
             net::TcpListener,
-            sync::Arc,
         };
 
-        use reqwest::Client;
-        use tokio::sync::OnceCell;
+        #[test]
+        fn verifies_app_state_getters_and_builders() {
+            use std::path::PathBuf;
+
+            use crate::security::SecurityProfile;
+
+            let db_path = PathBuf::from("/tmp/zotero.sqlite");
+            let state = AppState::test_default()
+                .with_semantic_scholar_url("http://scholar.test")
+                .with_open_library_url("http://library.test")
+                .with_zotero_db_path(Some(db_path.clone()));
+
+            assert_eq!(state.semantic_scholar_url(), "http://scholar.test");
+            assert_eq!(state.open_library_url(), "http://library.test");
+            assert_eq!(state.zotero_db_path(), Some(db_path.as_path()));
+            assert_eq!(state.security().profile(), SecurityProfile::Default);
+        }
 
         use super::AppState;
-        use crate::security::SecurityConfig;
-
         /// Builds an [`AppState`] with empty backend URLs, for tests that
         /// only exercise `write_enabled` or `send_with_retry`.
         pub(super) fn test_state(write_enabled: bool) -> AppState {
-            AppState {
-                client: Client::new(),
-                security: SecurityConfig::default(),
-                zotero_api_url: String::new(),
-                better_bibtex_url: String::new(),
-                better_notes_url: String::new(),
-                crossref_url: String::new(),
-                semantic_scholar_url: String::new(),
-                open_library_url: String::new(),
-                write_enabled,
-                sqlite_access: false,
-                semantic_search_enabled: false,
-                connector_compat: false,
-                zotero_db_path: None,
-                local_zotero_db: AppState::local_zotero_db_cache(),
-                semantic_db_path: None,
-                semantic_index: Arc::new(OnceCell::new()),
-                embedding_provider: Arc::new(OnceCell::new()),
-            }
+            AppState::test_default().with_write_enabled(write_enabled)
         }
 
         /// Spawns a background thread serving one canned raw HTTP response
@@ -631,19 +842,32 @@ mod tests {
 
         use super::*;
 
+        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
         #[test]
         fn defaults_connector_compat_to_false_when_unset() {
+            let _guard = ENV_LOCK.lock().unwrap();
+            let previous = env::var_os("ZOTERO_CONNECTOR_COMPAT");
             env::remove_var("ZOTERO_CONNECTOR_COMPAT");
             let state = AppState::from_env();
-            assert_eq!(state.connector_compat, false);
+            assert_eq!(state.is_connector_compat_enabled(), false);
+            if let Some(val) = previous {
+                env::set_var("ZOTERO_CONNECTOR_COMPAT", val);
+            }
         }
 
         #[test]
         fn parses_connector_compat_flag_when_enabled() {
+            let _guard = ENV_LOCK.lock().unwrap();
+            let previous = env::var_os("ZOTERO_CONNECTOR_COMPAT");
             env::set_var("ZOTERO_CONNECTOR_COMPAT", "1");
             let state = AppState::from_env();
-            assert_eq!(state.connector_compat, true);
-            env::remove_var("ZOTERO_CONNECTOR_COMPAT");
+            assert_eq!(state.is_connector_compat_enabled(), true);
+            if let Some(val) = previous {
+                env::set_var("ZOTERO_CONNECTOR_COMPAT", val);
+            } else {
+                env::remove_var("ZOTERO_CONNECTOR_COMPAT");
+            }
         }
     }
 
@@ -699,8 +923,7 @@ mod tests {
         #[test]
         fn permits_when_enabled() {
             // Arrange: fixture is disabled by default; flip the gate on.
-            let mut state = test_state(false);
-            state.sqlite_access = true;
+            let state = test_state(false).with_sqlite_access(true);
 
             // Act
             let result = state.check_sqlite_access();
@@ -728,7 +951,7 @@ mod tests {
         #[test]
         fn check_html_size_rejects_oversized_html() {
             let state = test_state(false);
-            let html = "x".repeat(state.security.max_html_bytes + 1);
+            let html = "x".repeat(state.security().max_html_bytes() + 1);
 
             let result = state.check_html_size(&html);
 

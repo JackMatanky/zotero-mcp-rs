@@ -43,18 +43,20 @@ use rmcp::model::{CallToolResult, ContentBlock};
 use serde::Serialize;
 pub(crate) use server::ZoteroMcpServer;
 
+use crate::errors::ZoteroMcpError;
+
 /// Wraps `text` in a successful [`CallToolResult`].
 fn text_success(text: impl Into<String>) -> CallToolResult {
     CallToolResult::success(vec![ContentBlock::text(text.into())])
 }
 
-/// Wraps `error` in an error [`CallToolResult`].
-fn text_error(error: &(impl ToString + ?Sized)) -> CallToolResult {
-    CallToolResult::error(vec![ContentBlock::text(error.to_string())])
+/// Wraps `error` in an error [`CallToolResult`], sanitizing internal details.
+fn text_error(error: &ZoteroMcpError) -> CallToolResult {
+    CallToolResult::error(vec![ContentBlock::text(error.client_message())])
 }
 
 /// Wraps `result` or `error` in a [`CallToolResult`], matching on [`Result`].
-fn text_result<E: ToString>(result: Result<String, E>) -> CallToolResult {
+fn text_result(result: Result<String, ZoteroMcpError>) -> CallToolResult {
     match result {
         Ok(text) => text_success(text),
         Err(e) => text_error(&e),
@@ -68,8 +70,8 @@ fn json_success<T: Serialize>(value: &T) -> CallToolResult {
 
 /// Wraps `result` or `error` in a JSON [`CallToolResult`], matching on
 /// [`Result`].
-fn json_result<T: Serialize, E: ToString>(
-    result: Result<T, E>,
+fn json_result<T: Serialize>(
+    result: Result<T, ZoteroMcpError>,
 ) -> CallToolResult {
     match result {
         Ok(value) => json_success(&value),
@@ -111,8 +113,9 @@ mod tests {
 
         #[test]
         fn text_error_wraps_error_in_error_result() {
-            // Act
-            let res = text_error("Something went wrong");
+            let err =
+                ZoteroMcpError::BetterNotes("Something went wrong".to_owned());
+            let res = text_error(&err);
 
             // Assert
             assert_eq!(res.is_error, Some(true));
@@ -122,13 +125,14 @@ mod tests {
                 .first()
                 .and_then(|c| c.as_text())
                 .map(|t| t.text.as_str());
-            assert_eq!(text, Some("Something went wrong"));
+            assert_eq!(text, Some("Better Notes error: Something went wrong"));
         }
 
         #[test]
         fn text_result_converts_ok_to_success() {
             // Arrange
-            let res_ok: Result<String, &str> = Ok("Success payload".to_owned());
+            let res_ok: Result<String, ZoteroMcpError> =
+                Ok("Success payload".to_owned());
 
             // Act
             let tool_res = text_result(res_ok);
@@ -139,7 +143,8 @@ mod tests {
         #[test]
         fn text_result_converts_err_to_error() {
             // Arrange
-            let res_err: Result<String, &str> = Err("Failure payload");
+            let res_err: Result<String, ZoteroMcpError> =
+                Err(ZoteroMcpError::BetterNotes("Failure payload".to_owned()));
 
             // Act
             let tool_res = text_result(res_err);
@@ -177,7 +182,7 @@ mod tests {
                 id: 1,
                 name: "Ok Item".to_owned(),
             };
-            let res_ok: Result<SampleData, &str> = Ok(data);
+            let res_ok: Result<SampleData, ZoteroMcpError> = Ok(data);
 
             // Act
             let tool_res = json_result(res_ok);
@@ -188,13 +193,39 @@ mod tests {
         #[test]
         fn json_result_converts_err_to_text_error() {
             // Arrange
-            let res_err: Result<SampleData, &str> = Err("JSON error");
+            let res_err: Result<SampleData, ZoteroMcpError> =
+                Err(ZoteroMcpError::BetterNotes("JSON error".to_owned()));
 
             // Act
             let tool_res = json_result(res_err);
 
             // Assert
             assert_eq!(tool_res.is_error, Some(true));
+        }
+
+        #[test]
+        fn sanitizes_sqlite_and_io_errors_for_clients() {
+            let io_err = ZoteroMcpError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "secret_path.txt not found",
+            ));
+            assert_eq!(io_err.client_message(), "I/O error: entity not found");
+            assert!(!io_err.client_message().contains("secret_path.txt"));
+
+            let sqlite_err = ZoteroMcpError::Sqlite(sqlx::Error::RowNotFound);
+            assert_eq!(
+                sqlite_err.client_message(),
+                "Local database query failed"
+            );
+
+            let tool_res = text_error(&sqlite_err);
+            let text = tool_res
+                .content
+                .first()
+                .and_then(|c| c.as_text())
+                .map(|t| t.text.as_str())
+                .unwrap_or_default();
+            assert_eq!(text, "Local database query failed");
         }
     }
 }

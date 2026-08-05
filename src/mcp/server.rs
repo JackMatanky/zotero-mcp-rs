@@ -262,8 +262,7 @@ mod tests {
         }
         #[test]
         fn returns_tool_for_visible_name_and_none_for_hidden_or_unknown() {
-            let mut state = AppState::from_env();
-            state.write_enabled = false;
+            let state = AppState::from_env().with_write_enabled(false);
             let server = ZoteroMcpServer::new(state);
 
             assert!(server.get_tool("zotero_items").is_some());
@@ -381,11 +380,11 @@ mod tests {
 
         #[test]
         fn visible_tools_lists_base_grouped_tools_only() {
-            let mut state = AppState::from_env();
-            state.write_enabled = false;
-            state.sqlite_access = false;
-            state.semantic_search_enabled = false;
-            state.connector_compat = false;
+            let state = AppState::from_env()
+                .with_write_enabled(false)
+                .with_sqlite_access(false)
+                .with_semantic_search_enabled(false)
+                .with_connector_compat(false);
 
             let names = visible_tool_names(&state);
 
@@ -411,8 +410,7 @@ mod tests {
 
         #[test]
         fn visible_tools_includes_connector_compat_when_enabled() {
-            let mut state = AppState::from_env();
-            state.connector_compat = true;
+            let state = AppState::from_env().with_connector_compat(true);
 
             let names = visible_tool_names(&state);
 
@@ -422,8 +420,7 @@ mod tests {
 
         #[test]
         fn sqlite_group_appears_when_enabled() {
-            let mut state = AppState::from_env();
-            state.sqlite_access = true;
+            let state = AppState::from_env().with_sqlite_access(true);
 
             let names = visible_tool_names(&state);
 
@@ -433,8 +430,7 @@ mod tests {
 
         #[test]
         fn write_groups_appear_when_enabled() {
-            let mut state = AppState::from_env();
-            state.write_enabled = true;
+            let state = AppState::from_env().with_write_enabled(true);
 
             let names = visible_tool_names(&state);
 
@@ -473,9 +469,9 @@ mod tests {
 
         #[test]
         fn discover_omits_write_capabilities_by_default() {
-            let mut state = AppState::from_env();
-            state.write_enabled = false;
-            state.sqlite_access = false;
+            let state = AppState::from_env()
+                .with_write_enabled(false)
+                .with_sqlite_access(false);
             let server = ZoteroMcpServer::new(state);
 
             let json = discover_json(&server, &DiscoverArgs {
@@ -500,9 +496,9 @@ mod tests {
 
         #[test]
         fn discover_can_include_disabled_capabilities() {
-            let mut state = AppState::from_env();
-            state.write_enabled = false;
-            state.sqlite_access = false;
+            let state = AppState::from_env()
+                .with_write_enabled(false)
+                .with_sqlite_access(false);
             let server = ZoteroMcpServer::new(state);
 
             let json = discover_json(&server, &DiscoverArgs {

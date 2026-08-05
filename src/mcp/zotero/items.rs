@@ -804,13 +804,9 @@ mod tests {
         #[tokio::test]
         async fn delete_item_returns_error_when_write_disabled() {
             // Arrange
-            let server = ZoteroMcpServer::new(AppState {
-                zotero_api_url: String::new(),
-                better_bibtex_url: String::new(),
-                better_notes_url: String::new(),
-                write_enabled: false,
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::test_default().with_write_enabled(false),
+            );
 
             // Act
             let res = server
@@ -888,12 +884,10 @@ mod tests {
                 mock_server(vec![http_response("201 Created", "")]);
             let base = import_server(&upload_base);
 
-            let mut app = zotero_state(base);
-            app.security = SecurityConfig {
-                direct_file_paths: true,
-                allowed_read_dirs: vec![dir.path().to_path_buf()],
-                ..app.security
-            };
+            let mut security = SecurityConfig::from_env();
+            security.set_file_paths_enabled(true);
+            security.set_allowed_read_dirs(vec![dir.path().to_path_buf()]);
+            let app = zotero_state(base).with_security(security);
             let server = ZoteroMcpServer::new(app);
 
             let res = server
@@ -940,16 +934,12 @@ mod tests {
                 http_response("200 OK", "[]"),
                 http_response("200 OK", &created.to_string()),
             ]);
-            let server = ZoteroMcpServer::new(AppState {
-                zotero_api_url: zotero_base,
-                better_bibtex_url: String::new(),
-                better_notes_url: String::new(),
-                crossref_url: crossref_base,
-                semantic_scholar_url: String::new(),
-                open_library_url: String::new(),
-                write_enabled: true,
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::test_default()
+                    .with_zotero_api_url(zotero_base)
+                    .with_crossref_url(crossref_base)
+                    .with_write_enabled(true),
+            );
 
             // Act
             let res = server
@@ -990,16 +980,12 @@ mod tests {
                 "200 OK",
                 &existing.to_string(),
             )]);
-            let server = ZoteroMcpServer::new(AppState {
-                zotero_api_url: zotero_base,
-                better_bibtex_url: String::new(),
-                better_notes_url: String::new(),
-                crossref_url: crossref_base,
-                semantic_scholar_url: String::new(),
-                open_library_url: String::new(),
-                write_enabled: true,
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::test_default()
+                    .with_zotero_api_url(zotero_base)
+                    .with_crossref_url(crossref_base)
+                    .with_write_enabled(true),
+            );
 
             // Act
             let res = server

@@ -167,8 +167,6 @@ impl ZoteroMcpServer {
 mod tests {
     use std::sync::Arc;
 
-    use tokio::sync::OnceCell;
-
     use super::*;
     use crate::{
         semantic_search::{Embedding, EmbeddingProvider, SemanticIndex},
@@ -219,19 +217,11 @@ mod tests {
         db_path: std::path::PathBuf,
         provider: Arc<dyn EmbeddingProvider>,
     ) -> AppState {
-        AppState {
-            zotero_api_url,
-            better_bibtex_url: String::new(),
-            better_notes_url: String::new(),
-            crossref_url: String::new(),
-            semantic_scholar_url: String::new(),
-            open_library_url: String::new(),
-            write_enabled: false,
-            semantic_search_enabled: true,
-            semantic_db_path: Some(db_path),
-            embedding_provider: Arc::new(OnceCell::new_with(Some(provider))),
-            ..AppState::from_env()
-        }
+        AppState::test_default()
+            .with_zotero_api_url(zotero_api_url)
+            .with_semantic_search_enabled(true)
+            .with_semantic_db_path(Some(db_path))
+            .with_embedding_provider(provider)
     }
 
     fn tool_text(res: &CallToolResult) -> String {
@@ -244,14 +234,14 @@ mod tests {
     #[tokio::test]
     async fn denies_semantic_search_when_disabled() {
         let dir = tempfile::tempdir().unwrap();
-        let mut state = semantic_state(
+        let state = semantic_state(
             String::new(),
             dir.path().join("embeddings.sqlite"),
             Arc::new(FixedProvider {
                 vector: vec![1.0],
             }),
-        );
-        state.semantic_search_enabled = false;
+        )
+        .with_semantic_search_enabled(false);
         let server = ZoteroMcpServer::new(state);
 
         let res = server.semantic_status_impl().await.unwrap();

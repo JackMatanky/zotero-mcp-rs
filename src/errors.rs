@@ -88,3 +88,23 @@ pub(crate) enum ZoteroMcpError {
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),
 }
+
+impl ZoteroMcpError {
+    /// Returns a sanitized error message suitable for external MCP clients,
+    /// suppressing sensitive internal paths, system details, and database
+    /// queries.
+    pub(crate) fn client_message(&self) -> String {
+        match self {
+            Self::Sqlite(_) => "Local database query failed".to_owned(),
+            Self::Io(err) => format!("I/O error: {}", err.kind()),
+            Self::Network(_) => "Upstream network request failed".to_owned(),
+            Self::LocalApi {
+                status,
+                message,
+            } => {
+                format!("Local API HTTP {status}: {message}")
+            }
+            _ => self.to_string(),
+        }
+    }
+}

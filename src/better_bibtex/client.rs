@@ -200,19 +200,7 @@ impl<'a> BetterBibtexClient<'a> {
         request: &AutoExportAddRequest,
     ) -> Result<Value, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        if !self.state.security.file_paths_enabled {
-            return Err(ZoteroMcpError::InputRejected(
-                "File path features are disabled; set \
-                 ZOTERO_MCP_PROFILE=workspace or \
-                 ZOTERO_FILE_PATHS_ENABLED=true"
-                    .to_owned(),
-            ));
-        }
-        self.state.check_output_path(
-            Path::new(request.path.as_ref()),
-            &self.state.security.allowed_export_dirs,
-            "auto-export output",
-        )?;
+        self.state.check_export_path(Path::new(request.path.as_ref()))?;
         let mut params = vec![
             serde_json::to_value(&request.collection)?,
             serde_json::to_value(&request.translator)?,
@@ -256,19 +244,7 @@ impl<'a> BetterBibtexClient<'a> {
         aux_path: &AuxFilePath,
     ) -> Result<Value, ZoteroMcpError> {
         self.state.check_write_permission()?;
-        if !self.state.security.file_paths_enabled {
-            return Err(ZoteroMcpError::InputRejected(
-                "File path features are disabled; set \
-                 ZOTERO_MCP_PROFILE=workspace or \
-                 ZOTERO_FILE_PATHS_ENABLED=true"
-                    .to_owned(),
-            ));
-        }
-        self.state.check_existing_read_path(
-            Path::new(aux_path.as_ref()),
-            &self.state.security.allowed_aux_dirs,
-            "AUX scan",
-        )?;
+        self.state.check_aux_path(Path::new(aux_path.as_ref()))?;
         let params = (collection, aux_path);
         self.call_rpc("collection.scanAUX", params).await
     }
@@ -300,8 +276,8 @@ impl<'a> BetterBibtexClient<'a> {
             .state
             .send_with_retry(
                 self.state
-                    .client
-                    .post(&self.state.better_bibtex_url)
+                    .client()
+                    .post(self.state.better_bibtex_url())
                     .json(&req_body),
             )
             .await?;
@@ -345,16 +321,10 @@ mod tests {
         use std::{
             io::{Read, Write},
             net::TcpListener,
-            sync::{
-                Arc,
-                mpsc::{self, Receiver},
-            },
+            sync::mpsc::{self, Receiver},
         };
 
-        use reqwest::Client;
-        use tokio::sync::OnceCell;
-
-        use crate::{security::SecurityConfig, state::AppState};
+        use crate::state::AppState;
 
         /// Builds an [`AppState`] pointing `better_bibtex_url` at a fixture
         /// server, with `write_enabled` set for write-gate tests.
@@ -362,25 +332,9 @@ mod tests {
             better_bibtex_url: String,
             write_enabled: bool,
         ) -> AppState {
-            AppState {
-                client: Client::new(),
-                security: SecurityConfig::default(),
-                zotero_api_url: String::new(),
-                better_bibtex_url,
-                better_notes_url: String::new(),
-                crossref_url: String::new(),
-                semantic_scholar_url: String::new(),
-                open_library_url: String::new(),
-                write_enabled,
-                sqlite_access: false,
-                semantic_search_enabled: false,
-                connector_compat: false,
-                zotero_db_path: None,
-                local_zotero_db: AppState::local_zotero_db_cache(),
-                semantic_db_path: None,
-                semantic_index: Arc::new(OnceCell::new()),
-                embedding_provider: Arc::new(OnceCell::new()),
-            }
+            AppState::test_default()
+                .with_better_bibtex_url(better_bibtex_url)
+                .with_write_enabled(write_enabled)
         }
 
         /// Formats a minimal JSON HTTP response with `status` and `body` for
@@ -755,7 +709,7 @@ mod tests {
         #[tokio::test]
         async fn autoexport_rejects_output_path_when_file_paths_disabled() {
             let mut state = test_state(String::new(), true);
-            state.security.file_paths_enabled = false;
+            state.security_mut().set_file_paths_enabled(false);
 
             let err = BetterBibtexClient::new(&state)
                 .autoexport_add(&request("/tmp/out.bib".to_owned()))
@@ -775,9 +729,10 @@ mod tests {
             let outside = tempfile::TempDir::new().unwrap();
             let output = outside.path().join("out.bib");
             let mut state = test_state(String::new(), true);
-            state.security.file_paths_enabled = true;
-            state.security.allowed_export_dirs =
-                vec![allowed.path().canonicalize().unwrap()];
+            state.security_mut().set_file_paths_enabled(true);
+            state.security_mut().set_allowed_export_dirs(vec![
+                allowed.path().canonicalize().unwrap(),
+            ]);
 
             let err = BetterBibtexClient::new(&state)
                 .autoexport_add(&request(output.display().to_string()))
@@ -801,9 +756,10 @@ mod tests {
                     r#"{"jsonrpc":"2.0","result":{"ok":true}}"#,
                 )]);
             let mut state = test_state(base, true);
-            state.security.file_paths_enabled = true;
-            state.security.allowed_export_dirs =
-                vec![root.path().canonicalize().unwrap()];
+            state.security_mut().set_file_paths_enabled(true);
+            state.security_mut().set_allowed_export_dirs(vec![
+                root.path().canonicalize().unwrap(),
+            ]);
             let output_str = output.display().to_string();
 
             BetterBibtexClient::new(&state)
@@ -840,9 +796,10 @@ mod tests {
             let aux = outside.path().join("paper.aux");
             std::fs::write(&aux, b"\\citation{key}").unwrap();
             let mut state = test_state(String::new(), true);
-            state.security.file_paths_enabled = true;
-            state.security.allowed_aux_dirs =
-                vec![allowed.path().canonicalize().unwrap()];
+            state.security_mut().set_file_paths_enabled(true);
+            state.security_mut().set_allowed_aux_dirs(vec![
+                allowed.path().canonicalize().unwrap(),
+            ]);
 
             let err = BetterBibtexClient::new(&state)
                 .scan_aux(
@@ -870,9 +827,10 @@ mod tests {
                     r#"{"jsonrpc":"2.0","result":{"ok":true}}"#,
                 )]);
             let mut state = test_state(base, true);
-            state.security.file_paths_enabled = true;
-            state.security.allowed_aux_dirs =
-                vec![root.path().canonicalize().unwrap()];
+            state.security_mut().set_file_paths_enabled(true);
+            state.security_mut().set_allowed_aux_dirs(vec![
+                root.path().canonicalize().unwrap(),
+            ]);
             let aux_str = aux.display().to_string();
 
             BetterBibtexClient::new(&state)

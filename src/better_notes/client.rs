@@ -219,10 +219,10 @@ impl<'a> BetterNotesClient<'a> {
         endpoint: &str,
         payload: P,
     ) -> Result<R, ZoteroMcpError> {
-        let url = format!("{}{}", self.state.better_notes_url, endpoint);
+        let url = format!("{}{}", self.state.better_notes_url(), endpoint);
         let resp = self
             .state
-            .send_with_retry(self.state.client.post(&url).json(&payload))
+            .send_with_retry(self.state.client().post(&url).json(&payload))
             .await?;
 
         if !resp.status().is_success() {
@@ -237,7 +237,7 @@ impl<'a> BetterNotesClient<'a> {
             .state
             .read_limited_text(
                 resp,
-                self.state.security.max_http_body_bytes,
+                self.state.security().max_http_body_bytes(),
                 &format!("{endpoint} response"),
             )
             .await?;
@@ -252,16 +252,10 @@ mod tests {
         use std::{
             io::{Read, Write},
             net::TcpListener,
-            sync::{
-                Arc,
-                mpsc::{self, Receiver},
-            },
+            sync::mpsc::{self, Receiver},
         };
 
-        use reqwest::Client;
-        use tokio::sync::OnceCell;
-
-        use crate::{security::SecurityConfig, state::AppState};
+        use crate::state::AppState;
 
         /// Builds an [`AppState`] pointing `better_notes_url` at a fixture
         /// server, with `write_enabled` set for write-gate tests.
@@ -269,25 +263,9 @@ mod tests {
             better_notes_url: String,
             write_enabled: bool,
         ) -> AppState {
-            AppState {
-                client: Client::new(),
-                security: SecurityConfig::default(),
-                zotero_api_url: String::new(),
-                better_bibtex_url: String::new(),
-                better_notes_url,
-                crossref_url: String::new(),
-                semantic_scholar_url: String::new(),
-                open_library_url: String::new(),
-                write_enabled,
-                sqlite_access: false,
-                semantic_search_enabled: false,
-                connector_compat: false,
-                zotero_db_path: None,
-                local_zotero_db: AppState::local_zotero_db_cache(),
-                semantic_db_path: None,
-                semantic_index: Arc::new(OnceCell::new()),
-                embedding_provider: Arc::new(OnceCell::new()),
-            }
+            AppState::test_default()
+                .with_better_notes_url(better_notes_url)
+                .with_write_enabled(write_enabled)
         }
 
         /// Formats a minimal JSON HTTP response with `status` and `body` for
@@ -383,7 +361,7 @@ mod tests {
             let body = r#"{"content":"hello"}"#;
             let base = mock_server(vec![http_response("200 OK", body)]);
             let mut state = test_state(base, false);
-            state.security.max_http_body_bytes = 3;
+            state.security_mut().set_max_http_body_bytes(3);
 
             // Act
             let err = BetterNotesClient::new(&state)
@@ -505,7 +483,7 @@ mod tests {
          {
             // Arrange
             let mut state = test_state(String::new(), true);
-            state.security.max_markdown_bytes = 3;
+            state.security_mut().set_max_markdown_bytes(3);
 
             // Act
             let err = BetterNotesClient::new(&state)
@@ -600,7 +578,7 @@ mod tests {
         async fn run_template_rejects_oversized_template_name_before_posting() {
             // Arrange
             let mut state = test_state(String::new(), false);
-            state.security.max_template_name_bytes = 3;
+            state.security_mut().set_max_template_name_bytes(3);
 
             // Act
             let err = BetterNotesClient::new(&state)

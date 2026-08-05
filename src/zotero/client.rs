@@ -71,14 +71,14 @@ impl<'a> ZoteroClient<'a> {
     /// rather than being propagated as an error.
     pub(crate) async fn check_status(&self) -> LocalApiStatus {
         let url =
-            format!("{}/users/0/items?limit=1", self.state.zotero_api_url);
-        match self.state.client.get(&url).send().await {
+            format!("{}/users/0/items?limit=1", self.state.zotero_api_url());
+        match self.state.client().get(&url).send().await {
             Ok(resp) => {
                 let status = resp.status();
                 if status.is_success() {
                     LocalApiStatus {
                         online: true,
-                        url: self.state.zotero_api_url.clone(),
+                        url: self.state.zotero_api_url().to_owned(),
                         version: resp
                             .headers()
                             .get("zotero-api-version")
@@ -89,7 +89,7 @@ impl<'a> ZoteroClient<'a> {
                 } else {
                     LocalApiStatus {
                         online: false,
-                        url: self.state.zotero_api_url.clone(),
+                        url: self.state.zotero_api_url().to_owned(),
                         version: None,
                         error: Some(format!("HTTP status {status}")),
                     }
@@ -97,7 +97,7 @@ impl<'a> ZoteroClient<'a> {
             }
             Err(e) => LocalApiStatus {
                 online: false,
-                url: self.state.zotero_api_url.clone(),
+                url: self.state.zotero_api_url().to_owned(),
                 version: None,
                 error: Some(e.to_string()),
             },
@@ -145,7 +145,7 @@ impl<'a> ZoteroClient<'a> {
         url: &str,
     ) -> Result<T, ZoteroMcpError> {
         let resp =
-            self.state.send_with_retry(self.state.client.get(url)).await?;
+            self.state.send_with_retry(self.state.client().get(url)).await?;
         Ok(self.ensure_success(resp).await?.json().await?)
     }
 
@@ -207,7 +207,7 @@ impl<'a> ZoteroClient<'a> {
         url: &str,
     ) -> Result<ItemsPage, ZoteroMcpError> {
         let resp =
-            self.state.send_with_retry(self.state.client.get(url)).await?;
+            self.state.send_with_retry(self.state.client().get(url)).await?;
         let resp = self.ensure_success(resp).await?;
         let total = resp
             .headers()
@@ -249,7 +249,7 @@ impl<'a> ZoteroClient<'a> {
     ) -> Result<T, ZoteroMcpError> {
         let resp = self
             .state
-            .send_with_retry(self.state.client.post(url).json(payload))
+            .send_with_retry(self.state.client().post(url).json(payload))
             .await?;
         let created: Vec<T> = self.ensure_success(resp).await?.json().await?;
         created.into_iter().next().ok_or_else(|| ZoteroMcpError::LocalApi {
@@ -276,7 +276,7 @@ impl<'a> ZoteroClient<'a> {
     ) -> Result<(), ZoteroMcpError> {
         let req = self
             .state
-            .client
+            .client()
             .delete(url)
             .header("If-Unmodified-Since-Version", version.to_string());
         self.ensure_success(self.state.send_with_retry(req).await?).await?;
@@ -301,10 +301,12 @@ impl<'a> ZoteroClient<'a> {
         &self,
     ) -> Result<LibraryVersion, ZoteroMcpError> {
         let url =
-            format!("{}/users/0/items?limit=1", self.state.zotero_api_url);
+            format!("{}/users/0/items?limit=1", self.state.zotero_api_url());
         let resp = self
             .ensure_success(
-                self.state.send_with_retry(self.state.client.get(&url)).await?,
+                self.state
+                    .send_with_retry(self.state.client().get(&url))
+                    .await?,
             )
             .await?;
         resp.headers()
@@ -353,17 +355,9 @@ mod tests {
             zotero_api_url: impl AsRef<str>,
             write_enabled: bool,
         ) -> AppState {
-            AppState {
-                zotero_api_url: zotero_api_url.as_ref().to_owned(),
-                better_bibtex_url: String::new(),
-                better_notes_url: String::new(),
-                crossref_url: String::new(),
-                semantic_scholar_url: String::new(),
-                open_library_url: String::new(),
-                write_enabled,
-                sqlite_access: false,
-                ..AppState::from_env()
-            }
+            AppState::test_default()
+                .with_zotero_api_url(zotero_api_url.as_ref())
+                .with_write_enabled(write_enabled)
         }
     }
 
@@ -445,8 +439,12 @@ mod tests {
             let base = server.url();
             let state = test_state(base, false);
 
-            let resp =
-                state.client.get(format!("{base}/test")).send().await.unwrap();
+            let resp = state
+                .client()
+                .get(format!("{base}/test"))
+                .send()
+                .await
+                .unwrap();
             let result = ZoteroClient::new(&state).ensure_success(resp).await;
 
             assert!(result.is_ok());
@@ -461,8 +459,12 @@ mod tests {
             let base = server.url();
             let state = test_state(base, false);
 
-            let resp =
-                state.client.get(format!("{base}/test")).send().await.unwrap();
+            let resp = state
+                .client()
+                .get(format!("{base}/test"))
+                .send()
+                .await
+                .unwrap();
             let err = ZoteroClient::new(&state)
                 .ensure_success(resp)
                 .await
@@ -528,7 +530,7 @@ mod tests {
             let state = test_state(base, false);
 
             let result = ZoteroClient::new(&state)
-                .delete(&state.zotero_api_url.clone(), LibraryVersion(5))
+                .delete(state.zotero_api_url(), LibraryVersion(5))
                 .await;
 
             assert!(result.is_ok());
@@ -544,7 +546,7 @@ mod tests {
             let state = test_state(base, false);
 
             let err = ZoteroClient::new(&state)
-                .delete(&state.zotero_api_url.clone(), LibraryVersion(5))
+                .delete(state.zotero_api_url(), LibraryVersion(5))
                 .await
                 .unwrap_err();
 
@@ -656,7 +658,7 @@ mod tests {
             let base = server.url();
             let state = test_state(base, false);
 
-            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let url = format!("{}/users/0/items", state.zotero_api_url());
             let items: Vec<serde_json::Value> =
                 ZoteroClient::new(&state).get_all_json(&url, 2).await.unwrap();
 
@@ -677,7 +679,7 @@ mod tests {
             let base = server.url();
             let state = test_state(base, false);
 
-            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let url = format!("{}/users/0/items", state.zotero_api_url());
             let items: Vec<serde_json::Value> =
                 ZoteroClient::new(&state).get_all_json(&url, 2).await.unwrap();
 
@@ -693,7 +695,7 @@ mod tests {
             let base = server.url();
             let state = test_state(base, false);
 
-            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let url = format!("{}/users/0/items", state.zotero_api_url());
             let items: Vec<serde_json::Value> =
                 ZoteroClient::new(&state).get_all_json(&url, 2).await.unwrap();
 
@@ -724,7 +726,7 @@ mod tests {
             let base = server.url();
             let state = test_state(base, false);
 
-            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let url = format!("{}/users/0/items", state.zotero_api_url());
             let page = ZoteroClient::new(&state)
                 .get_items_with_total(&url)
                 .await
@@ -740,7 +742,7 @@ mod tests {
             let base = server.url();
             let state = test_state(base, false);
 
-            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let url = format!("{}/users/0/items", state.zotero_api_url());
             let page = ZoteroClient::new(&state)
                 .get_items_with_total(&url)
                 .await
@@ -760,7 +762,7 @@ mod tests {
             let base = server.url();
             let state = test_state(base, false);
 
-            let url = format!("{}/users/0/items", state.zotero_api_url);
+            let url = format!("{}/users/0/items", state.zotero_api_url());
             let page = ZoteroClient::new(&state)
                 .get_items_with_total(&url)
                 .await

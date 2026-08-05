@@ -254,9 +254,10 @@ impl ZoteroClient<'_> {
         let base = match collection_key {
             Some(col) => format!(
                 "{}/users/0/collections/{}/items",
-                self.state.zotero_api_url, col
+                self.state.zotero_api_url(),
+                col
             ),
-            None => format!("{}/users/0/items", self.state.zotero_api_url),
+            None => format!("{}/users/0/items", self.state.zotero_api_url()),
         };
         let encoded_q = urlencoding::encode(query);
         let url = format!(
@@ -286,7 +287,9 @@ impl ZoteroClient<'_> {
         let encoded_tag = urlencoding::encode(tag.as_str());
         let url = format!(
             "{}/users/0/items?tag={}&limit={}&itemType=-note",
-            self.state.zotero_api_url, encoded_tag, limit
+            self.state.zotero_api_url(),
+            encoded_tag,
+            limit
         );
         self.get_json(&url).await
     }
@@ -352,7 +355,7 @@ impl ZoteroClient<'_> {
     /// - [`ZoteroMcpError::Network`] if the request fails at the transport
     ///   level
     /// - [`ZoteroMcpError::Json`] if the response cannot be decoded
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "six orthogonal search parameters; a params struct adds \
                   indirection without removing them"
@@ -463,7 +466,7 @@ impl ZoteroClient<'_> {
             }
         }
 
-        let mut url = format!("{}/users/0/items", self.state.zotero_api_url);
+        let mut url = format!("{}/users/0/items", self.state.zotero_api_url());
         let mut params = Vec::new();
         if let Some(q) = q {
             params.push(format!("q={}", urlencoding::encode(q)));
@@ -772,7 +775,7 @@ fn sort_key(item: &ZoteroItem, field: SortField) -> String {
 
 /// Coverage indicators for a single library item.
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "domain model tracks 3 distinct boolean flags"
 )]
@@ -842,12 +845,13 @@ impl ZoteroClient<'_> {
         let base = match collection_key {
             Some(col) => format!(
                 "{}/users/0/collections/{}/items",
-                self.state.zotero_api_url, col
+                self.state.zotero_api_url(),
+                col
             ),
             None => format!(
                 "{}/users/0/items?itemType=-note&sort=dateModified&\
                  direction=desc",
-                self.state.zotero_api_url
+                self.state.zotero_api_url()
             ),
         };
         let page_url = add_pagination(&base, offset, limit);
@@ -954,7 +958,7 @@ fn classify_coverage(flags: &[ItemCoverageFlags]) -> LibraryCoverage {
     }
 }
 
-#[allow(
+#[expect(
     clippy::as_conversions,
     clippy::cast_precision_loss,
     reason = "percentages calculation requires float conversion"
@@ -1552,16 +1556,8 @@ mod tests {
         }
 
         fn zotero_state(zotero_api_url: impl AsRef<str>) -> AppState {
-            AppState {
-                zotero_api_url: zotero_api_url.as_ref().to_owned(),
-                better_bibtex_url: String::new(),
-                better_notes_url: String::new(),
-                crossref_url: String::new(),
-                semantic_scholar_url: String::new(),
-                open_library_url: String::new(),
-                write_enabled: true,
-                ..AppState::from_env()
-            }
+            AppState::test_default()
+                .with_zotero_api_url(zotero_api_url.as_ref())
         }
 
         #[tokio::test]
@@ -2000,27 +1996,18 @@ mod tests {
         use super::*;
 
         mod compute_percentage {
-            use pretty_assertions::assert_eq;
 
             use super::*;
             #[test]
-            #[allow(
-                clippy::float_cmp,
-                reason = "exact float percentages in test"
-            )]
             fn returns_percentage_ratio_for_given_counts() {
-                assert_eq!(compute_percentage(1, 2), 50.0);
-                assert_eq!(compute_percentage(3, 4), 75.0);
+                assert!((compute_percentage(1, 2) - 50.0).abs() < f64::EPSILON);
+                assert!((compute_percentage(3, 4) - 75.0).abs() < f64::EPSILON);
             }
 
             #[test]
-            #[allow(
-                clippy::float_cmp,
-                reason = "exact float percentages in test"
-            )]
             fn returns_zero_when_total_is_zero() {
-                assert_eq!(compute_percentage(0, 0), 0.0);
-                assert_eq!(compute_percentage(5, 0), 0.0);
+                assert!((compute_percentage(0, 0) - 0.0).abs() < f64::EPSILON);
+                assert!((compute_percentage(5, 0) - 0.0).abs() < f64::EPSILON);
             }
         }
 
@@ -2104,10 +2091,6 @@ mod tests {
             }
 
             #[test]
-            #[allow(
-                clippy::float_cmp,
-                reason = "exact float percentages in test"
-            )]
             fn aggregates_library_coverage_statistics_and_percentages() {
                 let flags1 = ItemCoverageFlags {
                     has_pdf: true,
@@ -2125,16 +2108,14 @@ mod tests {
                 assert_eq!(coverage.with_pdf, 1);
                 assert_eq!(coverage.with_doi, 2);
                 assert_eq!(coverage.with_notes, 1);
-                assert_eq!(coverage.pdf_percentage, 50.0);
-                assert_eq!(coverage.doi_percentage, 100.0);
-                assert_eq!(coverage.notes_percentage, 50.0);
+                assert!((coverage.pdf_percentage - 50.0).abs() < f64::EPSILON);
+                assert!((coverage.doi_percentage - 100.0).abs() < f64::EPSILON);
+                assert!(
+                    (coverage.notes_percentage - 50.0).abs() < f64::EPSILON
+                );
             }
 
             #[test]
-            #[allow(
-                clippy::float_cmp,
-                reason = "exact zero percentages in test"
-            )]
             fn classify_coverage_returns_zeroed_stats_for_empty_input() {
                 let coverage = classify_coverage(&[]);
 
@@ -2142,9 +2123,9 @@ mod tests {
                 assert_eq!(coverage.with_pdf, 0);
                 assert_eq!(coverage.with_doi, 0);
                 assert_eq!(coverage.with_notes, 0);
-                assert_eq!(coverage.pdf_percentage, 0.0);
-                assert_eq!(coverage.doi_percentage, 0.0);
-                assert_eq!(coverage.notes_percentage, 0.0);
+                assert!((coverage.pdf_percentage - 0.0).abs() < f64::EPSILON);
+                assert!((coverage.doi_percentage - 0.0).abs() < f64::EPSILON);
+                assert!((coverage.notes_percentage - 0.0).abs() < f64::EPSILON);
             }
 
             #[test]
@@ -2366,16 +2347,8 @@ mod tests {
         }
 
         fn test_state(zotero_api_url: String) -> crate::state::AppState {
-            crate::state::AppState {
-                zotero_api_url,
-                better_bibtex_url: String::new(),
-                better_notes_url: String::new(),
-                crossref_url: String::new(),
-                semantic_scholar_url: String::new(),
-                open_library_url: String::new(),
-                write_enabled: false,
-                ..crate::state::AppState::from_env()
-            }
+            crate::state::AppState::test_default()
+                .with_zotero_api_url(zotero_api_url)
         }
 
         #[tokio::test]

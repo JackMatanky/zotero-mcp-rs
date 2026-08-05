@@ -63,16 +63,9 @@ mod fixtures {
     pub(in crate::mcp::zotero) fn zotero_state(
         zotero_api_url: String,
     ) -> AppState {
-        AppState {
-            zotero_api_url,
-            better_bibtex_url: String::new(),
-            better_notes_url: String::new(),
-            crossref_url: String::new(),
-            semantic_scholar_url: String::new(),
-            open_library_url: String::new(),
-            write_enabled: true,
-            ..AppState::from_env()
-        }
+        AppState::test_default()
+            .with_zotero_api_url(zotero_api_url)
+            .with_write_enabled(true)
     }
 
     pub(in crate::mcp::zotero) use crate::zotero::test_http::{
@@ -99,10 +92,9 @@ mod fixtures {
     pub(in crate::mcp::zotero) fn security_with_pdf_limit(
         max_pdf_bytes: u64,
     ) -> SecurityConfig {
-        SecurityConfig {
-            max_pdf_bytes,
-            ..SecurityConfig::default()
-        }
+        let mut config = SecurityConfig::default();
+        config.set_max_pdf_bytes(max_pdf_bytes);
+        config
     }
 
     pub(in crate::mcp::zotero) fn parent_journal_item() -> serde_json::Value {

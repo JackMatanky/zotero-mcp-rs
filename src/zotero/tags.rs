@@ -48,7 +48,8 @@ impl ZoteroClient<'_> {
     ) -> Result<Vec<TagName>, ZoteroMcpError> {
         let url = format!(
             "{}/users/0/tags?limit={}",
-            self.state.zotero_api_url, limit
+            self.state.zotero_api_url(),
+            limit
         );
         let raw: Vec<serde_json::Value> = self.get_json(&url).await?;
         Ok(raw
@@ -147,7 +148,8 @@ impl ZoteroClient<'_> {
             .join(" || ");
         let url = format!(
             "{}/users/0/tags?tag={}",
-            self.state.zotero_api_url, joined
+            self.state.zotero_api_url(),
+            joined
         );
         self.delete(&url, version).await
     }

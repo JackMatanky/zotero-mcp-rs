@@ -353,13 +353,9 @@ mod tests {
         #[tokio::test]
         async fn add_item_relation_returns_error_when_write_disabled() {
             // Arrange
-            let server = ZoteroMcpServer::new(AppState {
-                zotero_api_url: String::new(),
-                better_bibtex_url: String::new(),
-                better_notes_url: String::new(),
-                write_enabled: false,
-                ..AppState::from_env()
-            });
+            let server = ZoteroMcpServer::new(
+                AppState::test_default().with_write_enabled(false),
+            );
 
             // Act
             let res = server
