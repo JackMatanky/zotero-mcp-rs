@@ -31,6 +31,7 @@
 //! # Ok(())
 //! # }
 //! ```
+
 mod better_bibtex;
 mod better_notes;
 mod catalog;

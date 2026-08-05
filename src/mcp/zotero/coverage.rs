@@ -13,16 +13,23 @@
 //! ```no_run
 //! # use zotero_mcp_rs::ZoteroMcpServer;
 //! # use zotero_mcp_rs::mcp::zotero::coverage::LibraryCoverageArgs;
-//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
-//! let args = serde_json::from_value(serde_json::json!({
-//!     "collection_key": null,
-//!     "start": 0,
-//!     "limit": 50
-//! }))?;
-//! let result = server.zotero_library_coverage_impl(args).await?;
+//! # async fn run(
+//! #     server: ZoteroMcpServer,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = serde_json::from_value(
+//!     serde_json::json!({
+//!         "collection_key": null,
+//!         "start": 0,
+//!         "limit": 50
+//!     }),
+//! )?;
+//! let result = server
+//!     .zotero_library_coverage_impl(args)
+//!     .await?;
 //! # Ok(())
 //! # }
 //! ```
+
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;

@@ -17,13 +17,24 @@
 //!
 //! ```no_run
 //! # use zotero_mcp_rs::ZoteroMcpServer;
-//! # use zotero_mcp_rs::mcp::zotero::notes::{ZoteroNotesCommand, GetNotesArgs};
+//! # use zotero_mcp_rs::mcp::zotero::notes::{
+//! #     ZoteroNotesCommand,
+//! #     GetNotesArgs,
+//! # };
 //! # use rmcp::handler::server::wrapper::Parameters;
-//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
-//! let cmd = ZoteroNotesCommand::List(serde_json::from_value(serde_json::json!({
-//!     "item_key": "ITEM1234"
-//! }))?);
-//! let result = server.zotero_notes(Parameters(cmd)).await?;
+//! # async fn run(
+//! #     server: ZoteroMcpServer,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
+//! let cmd = ZoteroNotesCommand::List(
+//!     serde_json::from_value(
+//!         serde_json::json!({
+//!             "item_key": "ITEM1234"
+//!         }),
+//!     )?,
+//! );
+//! let result = server
+//!     .zotero_notes(Parameters(cmd))
+//!     .await?;
 //! # Ok(())
 //! # }
 //! ```

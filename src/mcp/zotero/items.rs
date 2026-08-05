@@ -26,15 +26,27 @@
 //!
 //! ```no_run
 //! # use rmcp::handler::server::wrapper::Parameters;
-//! # use zotero_mcp_rs::{ZoteroMcpServer, state::AppState};
-//! # use zotero_mcp_rs::mcp::zotero::items::{ZoteroItemsCommand, GetRecentArgs};
-//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! # use zotero_mcp_rs::{
+//! #     ZoteroMcpServer,
+//! #     state::AppState,
+//! # };
+//! # use zotero_mcp_rs::mcp::zotero::items::{
+//! #     ZoteroItemsCommand,
+//! #     GetRecentArgs,
+//! # };
+//! # async fn run() -> Result<
+//! #     (),
+//! #     Box<dyn std::error::Error>,
+//! # > {
 //! let server = ZoteroMcpServer::new(AppState::from_env());
-//! let args = ZoteroItemsCommand::Recent(GetRecentArgs { limit: Some(10) });
+//! let args = ZoteroItemsCommand::Recent(GetRecentArgs {
+//!     limit: Some(10),
+//! });
 //! let result = server.zotero_items(Parameters(args)).await?;
 //! # Ok(())
 //! # }
 //! ```
+
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
     tool_router,

@@ -23,6 +23,7 @@
 //! let b = Embedding::from(vec![0.6, 0.8]);
 //! assert_eq!(a.dot(&b), 1.0);
 //! ```
+
 use std::{path::Path, sync::Mutex};
 
 use fastembed::{EmbeddingModel, TextEmbedding, TextInitOptions};

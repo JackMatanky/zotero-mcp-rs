@@ -19,8 +19,13 @@
 //! ```no_run
 //! # use rmcp::handler::server::wrapper::Parameters;
 //! # use zotero_mcp_rs::ZoteroMcpServer;
-//! # use zotero_mcp_rs::mcp::zotero::tags::{ZoteroTagsCommand, ListTagsArgs};
-//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! # use zotero_mcp_rs::mcp::zotero::tags::{
+//! #     ZoteroTagsCommand,
+//! #     ListTagsArgs,
+//! # };
+//! # async fn run(
+//! #     server: ZoteroMcpServer,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
 //! let args = Parameters(ZoteroTagsCommand::List(ListTagsArgs {
 //!     limit: Some(50),
 //! }));

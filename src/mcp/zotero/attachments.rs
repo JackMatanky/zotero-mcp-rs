@@ -14,14 +14,20 @@
 //! ```no_run
 //! # use zotero_mcp_rs::ZoteroMcpServer;
 //! # use zotero_mcp_rs::mcp::zotero::attachments::AttachFileArgs;
-//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
-//! let args = serde_json::from_value(serde_json::json!({
-//!     "parent_item_key": "ITEM1234",
-//!     "title": "Main Manuscript",
-//!     "path_or_url": "/path/to/paper.pdf",
-//!     "content_type": "application/pdf"
-//! }))?;
-//! let result = server.zotero_attach_file_impl(args).await?;
+//! # async fn run(
+//! #     server: ZoteroMcpServer,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = serde_json::from_value(
+//!     serde_json::json!({
+//!         "parent_item_key": "ITEM1234",
+//!         "title": "Main Manuscript",
+//!         "path_or_url": "/path/to/paper.pdf",
+//!         "content_type": "application/pdf"
+//!     }),
+//! )?;
+//! let result = server
+//!     .zotero_attach_file_impl(args)
+//!     .await?;
 //! # Ok(())
 //! # }
 //! ```

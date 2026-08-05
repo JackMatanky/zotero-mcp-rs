@@ -37,6 +37,7 @@
 //! let db_path = resolve_db_path(None).unwrap();
 //! let cache_dir = resolve_model_cache_dir(&db_path);
 //! ```
+
 mod chunking;
 mod embedding;
 mod index;

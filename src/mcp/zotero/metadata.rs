@@ -16,9 +16,15 @@
 //!
 //! ```no_run
 //! # use zotero_mcp_rs::ZoteroMcpServer;
-//! # use zotero_mcp_rs::mcp::zotero::metadata::{GetItemMetadataArgs, MetadataFormat};
+//! # use zotero_mcp_rs::mcp::zotero::metadata::{
+//! #     GetItemMetadataArgs,
+//! #     MetadataFormat,
+//! # };
 //! # use zotero_mcp_rs::zotero::ItemKey;
-//! # async fn run(server: ZoteroMcpServer, key: ItemKey) -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn run(
+//! #     server: ZoteroMcpServer,
+//! #     key: ItemKey,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
 //! let args = GetItemMetadataArgs::json(key);
 //! let result = server.zotero_get_item_metadata_impl(args).await?;
 //! # Ok(())

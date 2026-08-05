@@ -16,12 +16,18 @@
 //! ```no_run
 //! # use rmcp::handler::server::wrapper::Parameters;
 //! # use zotero_mcp_rs::ZoteroMcpServer;
-//! # use zotero_mcp_rs::mcp::zotero::sqlite::{ZoteroSqliteSearchCommand, FulltextSearchArgs};
-//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
-//! let args = Parameters(ZoteroSqliteSearchCommand::Fulltext(FulltextSearchArgs {
-//!     query: "borrow checker".to_string(),
-//!     limit: Some(10),
-//! }));
+//! # use zotero_mcp_rs::mcp::zotero::sqlite::{
+//! #     ZoteroSqliteSearchCommand,
+//! #     FulltextSearchArgs,
+//! # };
+//! # async fn run(
+//! #     server: ZoteroMcpServer,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
+//! let args =
+//!     Parameters(ZoteroSqliteSearchCommand::Fulltext(FulltextSearchArgs {
+//!         query: "borrow checker".to_string(),
+//!         limit: Some(10),
+//!     }));
 //! let result = server.zotero_sqlite_search(args).await?;
 //! # Ok(())
 //! # }

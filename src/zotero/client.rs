@@ -27,6 +27,7 @@
 //! # Ok(())
 //! # }
 //! ```
+
 use reqwest::Response;
 use serde::{Serialize, de::DeserializeOwned};
 

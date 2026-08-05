@@ -14,11 +14,14 @@
 //! # use zotero_mcp_rs::ZoteroMcpServer;
 //! # use zotero_mcp_rs::mcp::zotero::status::EmptyArgs;
 //! # use rmcp::handler::server::wrapper::Parameters;
-//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn run(
+//! #     server: ZoteroMcpServer,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
 //! let result = server.zotero_status(Parameters(EmptyArgs {})).await?;
 //! # Ok(())
 //! # }
 //! ```
+
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
     tool_router,

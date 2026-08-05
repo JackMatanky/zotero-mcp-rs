@@ -23,11 +23,17 @@
 //! ```no_run
 //! # use rmcp::handler::server::wrapper::Parameters;
 //! # use zotero_mcp_rs::ZoteroMcpServer;
-//! # use zotero_mcp_rs::mcp::zotero::collections::{ZoteroCollectionsCommand, SearchCollectionsArgs};
-//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
-//! let args = Parameters(ZoteroCollectionsCommand::Search(SearchCollectionsArgs {
-//!     query: "machine learning".to_string(),
-//! }));
+//! # use zotero_mcp_rs::mcp::zotero::collections::{
+//! #     ZoteroCollectionsCommand,
+//! #     SearchCollectionsArgs,
+//! # };
+//! # async fn run(
+//! #     server: ZoteroMcpServer,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
+//! let args =
+//!     Parameters(ZoteroCollectionsCommand::Search(SearchCollectionsArgs {
+//!         query: "machine learning".to_string(),
+//!     }));
 //! let result = server.zotero_collections(args).await?;
 //! # Ok(())
 //! # }

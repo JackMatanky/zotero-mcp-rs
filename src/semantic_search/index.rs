@@ -19,14 +19,24 @@
 //!
 //! ```no_run
 //! use std::sync::Arc;
-//! use zotero_mcp_rs::semantic_search::{index_library, store::SemanticIndex, EmbeddingProvider};
-//! use zotero_mcp_rs::zotero::ZoteroClient;
 //!
-//! # async fn run(client: &ZoteroClient<'_>, index: &SemanticIndex, provider: Arc<dyn EmbeddingProvider>) {
+//! use zotero_mcp_rs::{
+//!     semantic_search::{
+//!         EmbeddingProvider, index_library, store::SemanticIndex,
+//!     },
+//!     zotero::ZoteroClient,
+//! };
+//!
+//! # async fn run(
+//! #     client: &ZoteroClient<'_>,
+//! #     index: &SemanticIndex,
+//! #     provider: Arc<dyn EmbeddingProvider>,
+//! # ) {
 //! let report = index_library(client, index, &provider, false).await.unwrap();
-//! println!("Indexed {} items", report.items_indexed);
+//! println!("Indexed {} items", report.items_indexed,);
 //! # }
 //! ```
+
 use std::sync::Arc;
 
 use serde::Serialize;

@@ -29,6 +29,7 @@
 //! let parsed_key = ItemKey::try_from(&relation_uri).unwrap();
 //! assert_eq!(parsed_key, item_key);
 //! ```
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

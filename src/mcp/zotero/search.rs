@@ -17,11 +17,16 @@
 //! ```no_run
 //! # use rmcp::handler::server::wrapper::Parameters;
 //! # use zotero_mcp_rs::ZoteroMcpServer;
-//! # use zotero_mcp_rs::mcp::zotero::search::{ZoteroSearchCommand, SearchItemsArgs};
-//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
-//! let args = Parameters(ZoteroSearchCommand::Items(SearchItemsArgs::for_connector(
-//!     "quantum computing".to_string(),
-//! )));
+//! # use zotero_mcp_rs::mcp::zotero::search::{
+//! #     ZoteroSearchCommand,
+//! #     SearchItemsArgs,
+//! # };
+//! # async fn run(
+//! #     server: ZoteroMcpServer,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = Parameters(ZoteroSearchCommand::Items(
+//!     SearchItemsArgs::for_connector("quantum computing".to_string()),
+//! ));
 //! let result = server.zotero_search(args).await?;
 //! # Ok(())
 //! # }

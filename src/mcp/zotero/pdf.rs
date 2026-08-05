@@ -21,9 +21,18 @@
 //!
 //! ```no_run
 //! # use rmcp::handler::server::wrapper::Parameters;
-//! # use zotero_mcp_rs::{ZoteroMcpServer, state::AppState};
-//! # use zotero_mcp_rs::mcp::zotero::pdf::{ZoteroPdfCommand, GetPdfPathArgs};
-//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! # use zotero_mcp_rs::{
+//! #     ZoteroMcpServer,
+//! #     state::AppState,
+//! # };
+//! # use zotero_mcp_rs::mcp::zotero::pdf::{
+//! #     ZoteroPdfCommand,
+//! #     GetPdfPathArgs,
+//! # };
+//! # async fn run() -> Result<
+//! #     (),
+//! #     Box<dyn std::error::Error>,
+//! # > {
 //! let server = ZoteroMcpServer::new(AppState::from_env());
 //! let args = ZoteroPdfCommand::Path(GetPdfPathArgs {
 //!     item_key: "ITEM0001".into(),

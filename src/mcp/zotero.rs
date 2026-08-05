@@ -44,6 +44,7 @@
 //! # use zotero_mcp_rs::mcp::zotero::search::SearchItemsArgs;
 //! let args = SearchItemsArgs::for_connector("rust".to_string());
 //! ```
+
 mod annotations;
 mod attachments;
 mod collections;

@@ -25,6 +25,7 @@
 //! # Ok(())
 //! # }
 //! ```
+
 use rmcp::{
     handler::server::wrapper::Parameters, model::CallToolResult, tool,
     tool_router,

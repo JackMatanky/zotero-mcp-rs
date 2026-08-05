@@ -15,11 +15,13 @@
 //! # use zotero_mcp_rs::state::AppState;
 //! # use zotero_mcp_rs::zotero::client::ZoteroClient;
 //! # use zotero_mcp_rs::zotero::ItemKey;
-//! # async fn example(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn example(
+//! #     state: AppState,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
 //! let client = ZoteroClient::new(&state);
 //! let item_key = ItemKey::from("ABCD1234");
 //! let item = client.get_item(&item_key).await?;
-//! println!("Item key: {}", item.key);
+//! println!("Item key: {}", item.key,);
 //! # Ok(())
 //! # }
 //! ```

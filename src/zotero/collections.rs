@@ -22,7 +22,7 @@
 //! # ) -> Result<(), Box<dyn std::error::Error>> {
 //! let client = ZoteroClient::new(state);
 //! let collections = client.get_collections().await?;
-//! println!("Found {} collections", collections.len());
+//! println!("Found {} collections", collections.len(),);
 //! # Ok(())
 //! # }
 //! ```

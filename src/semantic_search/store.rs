@@ -25,6 +25,7 @@
 //!     SemanticIndex::open(Path::new("/tmp/embeddings.sqlite")).await.unwrap();
 //! # }
 //! ```
+
 use std::{path::Path, time::Duration};
 
 use sqlx::{

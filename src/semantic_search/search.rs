@@ -28,6 +28,7 @@
 //!     search_library(&provider, &[], "rust async", 10, 0.3).await.unwrap();
 //! # }
 //! ```
+
 use std::{collections::HashMap, sync::Arc};
 
 use serde::Serialize;

@@ -13,14 +13,21 @@
 //! ```no_run
 //! # use zotero_mcp_rs::ZoteroMcpServer;
 //! # use zotero_mcp_rs::mcp::zotero::fulltext::GetItemFulltextArgs;
-//! # async fn run(server: ZoteroMcpServer) -> Result<(), Box<dyn std::error::Error>> {
-//! let args = serde_json::from_value(serde_json::json!({
-//!     "item_key": "ABC12345"
-//! }))?;
-//! let result = server.zotero_get_item_fulltext_impl(args).await?;
+//! # async fn run(
+//! #     server: ZoteroMcpServer,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
+//! let args = serde_json::from_value(
+//!     serde_json::json!({
+//!         "item_key": "ABC12345"
+//!     }),
+//! )?;
+//! let result = server
+//!     .zotero_get_item_fulltext_impl(args)
+//!     .await?;
 //! # Ok(())
 //! # }
 //! ```
+
 use rmcp::model::CallToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;

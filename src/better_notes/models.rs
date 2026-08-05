@@ -31,6 +31,7 @@
 //! let format = NoteExportFormat::Markdown;
 //! assert_eq!(format.as_str(), "markdown");
 //! ```
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
