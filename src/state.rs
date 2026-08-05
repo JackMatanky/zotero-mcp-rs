@@ -610,6 +610,28 @@ mod tests {
             format!("http://{addr}")
         }
     }
+    mod from_env {
+        use std::env;
+
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn defaults_connector_compat_to_false_when_unset() {
+            env::remove_var("ZOTERO_CONNECTOR_COMPAT");
+            let state = AppState::from_env();
+            assert_eq!(state.connector_compat, false);
+        }
+
+        #[test]
+        fn parses_connector_compat_flag_when_enabled() {
+            env::set_var("ZOTERO_CONNECTOR_COMPAT", "1");
+            let state = AppState::from_env();
+            assert_eq!(state.connector_compat, true);
+            env::remove_var("ZOTERO_CONNECTOR_COMPAT");
+        }
+    }
 
     mod is_transient_status {
         use super::*;

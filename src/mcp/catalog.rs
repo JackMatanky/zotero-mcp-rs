@@ -426,19 +426,37 @@ impl ZoteroMcpServer {
 }
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
+
     use super::*;
 
-    #[test]
-    fn omits_search_text_from_serialized_payload() {
-        let server = ZoteroMcpServer::new(AppState::from_env());
-        let res = server.zotero_discover_impl(&DiscoverArgs {
-            query: Some("items".to_owned()),
-            domain: None,
-            include_disabled: None,
-        });
+    mod discovery {
+        use super::*;
 
-        let json =
-            serde_json::to_string(&res).expect("serialize discovery response");
-        assert!(!json.contains("search_text"));
+        #[test]
+        fn omits_search_text_from_serialized_payload() {
+            let server = ZoteroMcpServer::new(AppState::from_env());
+            let res = server.zotero_discover_impl(&DiscoverArgs {
+                query: Some("items".to_owned()),
+                domain: None,
+                include_disabled: None,
+            });
+
+            let json = serde_json::to_string(&res)
+                .expect("serialize discovery response");
+            assert!(!json.contains("search_text"));
+        }
+    }
+
+    mod env_gate {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+        #[test]
+        fn serializes_connector_compat_variant_as_env_var_name() {
+            let json = serde_json::to_string(&EnvGate::ConnectorCompat)
+                .expect("serialize EnvGate");
+            assert_eq!(json, "\"ZOTERO_CONNECTOR_COMPAT\"");
+        }
     }
 }
