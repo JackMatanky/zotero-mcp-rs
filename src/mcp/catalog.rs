@@ -110,6 +110,24 @@ struct PrimitiveInfo {
 
 static PRIMITIVES: &[PrimitiveInfo] = &[
     PrimitiveInfo {
+        name: "search",
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Search,
+        requires: &[],
+        summary: "Connector compatibility: search Zotero items by query",
+        example: Some(r#"{"query":"rust"}"#),
+        search_text: "search connector compatibility zotero items query",
+    },
+    PrimitiveInfo {
+        name: "fetch",
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Items,
+        requires: &[],
+        summary: "Connector compatibility: get Zotero item metadata by key",
+        example: Some(r#"{"id":"ITEMKEY"}"#),
+        search_text: "fetch connector compatibility zotero item metadata key",
+    },
+    PrimitiveInfo {
         name: "zotero_discover",
         kind: PrimitiveKind::Tool,
         domain: PrimitiveDomain::Discovery,
@@ -119,6 +137,72 @@ static PRIMITIVES: &[PrimitiveInfo] = &[
         example: Some(r#"{"query":"notes"}"#),
         search_text: "zotero_discover discovery find zotero tools resources \
                       prompts env gates and examples",
+    },
+    PrimitiveInfo {
+        name: "zotero_status",
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Discovery,
+        requires: &[],
+        summary: "Show server status and configuration",
+        example: None,
+        search_text: "zotero_status status server configuration",
+    },
+    PrimitiveInfo {
+        name: "zotero_collections",
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Collections,
+        requires: &[],
+        summary: "Grouped collection actions: list, items",
+        example: Some(r#"{"action":"list"}"#),
+        search_text: "zotero_collections collections grouped actions list \
+                      items",
+    },
+    PrimitiveInfo {
+        name: "zotero_tags",
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Items,
+        requires: &[],
+        summary: "Grouped tag actions: list, add, remove",
+        example: Some(r#"{"action":"list","item_key":"ITEMKEY"}"#),
+        search_text: "zotero_tags tags grouped actions list add remove",
+    },
+    PrimitiveInfo {
+        name: "zotero_relations",
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Items,
+        requires: &[],
+        summary: "Grouped relation actions: list, add, remove",
+        example: Some(r#"{"action":"list","item_key":"ITEMKEY"}"#),
+        search_text: "zotero_relations relations grouped actions list add \
+                      remove",
+    },
+    PrimitiveInfo {
+        name: "zotero_pdf",
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Items,
+        requires: &[],
+        summary: "Grouped PDF actions: attachment, fulltext, annotation",
+        example: Some(r#"{"action":"attachment","item_key":"ITEMKEY"}"#),
+        search_text: "zotero_pdf pdf grouped actions attachment fulltext \
+                      annotation",
+    },
+    PrimitiveInfo {
+        name: "better_bibtex",
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Items,
+        requires: &[],
+        summary: "Better BibTeX export and citation key operations",
+        example: Some(r#"{"action":"export","item_key":"ITEMKEY"}"#),
+        search_text: "better_bibtex bibtex export citation key operations",
+    },
+    PrimitiveInfo {
+        name: "better_notes",
+        kind: PrimitiveKind::Tool,
+        domain: PrimitiveDomain::Notes,
+        requires: &[],
+        summary: "Better Notes template and synchronization operations",
+        example: Some(r#"{"action":"list_templates"}"#),
+        search_text: "better_notes notes template synchronization operations",
     },
     PrimitiveInfo {
         name: "zotero://items/{item_key}",
@@ -230,47 +314,33 @@ static PRIMITIVES: &[PrimitiveInfo] = &[
     },
 ];
 
+/// Returns the env gates for a tool by name, or `None` if not found in the
+/// catalog.
+fn tool_gates(name: &str) -> Option<&'static [EnvGate]> {
+    PRIMITIVES
+        .iter()
+        .find(|p| p.kind == PrimitiveKind::Tool && p.name == name)
+        .map(|p| p.requires)
+}
+
 /// Returns `true` if `name` is a write (mutating) tool gated behind
 /// `ZOTERO_WRITE_ENABLED`.
+#[allow(dead_code, reason = "used in tests; kept as public API for callers")]
 pub(crate) fn is_write_tool(name: &str) -> bool {
-    matches!(
-        name,
-        "zotero_notes_write"
-            | "zotero_collections_write"
-            | "zotero_items_write"
-            | "zotero_tags_write"
-            | "zotero_relations_write"
-    )
+    tool_gates(name).is_some_and(|gates| gates.contains(&EnvGate::WriteEnabled))
 }
 
 /// Returns `true` if `name` is currently advertised to MCP clients given
-/// `state`'s write and `SQLite` gates.
+/// `state`'s feature gates.
 pub(crate) fn is_tool_visible(state: &AppState, name: &str) -> bool {
-    if is_write_tool(name) {
-        return state.write_enabled;
-    }
-    if name == "zotero_sqlite_search" {
-        return state.sqlite_access;
-    }
-    if name == "zotero_semantic_search" {
-        return state.semantic_search_enabled;
-    }
-    matches!(
-        name,
-        "zotero_discover"
-            | "zotero_status"
-            | "zotero_search"
-            | "zotero_pdf"
-            | "zotero_notes"
-            | "zotero_collections"
-            | "zotero_items"
-            | "zotero_tags"
-            | "zotero_relations"
-            | "better_bibtex"
-            | "better_notes"
-            | "search"
-            | "fetch"
-    )
+    let Some(gates) = tool_gates(name) else {
+        return false;
+    };
+    gates.iter().all(|gate| match gate {
+        EnvGate::WriteEnabled => state.write_enabled,
+        EnvGate::SqliteAccess => state.sqlite_access,
+        EnvGate::SemanticSearchEnabled => state.semantic_search_enabled,
+    })
 }
 
 impl ZoteroMcpServer {
@@ -297,10 +367,12 @@ impl ZoteroMcpServer {
 
     /// Returns `true` if all env gates for `primitive` are satisfied.
     fn is_primitive_enabled(&self, primitive: PrimitiveInfo) -> bool {
-        !primitive.requires.iter().any(|requirement| {
-            (*requirement == EnvGate::WriteEnabled && !self.state.write_enabled)
-                || (*requirement == EnvGate::SqliteAccess
-                    && !self.state.sqlite_access)
+        primitive.requires.iter().all(|gate| match gate {
+            EnvGate::WriteEnabled => self.state.write_enabled,
+            EnvGate::SqliteAccess => self.state.sqlite_access,
+            EnvGate::SemanticSearchEnabled => {
+                self.state.semantic_search_enabled
+            }
         })
     }
 

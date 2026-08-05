@@ -323,6 +323,7 @@ mod tests {
             let mut state = AppState::from_env();
             state.write_enabled = false;
             state.sqlite_access = false;
+            state.semantic_search_enabled = false;
 
             let names = visible_tool_names(&state);
 
