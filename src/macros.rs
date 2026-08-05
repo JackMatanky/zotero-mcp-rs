@@ -39,6 +39,7 @@ macro_rules! string_newtype {
         impl $name {
             /// Returns the inner string slice.
             #[inline]
+            #[allow(dead_code, reason = "not all newtypes need as_str immediately")]
             pub(crate) fn as_str(&self) -> &str {
                 &self.0
             }

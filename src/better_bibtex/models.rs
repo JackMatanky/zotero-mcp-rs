@@ -36,69 +36,20 @@
 
 use std::collections::HashMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::zotero::{CitationKey, ItemKey};
 
-/// Generates a `String`-backed Better `BibTeX` new type wrapper with
-/// conversions for JSON-RPC argument boundaries.
-macro_rules! string_value {
-    ($name:ident, $doc:expr) => {
-        #[doc = $doc]
-        #[derive(
-            Clone,
-            Debug,
-            Default,
-            Deserialize,
-            Eq,
-            Hash,
-            Ord,
-            PartialEq,
-            PartialOrd,
-            schemars::JsonSchema,
-            Serialize,
-        )]
-        #[serde(transparent)]
-        pub(crate) struct $name(pub(crate) String);
-
-        impl std::fmt::Display for $name {
-            #[inline]
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(&self.0)
-            }
-        }
-
-        impl From<String> for $name {
-            #[inline]
-            fn from(value: String) -> Self {
-                Self(value)
-            }
-        }
-
-        impl From<&str> for $name {
-            #[inline]
-            fn from(value: &str) -> Self {
-                Self(value.to_owned())
-            }
-        }
-
-        impl AsRef<str> for $name {
-            #[inline]
-            fn as_ref(&self) -> &str {
-                &self.0
-            }
-        }
-    };
-}
-
-string_value!(
+string_newtype!(
     CollectionPath,
     concat!(
         "Better `BibTeX` collection path, represented as \
          forward-slash-separated ",
         "collections where `//` targets the user's personal library root. ",
         "Distinct from Zotero collection keys."
-    )
+    ),
+    json
 );
 
 impl CollectionPath {
@@ -109,31 +60,40 @@ impl CollectionPath {
     }
 }
 
-string_value!(
+string_newtype!(
     TranslatorName,
     concat!(
         "Better `BibTeX` translator name or GUID, such as `Better BibTeX`, ",
         "`Better BibLaTeX`, or `Better CSL JSON`."
-    )
+    ),
+    json
 );
-string_value!(
+string_newtype!(
     AuxFilePath,
-    "Absolute filesystem path to a `LaTeX` `.aux` file."
+    "Absolute filesystem path to a `LaTeX` `.aux` file.",
+    json
 );
-string_value!(
+string_newtype!(
     ExportFilePath,
-    "Absolute filesystem path for a Better `BibTeX` auto-export output file."
+    "Absolute filesystem path for a Better `BibTeX` auto-export output file.",
+    json
 );
-string_value!(
+string_newtype!(
     CslStyleId,
     "CSL style identifier accepted by Zotero, such as `apa` or a full style \
-     URI."
+     URI.",
+    json
 );
-string_value!(
+string_newtype!(
     Locale,
-    "CSL locale identifier accepted by Zotero, such as `en-US`."
+    "CSL locale identifier accepted by Zotero, such as `en-US`.",
+    json
 );
-string_value!(SearchQuery, "Better `BibTeX` quick-search query string.");
+string_newtype!(
+    SearchQuery,
+    "Better `BibTeX` quick-search query string.",
+    json
+);
 
 /// Content type format for generated bibliography output.
 #[derive(

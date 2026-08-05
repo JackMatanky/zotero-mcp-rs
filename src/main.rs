@@ -16,11 +16,11 @@
 //! let server = ZoteroMcpServer::new(state);
 //! ```
 
+#[macro_use]
+mod macros;
 mod better_bibtex;
 mod better_notes;
 mod errors;
-#[macro_use]
-mod macros;
 mod mcp;
 mod pdf;
 mod security;
