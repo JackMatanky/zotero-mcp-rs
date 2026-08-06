@@ -20,6 +20,7 @@ gitleaks = "latest"
 "cargo:cargo-tarpaulin" = "latest"
 "cargo:cargo-watch" = "latest"
 "cargo:critcmp" = "latest"
+"cargo:cargo-sweep" = "latest"
 "cargo:https://github.com/snowmead/rust-docs-mcp" = { version = "branch:main", crate = "rust-docs-mcp" }
 "cargo:adrs" = { version = "latest", install_env = { RUSTUP_TOOLCHAIN = "nightly" } }
 
@@ -55,8 +56,8 @@ run = "cargo build"
 alias = "b"
 
 [tasks.run]
-description = "Run the server"
-run = "cargo run"
+description = "Run the MCP server"
+run = "cargo run -p zotero-mcp"
 
 [tasks.test]
 description = "Run tests with nextest"
@@ -100,9 +101,18 @@ run = "cargo doc --no-deps"
 description = "Run cargo deny audit"
 run = "cargo deny check"
 
+[tasks."boundary-check"]
+description = "Fail if rmcp/schemars leak into zotero-api's dependency tree - it must stay a protocol-agnostic domain library"
+run = '''
+if cargo tree -p zotero-api -e normal --prefix none | grep -qE '^(rmcp|schemars) '; then
+  echo "zotero-api must stay protocol-agnostic: rmcp/schemars leaked into its dependency tree" >&2
+  exit 1
+fi
+'''
+
 [tasks.verify]
-description = "Full pre-commit verification: fmt-check + clippy (all targets/features, deny warnings) + full test suite incl. doctests. Run this before yielding non-trivial changes instead of chaining raw cargo commands."
-depends = ["fmt-check", "clippy", "test-all"]
+description = "Full pre-commit verification: fmt-check + clippy (all targets/features, deny warnings) + full test suite incl. doctests + domain/protocol boundary check. Run this before yielding non-trivial changes instead of chaining raw cargo commands."
+depends = ["fmt-check", "clippy", "test-all", "boundary-check"]
 
 [tasks.ci]
 description = "Full CI pipeline (verify + supply-chain audit)"
@@ -115,6 +125,10 @@ run = "cargo tarpaulin --workspace --out html"
 [tasks.clean]
 description = "Clean build artifacts"
 run = "cargo clean"
+
+[tasks.sweep]
+description = "Prune target/ artifacts untouched for 14+ days (e.g. after a crate/package rename orphans target/debug/build/<old-name>-*/ and target/debug/deps/<old_name>-*; cargo never garbage-collects these on its own). Cheaper than `clean` - keeps recent fingerprints so the next build stays incremental."
+run = "cargo sweep --time 14"
 
 [tasks.watch]
 description = "Watch and auto-check on changes"

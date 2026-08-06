@@ -1,11 +1,16 @@
-# zotero-mcp-rs
+# zotero-rs
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server for Zotero, written in Rust.
+A Rust workspace for Zotero: a protocol-agnostic domain library
+([`zotero-api`](crates/zotero-api)) built on top of the Zotero Local API,
+Better BibTeX, Better Notes, and local semantic search, plus a
+[Model Context Protocol](https://modelcontextprotocol.io) server
+([`zotero-mcp`](crates/zotero-mcp)) and a CLI scaffold
+([`zotero-cli`](crates/zotero-cli)) built on it.
 
 ## Build & run
 
 ```bash
-cargo run
+cargo run -p zotero-mcp
 ```
 
 ## Configuration

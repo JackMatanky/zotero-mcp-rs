@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Filename:    zotero-mcp-rs/clippy.toml
+# Filename:    zotero-rs/clippy.toml
 # Docs:        https://doc.rust-lang.org/clippy/configuration.html
 # Description: Configuration for clippy lints, including complexity thresholds
 #              and project-specific valid identifiers.
