@@ -236,16 +236,18 @@ pub(crate) struct SearchByCitationKeyArgs {
 /// Arguments for the `advanced` action of `zotero_search`.
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct AdvancedSearchArgs {
-    /// List of search conditions ([`SearchCondition`]).
+    /// List of search conditions
+    /// ([`SearchCondition`](zotero_api::SearchCondition)).
     conditions: Vec<SearchConditionArg>,
-    /// Match mode: `"all"` ([`JoinMode::All`], AND, default) or `"any"`
-    /// ([`JoinMode::Any`], OR).
+    /// Match mode: `"all"` ([`JoinMode::All`](zotero_api::JoinMode::All), AND,
+    /// default) or `"any"` ([`JoinMode::Any`](zotero_api::JoinMode::Any),
+    /// OR).
     join_mode: Option<JoinModeArg>,
-    /// Sort field ([`SortField`]): `"dateAdded"`, `"dateModified"`, `"title"`,
-    /// `"date"`, or `"creator"`.
+    /// Sort field ([`SortField`](zotero_api::SortField)): `"dateAdded"`,
+    /// `"dateModified"`, `"title"`, `"date"`, or `"creator"`.
     sort_by: Option<SortFieldArg>,
-    /// Sort direction: `"asc"` or `"desc"` ([`SortDirection`], default:
-    /// `"asc"`).
+    /// Sort direction: `"asc"` or `"desc"`
+    /// ([`SortDirection`](zotero_api::SortDirection), default: `"asc"`).
     sort_direction: Option<SortDirectionArg>,
     /// Zero-based offset into the full result set (default: 0).
     start: Option<usize>,

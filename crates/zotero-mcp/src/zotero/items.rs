@@ -205,7 +205,8 @@ pub(crate) struct AddByIdentifierArgs {
     kind: IdentifierKindArg,
     /// The DOI, arXiv ID, or ISBN to resolve.
     identifier: String,
-    /// Optional collection key ([`CollectionKey`]) to file the new item into.
+    /// Optional collection key ([`CollectionKey`](zotero_api::CollectionKey))
+    /// to file the new item into.
     collection_key: Option<String>,
 }
 

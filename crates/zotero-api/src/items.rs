@@ -238,8 +238,7 @@ impl ZoteroClient<'_> {
     /// Updates specific metadata fields of an existing library item via JSON
     /// patch fields.
     ///
-    /// Checks write permissions via
-    /// [`AppState::check_write_permission`](crate::state::AppState::check_write_permission)
+    /// Checks write permissions via [`AppState`]'s write permission check
     /// before sending a `PATCH` request to `<prefix>/items/<item_key>` with
     /// the supplied JSON object. If Zotero returns an empty response body
     /// (common in local write sync), this method refetches the item via

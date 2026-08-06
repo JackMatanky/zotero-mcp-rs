@@ -173,7 +173,7 @@ impl<'a> BetterBibtexClient<'a> {
     /// # Errors
     ///
     /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled
-    ///   in [`AppState`](crate::state::AppState).
+    ///   in [`AppState`].
     /// - [`ZoteroApiError::BetterBibTeX`] if the JSON-RPC call fails or returns
     ///   an RPC error.
     /// - [`ZoteroApiError::Network`] if transport failures occur.

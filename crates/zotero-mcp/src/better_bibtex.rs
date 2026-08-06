@@ -140,7 +140,7 @@ pub(crate) struct BibliographyArgs {
     /// Citation keys ([`CitationKey`]) to format.
     pub(crate) citekeys: Vec<String>,
     /// Optional Better `BibTeX` bibliography format settings
-    /// ([`BibliographyFormat`]).
+    /// ([`BibliographyFormat`](zotero_api::BibliographyFormat)).
     pub(crate) format: Option<BibliographyFormatArgs>,
 }
 

@@ -135,8 +135,7 @@ impl ZoteroClient<'_> {
     /// Creates a new collection with the given `name` and optional
     /// `parent_key`.
     ///
-    /// Checks write permissions via
-    /// [`AppState::check_write_permission`](crate::state::AppState::check_write_permission)
+    /// Checks write permissions via [`AppState`]'s write permission check
     /// and posts a single-element creation array to `POST
     /// <prefix>/collections`.
     ///

@@ -86,7 +86,7 @@ pub(crate) struct SynthesizeAnnotationsArgs {
 pub(crate) struct CreateAnnotationArgs {
     /// Key of the parent PDF attachment ([`ItemKey`]).
     parent_attachment_key: String,
-    /// Type of annotation ([`AnnotationType`]).
+    /// Type of annotation ([`AnnotationType`](zotero_api::AnnotationType)).
     annotation_type: String,
     /// Selected text (required for highlight/underline, omitted for note).
     text: Option<String>,

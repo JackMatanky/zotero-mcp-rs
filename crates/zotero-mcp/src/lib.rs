@@ -1,6 +1,6 @@
 //! Model Context Protocol server exposing a Zotero library over stdio.
 //!
-//! Wires the [`ZoteroMcpServer`] tool router to three backends: the Zotero
+//! Wires the `ZoteroMcpServer` tool router to three backends: the Zotero
 //! Local HTTP API, the Better `BibTeX` JSON-RPC API, and the Better Notes
 //! companion bridge. Communicates with MCP clients over standard input and
 //! output (stdio) using JSON-RPC ([`rmcp::transport::stdio`]); all diagnostic
@@ -27,7 +27,7 @@ use zotero_api::AppState;
 /// Runs the Zotero MCP server binary.
 ///
 /// Initializes the [`tracing`] subscriber to output strictly to standard error,
-/// constructs the shared [`AppState`], builds the [`ZoteroMcpServer`], and
+/// constructs the shared [`AppState`], builds `ZoteroMcpServer`, and
 /// connects to MCP clients over stdio.
 ///
 /// # Errors

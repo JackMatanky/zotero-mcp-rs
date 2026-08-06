@@ -91,8 +91,7 @@ impl<'a> BetterNotesClient<'a> {
     /// Converts a `markdown` string into a Zotero HTML note attached to
     /// `parent_key`.
     ///
-    /// Checks write permissions via
-    /// [`AppState::check_write_permission`](crate::state::AppState::check_write_permission),
+    /// Checks write permissions via [`AppState`]'s write permission check,
     /// validates `markdown` string length against security size caps, and
     /// posts the note conversion payload to the Better Notes bridge server.
     ///

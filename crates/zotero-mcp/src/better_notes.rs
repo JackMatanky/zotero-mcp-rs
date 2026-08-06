@@ -60,8 +60,8 @@ impl From<NoteExportFormatArg> for zotero_api::NoteExportFormat {
 pub(crate) struct NoteExportArgs {
     /// Note item key ([`ItemKey`]) to export.
     pub(crate) item_key: String,
-    /// Output format ([`NoteExportFormat`]), defaulting to Markdown when
-    /// [`None`].
+    /// Output format ([`NoteExportFormat`](zotero_api::NoteExportFormat)),
+    /// defaulting to Markdown when [`None`].
     pub(crate) format: Option<NoteExportFormatArg>,
 }
 

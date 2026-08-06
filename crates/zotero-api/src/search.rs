@@ -335,8 +335,7 @@ impl ZoteroClient<'_> {
     ///   value).
     /// * `join_mode` - [`JoinMode::All`] (AND) or [`JoinMode::Any`] (OR).
     /// * `sort` - Optional field to sort results by.
-    /// * `sort_direction` - [`SortDirection::Ascending`] or
-    ///   [`SortDirection::Descending`].
+    /// * `sort_direction` - [`SortDirection::Asc`] or [`SortDirection::Desc`].
     /// * `offset` - 0-based result offset for pagination.
     /// * `limit` - Maximum number of items to return.
     ///
