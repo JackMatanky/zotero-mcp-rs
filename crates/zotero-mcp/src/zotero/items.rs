@@ -642,7 +642,7 @@ impl ZoteroMcpServer {
         args: AddByIdentifierArgs,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let client = ZoteroClient::new(&self.state);
-        let mut draft = match zotero_api::metadata::resolve_metadata(
+        let mut draft = match zotero_api::resolve_metadata(
             &self.state,
             args.kind.into(),
             &args.identifier,

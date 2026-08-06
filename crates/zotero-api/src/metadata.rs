@@ -14,7 +14,7 @@
 //!
 //! ```no_run
 //! # use zotero_api::AppState;
-//! # use zotero_api::metadata::{resolve_metadata, IdentifierKind};
+//! # use zotero_api::{resolve_metadata, IdentifierKind};
 //! # async fn run(
 //! #     state: &AppState,
 //! # ) -> Result<(), Box<dyn std::error::Error>> {

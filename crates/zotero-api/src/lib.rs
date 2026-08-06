@@ -5,27 +5,27 @@
 mod macros;
 pub mod better_bibtex;
 pub mod better_notes;
-pub mod bibtex;
+pub(crate) mod bibtex;
 pub mod client;
-pub mod collections;
-pub mod deleted;
+pub(crate) mod collections;
+pub(crate) mod deleted;
 pub mod errors;
-pub mod items;
-pub mod keys;
-pub mod metadata;
-pub mod notes;
-pub mod objects;
+pub(crate) mod items;
+pub(crate) mod keys;
+pub(crate) mod metadata;
+pub(crate) mod notes;
+pub(crate) mod objects;
 pub mod pdf;
-pub mod relations;
-pub mod search;
-pub mod searches;
+pub(crate) mod relations;
+pub(crate) mod search;
+pub(crate) mod searches;
 pub mod security;
 pub mod semantic_search;
-pub mod settings;
+pub(crate) mod settings;
 pub mod sqlite;
-pub mod state;
-pub mod tags;
-pub mod types;
+pub(crate) mod state;
+pub(crate) mod tags;
+pub(crate) mod types;
 
 pub use better_bibtex::{
     AutoExportAddRequest, AuxFilePath, BetterBibtexClient,
@@ -40,7 +40,7 @@ pub use deleted::DeletedObjectsResponse;
 pub use errors::ZoteroApiError;
 pub use items::TrashAction;
 pub use keys::{CitationKey, CollectionKey, ItemKey, LibraryVersion, TagName};
-pub use metadata::IdentifierKind;
+pub use metadata::{IdentifierKind, ItemDraft, resolve_metadata};
 pub use notes::{AnnotationDraft, AnnotationPosition};
 pub use objects::{
     BatchWriteResponse, ItemLinks, ItemMeta, LibraryInfo, ZoteroCollection,
