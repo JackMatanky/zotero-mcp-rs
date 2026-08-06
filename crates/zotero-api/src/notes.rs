@@ -14,7 +14,7 @@
 //! ```no_run
 //! # use zotero_api::errors::ZoteroApiError;
 //! # use zotero_api::AppState;
-//! # use zotero_api::zotero::{ItemKey, ZoteroClient};
+//! # use zotero_api::{ItemKey, ZoteroClient};
 //! # async fn example() -> Result<(), ZoteroApiError> {
 //! let state = AppState::from_env();
 //! let client = ZoteroClient::new(&state);
@@ -28,10 +28,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    client::ZoteroClient,
     errors::ZoteroApiError,
-    zotero::{
-        AnnotationType, ItemKey, ItemType, ZoteroItem, client::ZoteroClient,
-    },
+    keys::ItemKey,
+    objects::ZoteroItem,
+    types::{AnnotationType, ItemType},
 };
 
 /// Serialized Zotero annotation position payload.
@@ -92,7 +93,11 @@ impl ZoteroClient<'_> {
         note_content: &str,
     ) -> Result<ZoteroItem, ZoteroApiError> {
         self.state.check_write_permission()?;
-        let url = format!("{}/users/0/items", self.state.zotero_api_url());
+        let url = format!(
+            "{}{}/items",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
         let payload = serde_json::json!([{
             "itemType": ItemType::Note,
             "parentItem": parent_item_key,
@@ -119,7 +124,11 @@ impl ZoteroClient<'_> {
     ) -> Result<ZoteroItem, ZoteroApiError> {
         self.state.check_write_permission()?;
         let position = draft.position.as_zotero_string();
-        let url = format!("{}/users/0/items", self.state.zotero_api_url());
+        let url = format!(
+            "{}{}/items",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
         let payload = serde_json::json!([{
             "itemType": ItemType::Annotation,
             "parentItem": draft.parent_attachment_key,
@@ -248,11 +257,11 @@ mod tests {
 
     use super::*;
     use crate::{
-        state::AppState,
-        zotero::{
-            client::ZoteroClient,
+        client::{
+            ZoteroClient,
             test_http::{MockServer, http_response, request_body},
         },
+        state::AppState,
     };
 
     fn state(zotero_api_url: impl AsRef<str>, write_enabled: bool) -> AppState {
@@ -302,8 +311,9 @@ mod tests {
 
     mod annotations {
         use super::*;
-        use crate::zotero::{
-            AnnotationType, LibraryVersion, objects::ZoteroItemData,
+        use crate::{
+            keys::LibraryVersion, objects::ZoteroItemData,
+            types::AnnotationType,
         };
 
         mod formatting {
@@ -315,9 +325,9 @@ mod tests {
                 let annotation = ZoteroItem {
                     key: ItemKey::from("ANN00001"),
                     version: LibraryVersion(1),
-                    library: serde_json::Value::Null,
-                    links: serde_json::Value::Null,
-                    meta: serde_json::Value::Null,
+                    library: None,
+                    links: None,
+                    meta: None,
                     data: ZoteroItemData {
                         key: ItemKey::from("ANN00001"),
                         version: LibraryVersion(1),
@@ -345,9 +355,9 @@ mod tests {
                 let note_item = ZoteroItem {
                     key: ItemKey::from("NOTE0001"),
                     version: LibraryVersion(1),
-                    library: serde_json::Value::Null,
-                    links: serde_json::Value::Null,
-                    meta: serde_json::Value::Null,
+                    library: None,
+                    links: None,
+                    meta: None,
                     data: ZoteroItemData {
                         key: ItemKey::from("NOTE0001"),
                         version: LibraryVersion(1),
@@ -370,9 +380,9 @@ mod tests {
                 let main_item = ZoteroItem {
                     key: ItemKey::from("ITEM0001"),
                     version: LibraryVersion(1),
-                    library: serde_json::Value::Null,
-                    links: serde_json::Value::Null,
-                    meta: serde_json::Value::Null,
+                    library: None,
+                    links: None,
+                    meta: None,
                     data: ZoteroItemData {
                         key: ItemKey::from("ITEM0001"),
                         version: LibraryVersion(1),
@@ -383,9 +393,9 @@ mod tests {
                 let child_note = ZoteroItem {
                     key: ItemKey::from("NOTE0001"),
                     version: LibraryVersion(1),
-                    library: serde_json::Value::Null,
-                    links: serde_json::Value::Null,
-                    meta: serde_json::Value::Null,
+                    library: None,
+                    links: None,
+                    meta: None,
                     data: ZoteroItemData {
                         key: ItemKey::from("NOTE0001"),
                         version: LibraryVersion(1),
@@ -410,9 +420,9 @@ mod tests {
                 let item = ZoteroItem {
                     key: ItemKey::from("ITEM0001"),
                     version: LibraryVersion(1),
-                    library: serde_json::Value::Null,
-                    links: serde_json::Value::Null,
-                    meta: serde_json::Value::Null,
+                    library: None,
+                    links: None,
+                    meta: None,
                     data: ZoteroItemData {
                         key: ItemKey::from("ITEM0001"),
                         version: LibraryVersion(1),

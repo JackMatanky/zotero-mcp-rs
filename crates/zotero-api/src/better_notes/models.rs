@@ -34,7 +34,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::zotero::ItemKey;
+use crate::keys::ItemKey;
 
 string_newtype!(
     pub TemplateName,

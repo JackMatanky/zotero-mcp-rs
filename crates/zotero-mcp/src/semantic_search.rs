@@ -170,7 +170,7 @@ mod tests {
 
     use zotero_api::{
         AppState, Embedding, EmbeddingProvider, ItemKey, SemanticIndex,
-        zotero::test_http::{MockServer, http_response},
+        client::test_http::{MockServer, http_response},
     };
 
     use super::*;

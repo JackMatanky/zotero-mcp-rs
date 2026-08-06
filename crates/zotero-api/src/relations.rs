@@ -18,7 +18,7 @@
 //!
 //! ```no_run
 //! # use zotero_api::AppState;
-//! # use zotero_api::zotero::{ItemKey, ZoteroClient};
+//! # use zotero_api::{ItemKey, ZoteroClient};
 //! # async fn run(
 //! #     state: &AppState,
 //! #     key_a: &ItemKey,
@@ -37,8 +37,10 @@ use std::collections::BTreeSet;
 use serde::Serialize;
 
 use crate::{
+    client::ZoteroClient,
     errors::ZoteroApiError,
-    zotero::{ItemKey, ItemType, client::ZoteroClient, keys::RelationUri},
+    keys::{ItemKey, RelationUri},
+    types::ItemType,
 };
 
 /// A single item linked to another via a `dc:relation` URI.
@@ -435,10 +437,10 @@ mod tests {
     }
 
     mod fixtures {
-        use crate::state::AppState;
-        pub(super) use crate::zotero::test_http::{
+        pub(super) use crate::client::test_http::{
             MockServer, http_response, request_body,
         };
+        use crate::state::AppState;
 
         /// Builds an [`AppState`] fixture for testing with `zotero_api_url` and
         /// `write_enabled`.
@@ -478,7 +480,7 @@ mod tests {
             fixtures::{MockServer, http_response, test_state},
             *,
         };
-        use crate::zotero::{ItemKey, ItemType};
+        use crate::{keys::ItemKey, types::ItemType};
 
         #[tokio::test]
         async fn resolves_related_items_and_skips_unresolvable_keys() {
@@ -576,7 +578,7 @@ mod tests {
             },
             *,
         };
-        use crate::zotero::ItemKey;
+        use crate::keys::ItemKey;
 
         #[tokio::test]
         async fn patches_both_items_with_each_others_uri() {
@@ -691,7 +693,7 @@ mod tests {
             },
             *,
         };
-        use crate::zotero::ItemKey;
+        use crate::keys::ItemKey;
 
         #[tokio::test]
         async fn patches_both_items_removing_each_others_uri() {

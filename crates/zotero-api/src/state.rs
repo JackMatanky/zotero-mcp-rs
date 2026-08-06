@@ -18,7 +18,7 @@
 use std::{
     env,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::Duration,
 };
 
@@ -32,7 +32,7 @@ use crate::{
         EmbeddingProvider, FastEmbedProvider, SemanticIndex, resolve_db_path,
         resolve_model_cache_dir,
     },
-    zotero::{LocalZoteroDb, find_zotero_db},
+    sqlite::{LocalZoteroDb, find_zotero_db},
 };
 
 const RETRY_MAX_ATTEMPTS: u32 = 3;
@@ -106,6 +106,12 @@ pub struct AppState {
     semantic_index: Arc<OnceCell<SemanticIndex>>,
     /// Cached embedding provider, loaded lazily on first use.
     embedding_provider: Arc<OnceCell<Arc<dyn EmbeddingProvider>>>,
+    /// Optional Zotero Server ID captured from `Zotero-Server-ID` response
+    /// headers.
+    server_id: Arc<RwLock<Option<String>>>,
+    /// Optional local API write authorization key obtained via `POST
+    /// /api/local/authorize`.
+    local_write_key: Arc<RwLock<Option<String>>>,
 }
 
 impl AppState {
@@ -172,6 +178,10 @@ impl AppState {
             env::var_os("ZOTERO_SEMANTIC_DB_PATH").map(PathBuf::from);
         let connector_compat = env::var("ZOTERO_CONNECTOR_COMPAT")
             .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+        let server_id = env::var("ZOTERO_SERVER_ID").ok();
+        let local_write_key = env::var("ZOTERO_LOCAL_WRITE_KEY")
+            .or_else(|_| env::var("ZOTERO_WRITE_KEY"))
+            .ok();
 
         Self {
             client,
@@ -191,6 +201,8 @@ impl AppState {
             semantic_db_path,
             semantic_index: Arc::new(OnceCell::new()),
             embedding_provider: Arc::new(OnceCell::new()),
+            server_id: Arc::new(RwLock::new(server_id)),
+            local_write_key: Arc::new(RwLock::new(local_write_key)),
         }
     }
 
@@ -635,6 +647,52 @@ impl AppState {
         self.connector_compat
     }
 
+    /// Returns the active Zotero Server ID, if captured.
+    #[must_use]
+    #[inline]
+    pub fn server_id(&self) -> Option<String> {
+        self.server_id.read().ok().and_then(|guard| guard.clone())
+    }
+
+    /// Sets or updates the active Zotero Server ID.
+    #[inline]
+    pub fn set_server_id<S: Into<String>>(&self, id: S) {
+        if let Ok(mut guard) = self.server_id.write() {
+            *guard = Some(id.into());
+        }
+    }
+
+    /// Returns the local API write authorization key, if set.
+    #[must_use]
+    #[inline]
+    pub fn local_write_key(&self) -> Option<String> {
+        self.local_write_key.read().ok().and_then(|guard| guard.clone())
+    }
+
+    /// Sets or updates the local API write authorization key.
+    #[inline]
+    pub fn set_local_write_key<S: Into<String>>(&self, key: S) {
+        if let Ok(mut guard) = self.local_write_key.write() {
+            *guard = Some(key.into());
+        }
+    }
+
+    /// Builder method to override server ID.
+    #[must_use]
+    #[inline]
+    pub fn with_server_id<S: Into<String>>(self, id: S) -> Self {
+        self.set_server_id(id);
+        self
+    }
+
+    /// Builder method to override local write key.
+    #[must_use]
+    #[inline]
+    pub fn with_local_write_key<S: Into<String>>(self, key: S) -> Self {
+        self.set_local_write_key(key);
+        self
+    }
+
     /// Returns the optional explicit path to `zotero.sqlite`.
     pub(crate) fn zotero_db_path(&self) -> Option<&Path> {
         self.zotero_db_path.as_deref()
@@ -691,6 +749,8 @@ impl AppState {
             local_zotero_db: Self::local_zotero_db_cache(),
             semantic_db_path: None,
             semantic_index: Arc::new(OnceCell::new()),
+            server_id: Arc::new(RwLock::new(None)),
+            local_write_key: Arc::new(RwLock::new(None)),
             embedding_provider: Arc::new(OnceCell::new()),
         }
     }

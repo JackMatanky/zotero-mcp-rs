@@ -22,7 +22,7 @@
 //!
 //! use zotero_api::{
 //!     semantic_search::{EmbeddingProvider, SemanticIndex, index_library},
-//!     zotero::ZoteroClient,
+//!     client::ZoteroClient,
 //! };
 //!
 //! # async fn run(
@@ -40,13 +40,15 @@ use std::sync::Arc;
 use serde::Serialize;
 
 use crate::{
+    client::ZoteroClient,
     errors::ZoteroApiError,
+    objects::ZoteroItem,
     semantic_search::{
         EmbeddingProvider, MAX_CHUNK_CHARS, MAX_INDEXABLE_CHARS,
         chunking::chunk_text,
         store::{NewChunk, SemanticIndex},
     },
-    zotero::{ItemType, ZoteroClient, ZoteroItem},
+    types::ItemType,
 };
 
 /// Per-item outcome of the library scan, used to bump exactly one
@@ -266,9 +268,9 @@ mod tests {
 
     use super::*;
     use crate::{
+        client::test_http::{MockServer, http_response},
         semantic_search::Embedding,
         state::AppState,
-        zotero::test_http::{MockServer, http_response},
     };
 
     /// Deterministic test [`EmbeddingProvider`]: every text embeds to the

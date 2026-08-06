@@ -35,8 +35,8 @@ use serde::Serialize;
 
 use crate::{
     errors::ZoteroApiError,
+    keys::ItemKey,
     semantic_search::{EmbeddingProvider, store::StoredChunk},
-    zotero::ItemKey,
 };
 
 /// Represents a semantic search match for a single item in the library.

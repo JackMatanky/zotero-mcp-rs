@@ -14,7 +14,7 @@
 //!
 //! ```no_run
 //! # use zotero_api::AppState;
-//! # use zotero_api::zotero::metadata::{resolve_metadata, IdentifierKind};
+//! # use zotero_api::metadata::{resolve_metadata, IdentifierKind};
 //! # async fn run(
 //! #     state: &AppState,
 //! # ) -> Result<(), Box<dyn std::error::Error>> {
@@ -33,10 +33,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     errors::ZoteroApiError,
+    keys::CollectionKey,
+    objects::ZoteroCreator,
     state::AppState,
-    zotero::{
-        CollectionKey, ItemType, objects::ZoteroCreator, types::CreatorType,
-    },
+    types::{CreatorType, ItemType},
 };
 
 /// Zotero item payload resolved from a DOI, arXiv ID, or ISBN lookup.
@@ -332,7 +332,7 @@ mod tests {
     use super::*;
 
     mod fixtures {
-        pub(super) use crate::zotero::test_http::{MockServer, http_response};
+        pub(super) use crate::client::test_http::{MockServer, http_response};
     }
 
     use fixtures::*;

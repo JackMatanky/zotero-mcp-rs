@@ -17,7 +17,7 @@
 //! ```no_run
 //! # use zotero_api::errors::ZoteroApiError;
 //! # use zotero_api::AppState;
-//! # use zotero_api::zotero::ZoteroClient;
+//! # use zotero_api::ZoteroClient;
 //! # async fn example() -> Result<(), ZoteroApiError> {
 //! let state = AppState::from_env();
 //! let client = ZoteroClient::new(&state);
@@ -29,8 +29,10 @@
 use std::collections::BTreeSet;
 
 use crate::{
+    client::ZoteroClient,
     errors::ZoteroApiError,
-    zotero::{ItemKey, TagName, client::ZoteroClient, objects::ZoteroTag},
+    keys::{ItemKey, TagName},
+    objects::ZoteroTag,
 };
 
 impl ZoteroClient<'_> {
@@ -48,8 +50,9 @@ impl ZoteroClient<'_> {
         limit: usize,
     ) -> Result<Vec<TagName>, ZoteroApiError> {
         let url = format!(
-            "{}/users/0/tags?limit={}",
+            "{}{}/tags?limit={}",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             limit
         );
         let raw: Vec<serde_json::Value> = self.get_json(&url).await?;
@@ -151,8 +154,9 @@ impl ZoteroClient<'_> {
             .collect::<Vec<_>>()
             .join(" || ");
         let url = format!(
-            "{}/users/0/tags?tag={}",
+            "{}{}/tags?tag={}",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             joined
         );
         self.delete(&url, version).await
@@ -187,7 +191,7 @@ pub(crate) fn diff_tags(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::zotero::types::TagOrigin;
+    use crate::types::TagOrigin;
 
     mod diff_tags {
         use pretty_assertions::assert_eq;

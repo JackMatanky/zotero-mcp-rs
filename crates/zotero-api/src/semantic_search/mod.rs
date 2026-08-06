@@ -3,7 +3,7 @@
 //! server owns.
 //!
 //! This module operates independently of Zotero's primary `zotero.sqlite`
-//! database, consuming [`ZoteroClient`](crate::zotero::ZoteroClient) to scan
+//! database, consuming [`ZoteroClient`](crate::client::ZoteroClient) to scan
 //! the library for items and storing generated text chunks and vector
 //! embeddings in a dedicated `SQLite` database.
 //!

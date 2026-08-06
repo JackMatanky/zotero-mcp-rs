@@ -164,7 +164,7 @@ mod tests {
 
     mod sqlite_tools {
         use pretty_assertions::assert_eq;
-        use zotero_api::zotero::test_sqlite::seed_zotero_db as seed_db;
+        use zotero_api::sqlite::test_sqlite::seed_zotero_db as seed_db;
 
         use super::*;
 

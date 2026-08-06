@@ -17,7 +17,7 @@
 //! # Examples
 //!
 //! ```ignore
-//! use zotero_api::zotero::{ItemKey, RelationUri};
+//! use zotero_api::{ItemKey, relations::RelationUri};
 //!
 //! let item_key = ItemKey::from("ABC12345");
 //! let relation_uri = RelationUri::from(&item_key);

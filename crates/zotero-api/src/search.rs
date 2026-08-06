@@ -26,7 +26,7 @@
 //!
 //! ```no_run
 //! # use zotero_api::errors::ZoteroApiError;
-//! # use zotero_api::zotero::ZoteroClient;
+//! # use zotero_api::ZoteroClient;
 //! # async fn run(
 //! #     client: &ZoteroClient<'_>,
 //! # ) -> Result<(), ZoteroApiError> {
@@ -39,12 +39,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    client::{ZoteroClient, add_pagination},
     errors::ZoteroApiError,
-    zotero::{
-        CitationKey, CollectionKey, ItemKey, ItemType, TagName, ZoteroItem,
-        client::{ZoteroClient, add_pagination},
-        objects::ZoteroCreator,
-    },
+    keys::{CitationKey, CollectionKey, ItemKey, TagName},
+    objects::{ZoteroCreator, ZoteroItem},
+    types::ItemType,
 };
 
 /// Searchable item field in structured searches.
@@ -230,11 +229,16 @@ impl ZoteroClient<'_> {
     ) -> Result<SearchPage<ZoteroItem>, ZoteroApiError> {
         let base = match collection_key {
             Some(col) => format!(
-                "{}/users/0/collections/{}/items",
+                "{}{}/collections/{}/items",
                 self.state.zotero_api_url(),
+                self.target_prefix(),
                 col
             ),
-            None => format!("{}/users/0/items", self.state.zotero_api_url()),
+            None => format!(
+                "{}{}/items",
+                self.state.zotero_api_url(),
+                self.target_prefix()
+            ),
         };
         let encoded_q = urlencoding::encode(query);
         let url = format!(
@@ -264,8 +268,9 @@ impl ZoteroClient<'_> {
     ) -> Result<Vec<ZoteroItem>, ZoteroApiError> {
         let encoded_tag = urlencoding::encode(tag.as_str());
         let url = format!(
-            "{}/users/0/items?tag={}&limit={}&itemType=-note",
+            "{}{}/items?tag={}&limit={}&itemType=-note",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             encoded_tag,
             limit
         );
@@ -446,7 +451,11 @@ impl ZoteroClient<'_> {
             }
         }
 
-        let mut url = format!("{}/users/0/items", self.state.zotero_api_url());
+        let mut url = format!(
+            "{}{}/items",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
         let mut params = Vec::new();
         if let Some(q) = q {
             params.push(format!("q={}", urlencoding::encode(q)));
@@ -825,14 +834,15 @@ impl ZoteroClient<'_> {
     ) -> Result<LibraryCoveragePage, ZoteroApiError> {
         let base = match collection_key {
             Some(col) => format!(
-                "{}/users/0/collections/{}/items",
+                "{}{}/collections/{}/items",
                 self.state.zotero_api_url(),
+                self.target_prefix(),
                 col
             ),
             None => format!(
-                "{}/users/0/items?itemType=-note&sort=dateModified&\
-                 direction=desc",
-                self.state.zotero_api_url()
+                "{}{}/items?itemType=-note&sort=dateModified&direction=desc",
+                self.state.zotero_api_url(),
+                self.target_prefix()
             ),
         };
         let page_url = add_pagination(&base, offset, limit);
@@ -1050,8 +1060,10 @@ fn find_duplicate_groups(items: &[ZoteroItem]) -> Vec<DuplicateGroup> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::zotero::{
-        ItemKey, ItemType, LibraryVersion, objects::ZoteroItemData,
+    use crate::{
+        keys::{ItemKey, LibraryVersion},
+        objects::{ZoteroItemData, ZoteroTag},
+        types::{ItemType, TagOrigin},
     };
 
     mod deserialization {
@@ -1098,9 +1110,9 @@ mod tests {
             ZoteroItem {
                 key: ItemKey::from("ITEM0001"),
                 version: LibraryVersion(1),
-                library: serde_json::Value::Null,
-                links: serde_json::Value::Null,
-                meta: serde_json::Value::Null,
+                library: None,
+                links: None,
+                meta: None,
                 data: ZoteroItemData {
                     key: ItemKey::from("ITEM0001"),
                     version: LibraryVersion(1),
@@ -1137,9 +1149,9 @@ mod tests {
             let mut item =
                 make_item(Some("Mapped Title"), None, Some("10.1000/x"));
             item.data.extra = Some("Citation Key: mapped2024".to_owned());
-            item.data.tags = vec![crate::zotero::objects::ZoteroTag {
+            item.data.tags = vec![ZoteroTag {
                 tag: TagName::from("Methods"),
-                origin: crate::zotero::types::TagOrigin::User,
+                origin: TagOrigin::User,
             }];
             let cases = [
                 (SearchField::ItemType, "journalArticle"),
@@ -1330,9 +1342,9 @@ mod tests {
             ZoteroItem {
                 key: ItemKey::from(key),
                 version: LibraryVersion(1),
-                library: serde_json::Value::Null,
-                links: serde_json::Value::Null,
-                meta: serde_json::Value::Null,
+                library: None,
+                links: None,
+                meta: None,
                 data: ZoteroItemData {
                     key: ItemKey::from(key),
                     version: LibraryVersion(1),
@@ -1385,15 +1397,15 @@ mod tests {
         use pretty_assertions::assert_eq;
 
         use super::*;
-        use crate::zotero::{ItemKey, ItemType, objects::ZoteroItemData};
+        use crate::{keys::ItemKey, objects::ZoteroItemData, types::ItemType};
 
         fn item(key: &str, title: &str, date: &str) -> ZoteroItem {
             ZoteroItem {
                 key: ItemKey::from(key),
                 version: LibraryVersion(1),
-                library: serde_json::Value::Null,
-                links: serde_json::Value::Null,
-                meta: serde_json::Value::Null,
+                library: None,
+                links: None,
+                meta: None,
                 data: ZoteroItemData {
                     key: ItemKey::from(key),
                     version: LibraryVersion(1),
@@ -1441,13 +1453,13 @@ mod tests {
 
         use super::*;
         use crate::{
-            state::AppState,
-            zotero::{
-                client::ZoteroClient,
+            client::{
+                ZoteroClient,
                 test_http::{
                     MockServer, http_response, http_response_with_headers,
                 },
             },
+            state::AppState,
         };
 
         fn items_page(items: &[serde_json::Value]) -> String {
@@ -2006,9 +2018,9 @@ mod tests {
                 ZoteroItem {
                     key: ItemKey::from(key),
                     version: LibraryVersion(1),
-                    library: serde_json::Value::Null,
-                    links: serde_json::Value::Null,
-                    meta: serde_json::Value::Null,
+                    library: None,
+                    links: None,
+                    meta: None,
                     data: ZoteroItemData {
                         key: ItemKey::from(key),
                         version: LibraryVersion(1),
@@ -2024,9 +2036,9 @@ mod tests {
                 let item = ZoteroItem {
                     key: ItemKey::from("ITEM0001"),
                     version: LibraryVersion(1),
-                    library: serde_json::Value::Null,
-                    links: serde_json::Value::Null,
-                    meta: serde_json::Value::Null,
+                    library: None,
+                    links: None,
+                    meta: None,
                     data: ZoteroItemData {
                         key: ItemKey::from("ITEM0001"),
                         version: LibraryVersion(1),
@@ -2039,9 +2051,9 @@ mod tests {
                 let attachment = ZoteroItem {
                     key: ItemKey::from("ATTACH01"),
                     version: LibraryVersion(1),
-                    library: serde_json::Value::Null,
-                    links: serde_json::Value::Null,
-                    meta: serde_json::Value::Null,
+                    library: None,
+                    links: None,
+                    meta: None,
                     data: ZoteroItemData {
                         key: ItemKey::from("ATTACH01"),
                         version: LibraryVersion(1),
@@ -2053,9 +2065,9 @@ mod tests {
                 let note = ZoteroItem {
                     key: ItemKey::from("NOTE0001"),
                     version: LibraryVersion(1),
-                    library: serde_json::Value::Null,
-                    links: serde_json::Value::Null,
-                    meta: serde_json::Value::Null,
+                    library: None,
+                    links: None,
+                    meta: None,
                     data: ZoteroItemData {
                         key: ItemKey::from("NOTE0001"),
                         version: LibraryVersion(1),
@@ -2117,9 +2129,9 @@ mod tests {
                 let attachment = ZoteroItem {
                     key: ItemKey::from("ATTACH01"),
                     version: LibraryVersion(1),
-                    library: serde_json::Value::Null,
-                    links: serde_json::Value::Null,
-                    meta: serde_json::Value::Null,
+                    library: None,
+                    links: None,
+                    meta: None,
                     data: ZoteroItemData {
                         key: ItemKey::from("ATTACH01"),
                         version: LibraryVersion(1),
@@ -2219,8 +2231,8 @@ mod tests {
         use pretty_assertions::assert_eq;
 
         use super::*;
-        use crate::zotero::{
-            client::ZoteroClient,
+        use crate::client::{
+            ZoteroClient,
             test_http::{MockServer, http_response},
         };
 
@@ -2232,9 +2244,9 @@ mod tests {
             ZoteroItem {
                 key: ItemKey::from(key),
                 version: LibraryVersion(1),
-                library: serde_json::Value::Null,
-                links: serde_json::Value::Null,
-                meta: serde_json::Value::Null,
+                library: None,
+                links: None,
+                meta: None,
                 data: ZoteroItemData {
                     key: ItemKey::from(key),
                     version: LibraryVersion(1),

@@ -16,7 +16,7 @@
 //!
 //! ```no_run
 //! # use zotero_api::AppState;
-//! # use zotero_api::zotero::ZoteroClient;
+//! # use zotero_api::ZoteroClient;
 //! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 //! let state = AppState::from_env();
 //! let client = ZoteroClient::new(&state);
@@ -29,12 +29,13 @@
 //! ```
 
 use reqwest::Response;
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
     errors::ZoteroApiError,
+    keys::LibraryVersion,
+    objects::{LocalApiStatus, ZoteroItem},
     state::AppState,
-    zotero::{LibraryVersion, ZoteroItem, objects::LocalApiStatus},
 };
 
 /// One page of Zotero items and the optional `Total-Results` header count.
@@ -43,6 +44,46 @@ pub(super) struct ItemsPage {
     pub(super) items: Vec<ZoteroItem>,
     /// Total number of matching items across all pages, if provided by Zotero.
     pub(super) total: Option<usize>,
+}
+
+/// Target Zotero library (User or Group).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum LibraryTarget {
+    /// User library with ID (default `User(0)` for active local user).
+    User(u64),
+    /// Group library with group ID.
+    Group(u64),
+}
+
+impl Default for LibraryTarget {
+    #[inline]
+    fn default() -> Self {
+        Self::User(0)
+    }
+}
+
+impl LibraryTarget {
+    /// Returns the URL path prefix for this library target (e.g. `/users/0` or
+    /// `/groups/12345`).
+    #[must_use]
+    #[inline]
+    pub fn target_prefix(&self) -> String {
+        match self {
+            Self::User(id) => format!("/users/{id}"),
+            Self::Group(id) => format!("/groups/{id}"),
+        }
+    }
+}
+
+/// Response payload returned by `POST /api/local/authorize`.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalAuthResponse {
+    /// Generated local API write key / token.
+    pub secret: String,
+    /// Optional backoff delay in seconds if user interaction is pending.
+    pub backoff: Option<u64>,
 }
 
 /// Client for the Zotero Local HTTP API, scoped to a single tool call.
@@ -54,6 +95,8 @@ pub struct ZoteroClient<'a> {
     /// Borrowed shared application state containing HTTP client and API
     /// configuration.
     pub(super) state: &'a AppState,
+    /// Target Zotero library scope.
+    pub(super) target: LibraryTarget,
 }
 
 impl<'a> ZoteroClient<'a> {
@@ -63,7 +106,42 @@ impl<'a> ZoteroClient<'a> {
     pub fn new(state: &'a AppState) -> Self {
         Self {
             state,
+            target: LibraryTarget::default(),
         }
+    }
+
+    /// Scopes the client to a specific [`LibraryTarget`] (User or Group).
+    #[must_use]
+    #[inline]
+    pub fn with_target(mut self, target: LibraryTarget) -> Self {
+        self.target = target;
+        self
+    }
+
+    /// Returns the active [`LibraryTarget`].
+    #[must_use]
+    #[inline]
+    pub fn target(&self) -> LibraryTarget {
+        self.target
+    }
+
+    /// Returns the target library URL prefix (e.g. `/users/0` or
+    /// `/groups/12345`).
+    #[must_use]
+    #[inline]
+    pub fn target_prefix(&self) -> String {
+        self.target.target_prefix()
+    }
+
+    /// Applies local write key headers if configured in [`AppState`].
+    pub(super) fn apply_auth_headers(
+        &self,
+        mut req: reqwest::RequestBuilder,
+    ) -> reqwest::RequestBuilder {
+        if let Some(key) = self.state.local_write_key() {
+            req = req.header("Zotero-Write-Key", key);
+        }
+        req
     }
 
     /// Probes the Zotero Local API for availability.
@@ -73,10 +151,20 @@ impl<'a> ZoteroClient<'a> {
     /// rather than being propagated as an error.
     #[inline]
     pub async fn check_status(&self) -> LocalApiStatus {
-        let url =
-            format!("{}/users/0/items?limit=1", self.state.zotero_api_url());
-        match self.state.client().get(&url).send().await {
+        let url = format!(
+            "{}{}/items?limit=1",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
+        let req = self.apply_auth_headers(self.state.client().get(&url));
+        match req.send().await {
             Ok(resp) => {
+                if let Some(header_val) = resp.headers().get("zotero-server-id")
+                {
+                    if let Ok(server_id) = header_val.to_str() {
+                        self.state.set_server_id(server_id);
+                    }
+                }
                 let status = resp.status();
                 if status.is_success() {
                     LocalApiStatus {
@@ -121,6 +209,24 @@ impl<'a> ZoteroClient<'a> {
         &self,
         resp: Response,
     ) -> Result<Response, ZoteroApiError> {
+        if let Some(header_val) = resp.headers().get("zotero-server-id") {
+            if let Ok(server_id) = header_val.to_str() {
+                match self.state.server_id() {
+                    Some(expected_id) if expected_id != server_id => {
+                        return Err(ZoteroApiError::LocalApi {
+                            status: 412,
+                            message: format!(
+                                "Zotero Server ID mismatch: expected \
+                                 '{expected_id}', got '{server_id}'"
+                            ),
+                        });
+                    }
+                    None => self.state.set_server_id(server_id),
+                    _ => {}
+                }
+            }
+        }
+
         if resp.status().is_success() {
             return Ok(resp);
         }
@@ -128,6 +234,33 @@ impl<'a> ZoteroClient<'a> {
             status: resp.status().as_u16(),
             message: resp.text().await.unwrap_or_default(),
         })
+    }
+
+    /// Requests local API write authorization from Zotero via `POST
+    /// /api/local/authorize`.
+    ///
+    /// # Errors
+    ///
+    /// - [`LocalApi`]: If Zotero rejects the request.
+    /// - [`Network`]: Transport errors.
+    #[inline]
+    pub async fn request_local_authorization(
+        &self,
+        app_name: &str,
+    ) -> Result<LocalAuthResponse, ZoteroApiError> {
+        let base = self.state.zotero_api_url().trim_end_matches('/');
+        let url = if base.ends_with("/api") {
+            format!("{base}/local/authorize")
+        } else {
+            format!("{base}/api/local/authorize")
+        };
+        let body = serde_json::json!({ "appName": app_name });
+        let req = self.state.client().post(&url).json(&body);
+        let resp = self.state.send_with_retry(req).await?;
+        let auth: LocalAuthResponse =
+            self.ensure_success(resp).await?.json().await?;
+        self.state.set_local_write_key(&auth.secret);
+        Ok(auth)
     }
 
     /// Fetches JSON data from `url` and decodes the response body.
@@ -147,8 +280,8 @@ impl<'a> ZoteroClient<'a> {
         &self,
         url: &str,
     ) -> Result<T, ZoteroApiError> {
-        let resp =
-            self.state.send_with_retry(self.state.client().get(url)).await?;
+        let req = self.apply_auth_headers(self.state.client().get(url));
+        let resp = self.state.send_with_retry(req).await?;
         Ok(self.ensure_success(resp).await?.json().await?)
     }
 
@@ -210,8 +343,8 @@ impl<'a> ZoteroClient<'a> {
         &self,
         url: &str,
     ) -> Result<ItemsPage, ZoteroApiError> {
-        let resp =
-            self.state.send_with_retry(self.state.client().get(url)).await?;
+        let req = self.apply_auth_headers(self.state.client().get(url));
+        let resp = self.state.send_with_retry(req).await?;
         let resp = self.ensure_success(resp).await?;
         let total = resp
             .headers()
@@ -251,10 +384,9 @@ impl<'a> ZoteroClient<'a> {
         payload: &P,
         empty_message: &'static str,
     ) -> Result<T, ZoteroApiError> {
-        let resp = self
-            .state
-            .send_with_retry(self.state.client().post(url).json(payload))
-            .await?;
+        let req = self
+            .apply_auth_headers(self.state.client().post(url).json(payload));
+        let resp = self.state.send_with_retry(req).await?;
         let created: Vec<T> = self.ensure_success(resp).await?.json().await?;
         created.into_iter().next().ok_or_else(|| ZoteroApiError::LocalApi {
             status: 500,
@@ -279,9 +411,7 @@ impl<'a> ZoteroClient<'a> {
         version: LibraryVersion,
     ) -> Result<(), ZoteroApiError> {
         let req = self
-            .state
-            .client()
-            .delete(url)
+            .apply_auth_headers(self.state.client().delete(url))
             .header("If-Unmodified-Since-Version", version.to_string());
         self.ensure_success(self.state.send_with_retry(req).await?).await?;
         Ok(())
@@ -304,15 +434,14 @@ impl<'a> ZoteroClient<'a> {
     pub(super) async fn get_library_version(
         &self,
     ) -> Result<LibraryVersion, ZoteroApiError> {
-        let url =
-            format!("{}/users/0/items?limit=1", self.state.zotero_api_url());
-        let resp = self
-            .ensure_success(
-                self.state
-                    .send_with_retry(self.state.client().get(&url))
-                    .await?,
-            )
-            .await?;
+        let url = format!(
+            "{}{}/items?limit=1",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
+        let req = self.apply_auth_headers(self.state.client().get(&url));
+        let resp =
+            self.ensure_success(self.state.send_with_retry(req).await?).await?;
         resp.headers()
             .get("Last-Modified-Version")
             .and_then(|v| v.to_str().ok())
@@ -348,10 +477,10 @@ mod tests {
     use super::*;
 
     mod fixtures {
-        use super::AppState;
-        pub(super) use crate::zotero::test_http::{
+        pub(super) use super::super::test_http::{
             MockServer, http_response, http_response_with_headers,
         };
+        use crate::state::AppState;
 
         /// Builds an [`AppState`] fixture for testing with `zotero_api_url` and
         /// `write_enabled`.
@@ -796,6 +925,223 @@ mod tests {
                 add_pagination("http://x/items?foo=1", 0, 2),
                 "http://x/items?foo=1&start=0&limit=2"
             );
+        }
+    }
+}
+#[cfg(any(test, feature = "test-util"))]
+pub mod test_http {
+    use std::{
+        io::{Read, Write},
+        net::{TcpListener, TcpStream},
+        sync::{
+            Arc, Mutex,
+            atomic::{AtomicBool, Ordering},
+        },
+        thread::{self, JoinHandle},
+    };
+
+    pub type RequestLog = Arc<Mutex<Vec<String>>>;
+
+    pub struct MockServer {
+        base_url: String,
+        stop: Arc<AtomicBool>,
+        handle: Option<JoinHandle<()>>,
+    }
+
+    impl MockServer {
+        #[must_use]
+        #[inline]
+        pub fn new(responses: Vec<String>) -> Self {
+            Self::with_log(responses, None)
+        }
+
+        #[must_use]
+        #[inline]
+        pub fn recording(responses: Vec<String>) -> (Self, RequestLog) {
+            let recorded = Arc::new(Mutex::new(Vec::new()));
+            let server = Self::with_log(responses, Some(Arc::clone(&recorded)));
+            (server, recorded)
+        }
+
+        #[must_use]
+        #[inline]
+        pub fn url(&self) -> &str {
+            &self.base_url
+        }
+
+        fn with_log(
+            responses: Vec<String>,
+            recorded: Option<RequestLog>,
+        ) -> Self {
+            #[expect(clippy::expect_used, reason = "test-only mock server")]
+            let listener =
+                TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+            #[expect(clippy::expect_used, reason = "test-only mock server")]
+            let addr = listener.local_addr().expect("test listener address");
+            let stop = Arc::new(AtomicBool::new(false));
+            let thread_stop = Arc::clone(&stop);
+            let handle = thread::spawn(move || {
+                serve_responses(
+                    &listener,
+                    &responses,
+                    recorded.as_ref(),
+                    &thread_stop,
+                );
+            });
+
+            Self {
+                base_url: format!("http://{addr}"),
+                stop,
+                handle: Some(handle),
+            }
+        }
+    }
+
+    impl Drop for MockServer {
+        #[inline]
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::Release);
+            if let Some(addr) = self.base_url.strip_prefix("http://") {
+                let _ = TcpStream::connect(addr);
+            }
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn http_response(status: &str, body: &str) -> String {
+        http_response_with_headers(status, &[], body)
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn http_response_with_headers(
+        status: &str,
+        headers: &[(&str, &str)],
+        body: &str,
+    ) -> String {
+        let mut response = format!(
+            "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: \
+             application/json\r\n",
+            body.len()
+        );
+        for (name, value) in headers {
+            response.push_str(name);
+            response.push_str(": ");
+            response.push_str(value);
+            response.push_str("\r\n");
+        }
+        response.push_str("Connection: close\r\n\r\n");
+        response.push_str(body);
+        response
+    }
+
+    fn serve_responses(
+        listener: &TcpListener,
+        responses: &[String],
+        recorded: Option<&RequestLog>,
+        stop: &AtomicBool,
+    ) {
+        for response in responses {
+            if !serve_response(listener, response, recorded, stop) {
+                break;
+            }
+        }
+    }
+
+    fn serve_response(
+        listener: &TcpListener,
+        response: &str,
+        recorded: Option<&RequestLog>,
+        stop: &AtomicBool,
+    ) -> bool {
+        let Ok((mut stream, _)) = listener.accept() else {
+            return false;
+        };
+        if stop.load(Ordering::Acquire) {
+            return false;
+        }
+        record_or_drain_request(&mut stream, recorded);
+        let _ = stream.write_all(response.as_bytes());
+        true
+    }
+
+    fn record_or_drain_request(
+        stream: &mut TcpStream,
+        recorded: Option<&RequestLog>,
+    ) {
+        if let Some(recorded) = recorded {
+            #[expect(clippy::expect_used, reason = "test-only mock server")]
+            let mut log = recorded.lock().expect("request log lock");
+            log.push(read_request(stream));
+            return;
+        }
+        let mut buf = [0_u8; 1024];
+        let _ = stream.read(&mut buf);
+    }
+
+    /// Parses request body JSON string.
+    ///
+    /// # Errors
+    ///
+    /// - [`serde_json::Error`]: If JSON parsing fails.
+    #[inline]
+    pub fn request_body(
+        raw: &str,
+    ) -> Result<serde_json::Value, serde_json::Error> {
+        let body = raw.split_once("\r\n\r\n").map_or("", |(_, body)| body);
+        serde_json::from_str(body)
+    }
+
+    fn read_request(stream: &mut TcpStream) -> String {
+        let mut buf = [0_u8; 1024];
+        let mut data = Vec::new();
+        while let Ok(n) = stream.read(&mut buf) {
+            if n == 0 {
+                break;
+            }
+            data.extend_from_slice(buf.get(..n).unwrap_or_default());
+            if request_complete(&data) {
+                break;
+            }
+        }
+        String::from_utf8_lossy(&data).into_owned()
+    }
+
+    fn request_complete(data: &[u8]) -> bool {
+        let Some((head_end, content_length)) = request_meta(data) else {
+            return false;
+        };
+        data.len() >= head_end.saturating_add(content_length)
+    }
+
+    fn request_meta(data: &[u8]) -> Option<(usize, usize)> {
+        let head_end =
+            data.windows(4).position(|w| w == b"\r\n\r\n")?.saturating_add(4);
+        let head =
+            String::from_utf8_lossy(data.get(..head_end).unwrap_or_default());
+        let content_length = head
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().ok())?
+            })
+            .unwrap_or(0);
+        Some((head_end, content_length))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn drop_stops_server_with_unconsumed_responses() {
+            let server = MockServer::new(vec![http_response("200 OK", "{}")]);
+            drop(server);
         }
     }
 }

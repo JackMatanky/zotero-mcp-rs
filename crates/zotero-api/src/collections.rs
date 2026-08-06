@@ -16,7 +16,7 @@
 //!
 //! ```no_run
 //! # use zotero_api::AppState;
-//! # use zotero_api::zotero::ZoteroClient;
+//! # use zotero_api::ZoteroClient;
 //! # async fn run(
 //! #     state: &AppState,
 //! # ) -> Result<(), Box<dyn std::error::Error>> {
@@ -30,11 +30,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    client::ZoteroClient,
     errors::ZoteroApiError,
-    zotero::{
-        CollectionKey, CollectionParent, ItemKey, ZoteroCollection, ZoteroItem,
-        client::ZoteroClient,
-    },
+    keys::{CollectionKey, ItemKey, LibraryVersion},
+    objects::{ZoteroCollection, ZoteroItem},
+    types::CollectionParent,
 };
 
 /// Action for adding or removing items to or from a collection.
@@ -65,8 +65,11 @@ impl ZoteroClient<'_> {
     pub async fn get_collections(
         &self,
     ) -> Result<Vec<ZoteroCollection>, ZoteroApiError> {
-        let url =
-            format!("{}/users/0/collections", self.state.zotero_api_url());
+        let url = format!(
+            "{}{}/collections",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
         self.get_json(&url).await
     }
 
@@ -118,8 +121,9 @@ impl ZoteroClient<'_> {
         collection_key: &CollectionKey,
     ) -> Result<Vec<ZoteroItem>, ZoteroApiError> {
         let url = format!(
-            "{}/users/0/collections/{}/items",
+            "{}{}/collections/{}/items",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             collection_key
         );
         self.get_json(&url).await
@@ -148,8 +152,11 @@ impl ZoteroClient<'_> {
         parent_key: Option<&CollectionKey>,
     ) -> Result<ZoteroCollection, ZoteroApiError> {
         self.state.check_write_permission()?;
-        let url =
-            format!("{}/users/0/collections", self.state.zotero_api_url());
+        let url = format!(
+            "{}{}/collections",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
         let parent_val = parent_key.map_or(CollectionParent::TopLevel, |key| {
             CollectionParent::Parent(key.clone())
         });
@@ -195,8 +202,9 @@ impl ZoteroClient<'_> {
     ) -> Result<(), ZoteroApiError> {
         self.state.check_write_permission()?;
         let url = format!(
-            "{}/users/0/collections/{}/items",
+            "{}{}/collections/{}/items",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             collection_key
         );
         let body_str =
@@ -237,8 +245,9 @@ impl ZoteroClient<'_> {
     ) -> Result<(), ZoteroApiError> {
         self.state.check_write_permission()?;
         let url = format!(
-            "{}/users/0/collections/{}",
+            "{}{}/collections/{}",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             collection_key
         );
         let resp = self
@@ -282,8 +291,9 @@ impl ZoteroClient<'_> {
     ) -> Result<ZoteroCollection, ZoteroApiError> {
         self.state.check_write_permission()?;
         let url = format!(
-            "{}/users/0/collections/{}",
+            "{}{}/collections/{}",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             collection_key
         );
         let resp = self
@@ -321,6 +331,37 @@ impl ZoteroClient<'_> {
             Ok(self.ensure_success(refetch).await?.json().await?)
         }
     }
+
+    /// Deletes multiple collections by key in a single request via `DELETE
+    /// <prefix>/collections?collectionKey=K1,K2,...`.
+    ///
+    /// # Errors
+    ///
+    /// - [`PermissionDenied`]: If write operations are disabled.
+    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
+    /// - [`Network`]: Transport errors.
+    ///
+    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
+    /// [`LocalApi`]: ZoteroApiError::LocalApi
+    #[inline]
+    pub async fn delete_collections(
+        &self,
+        keys: &[CollectionKey],
+        version: LibraryVersion,
+    ) -> Result<(), ZoteroApiError> {
+        self.state.check_write_permission()?;
+        let keys_str = keys
+            .iter()
+            .map(CollectionKey::as_str)
+            .collect::<Vec<_>>()
+            .join(",");
+        let url = format!(
+            "{}{}/collections?collectionKey={keys_str}",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
+        self.delete(&url, version).await
+    }
 }
 
 #[cfg(test)]
@@ -330,12 +371,12 @@ mod tests {
 
     use super::*;
     use crate::{
-        state::AppState,
-        zotero::{
-            LibraryVersion,
-            client::ZoteroClient,
+        client::{
+            ZoteroClient,
             test_http::{MockServer, http_response, request_body},
         },
+        keys::LibraryVersion,
+        state::AppState,
     };
 
     fn state(zotero_api_url: impl AsRef<str>, write_enabled: bool) -> AppState {

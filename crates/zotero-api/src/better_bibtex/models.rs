@@ -38,7 +38,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::zotero::{CitationKey, ItemKey};
+use crate::keys::{CitationKey, ItemKey};
 
 string_newtype!(
     pub CollectionPath,
@@ -183,15 +183,15 @@ pub(crate) struct JsonRpcError {
 ///
 /// A value of `None` indicates the item has no generated citation key.
 ///
-/// [`ItemKey`]: crate::zotero::ItemKey
-/// [`CitationKey`]: crate::zotero::CitationKey
+/// [`ItemKey`]: crate::keys::ItemKey
+/// [`CitationKey`]: crate::keys::CitationKey
 pub(crate) type CitekeyMap = HashMap<ItemKey, Option<CitationKey>>;
 
 /// Maps a current [`CitationKey`] to its newly regenerated [`CitationKey`].
 ///
 /// A value of `None` indicates the citation key could not be regenerated.
 ///
-/// [`CitationKey`]: crate::zotero::CitationKey
+/// [`CitationKey`]: crate::keys::CitationKey
 pub(crate) type RegenerateKeyMap = HashMap<CitationKey, Option<CitationKey>>;
 
 #[cfg(test)]

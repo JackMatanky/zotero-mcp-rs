@@ -3,7 +3,7 @@
 //! Defines serde deserialization shapes for Zotero items, collections,
 //! creators, tags, annotations, and local API availability status returned by
 //! `/users/0` HTTP endpoints. These types form the core data layer used across
-//! [`crate::zotero`] client methods and higher-level [`crate::mcp`] tool
+//! client methods and higher-level [`crate::mcp`] tool
 //! handlers.
 //!
 //! # Main Types
@@ -19,13 +19,81 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::zotero::{
+use crate::{
     keys::{CollectionKey, ItemKey, LibraryVersion, TagName},
     types::{
         AnnotationType, CollectionParent, CreatorType, ItemType, LinkMode,
         TagOrigin,
     },
 };
+
+/// Response payload returned by batch create/update operations.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
+pub struct BatchWriteResponse {
+    /// Successful item keys mapped by payload index or temporary key.
+    #[serde(default)]
+    pub successful: serde_json::Value,
+    /// Unchanged item keys.
+    #[serde(default)]
+    pub unchanged: serde_json::Value,
+    /// Failed items mapped by key or index to error details.
+    #[serde(default)]
+    pub failed: serde_json::Value,
+}
+
+/// Zotero library descriptor in API responses.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct LibraryInfo {
+    /// Library ID.
+    #[serde(default)]
+    pub id: u64,
+    /// Library type (`user` or `group`).
+    #[serde(rename = "type", default)]
+    pub type_: String,
+    /// Library name (for group libraries).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// Item links envelope in Zotero API responses.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ItemLinks {
+    /// Self link URL (`self`).
+    #[serde(rename = "self", default, skip_serializing_if = "Option::is_none")]
+    pub self_link: Option<serde_json::Value>,
+    /// Alternate web link URL (`alternate`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alternate: Option<serde_json::Value>,
+    /// Enclosure link object for attachments (`enclosure`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enclosure: Option<serde_json::Value>,
+}
+
+impl ItemLinks {
+    /// Lookup a link object by name.
+    #[must_use]
+    #[inline]
+    pub fn get(&self, key: &str) -> Option<&serde_json::Value> {
+        match key {
+            "self" => self.self_link.as_ref(),
+            "alternate" => self.alternate.as_ref(),
+            "enclosure" => self.enclosure.as_ref(),
+            _ => None,
+        }
+    }
+}
+
+/// Metadata counter envelope in Zotero API responses.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemMeta {
+    /// Number of child items (notes, attachments, annotations).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub num_children: Option<usize>,
+    /// Number of collections containing this item.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub num_collections: Option<usize>,
+}
 
 /// A single Zotero library item as returned by the Local API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,13 +102,13 @@ pub struct ZoteroItem {
     pub(crate) version: LibraryVersion,
     /// Owning library metadata object.
     #[serde(default)]
-    pub(crate) library: serde_json::Value,
+    pub library: Option<LibraryInfo>,
     /// HATEOAS API link objects.
     #[serde(default)]
-    pub links: serde_json::Value,
+    pub links: Option<ItemLinks>,
     /// Item metadata containing creator summary and child counts.
     #[serde(default)]
-    pub(crate) meta: serde_json::Value,
+    pub meta: Option<ItemMeta>,
     pub data: ZoteroItemData,
 }
 
@@ -69,6 +137,9 @@ pub struct ZoteroItemData {
     pub(crate) series_title: Option<String>,
     pub(crate) series_text: Option<String>,
     pub(crate) journal_abbreviation: Option<String>,
+    pub(crate) publisher: Option<String>,
+    pub(crate) institution: Option<String>,
+    pub(crate) place: Option<String>,
     pub(crate) doi: Option<String>,
     /// Zotero's native citation key field.
     ///

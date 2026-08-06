@@ -15,7 +15,7 @@
 //! ```no_run
 //! # use zotero_api::AppState;
 //! # use zotero_api::better_notes::BetterNotesClient;
-//! # use zotero_api::zotero::ItemKey;
+//! # use zotero_api::ItemKey;
 //! # async fn example(
 //! #     state: &AppState,
 //! #     item_key: &ItemKey,
@@ -35,8 +35,8 @@ use crate::{
         NoteTreeResponse, RelationsResponse, TemplateName, TemplateResponse,
     },
     errors::ZoteroApiError,
+    keys::ItemKey,
     state::AppState,
-    zotero::ItemKey,
 };
 
 /// Async HTTP client for the Better Notes companion API, scoped to a single

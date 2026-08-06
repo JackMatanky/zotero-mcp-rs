@@ -18,7 +18,7 @@
 //! # Examples
 //!
 //! ```ignore
-//! # use zotero_api::zotero::types::{ItemType, TagOrigin};
+//! # use zotero_api::types::{ItemType, TagOrigin};
 //! let item_type = ItemType::from("journalArticle".to_string());
 //! assert_eq!(item_type, ItemType::JournalArticle);
 //! assert_eq!(item_type.as_str(), "journalArticle");
@@ -30,7 +30,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::zotero::keys::CollectionKey;
+use crate::keys::CollectionKey;
 
 /// Zotero item kind carried in the `itemType` field.
 ///
@@ -40,33 +40,130 @@ use crate::zotero::keys::CollectionKey;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub enum ItemType {
-    /// Journal article item (`journalArticle`).
-    JournalArticle,
+    /// Annotation item (`annotation`).
+    Annotation,
+    /// Artwork item (`artwork`).
+    Artwork,
+    /// Attachment item (`attachment`).
+    Attachment,
+    /// Audio recording item (`audioRecording`).
+    AudioRecording,
+    /// Bill item (`bill`).
+    Bill,
+    /// Blog post item (`blogPost`).
+    BlogPost,
     /// Book item (`book`).
     Book,
-    /// Preprint item (`preprint`).
-    Preprint,
+    /// Book section item (`bookSection`).
+    BookSection,
+    /// Case item (`case`).
+    Case,
+    /// Computer program item (`computerProgram`).
+    ComputerProgram,
+    /// Conference paper item (`conferencePaper`).
+    ConferencePaper,
+    /// Dictionary entry item (`dictionaryEntry`).
+    DictionaryEntry,
+    /// Document item (`document`).
+    Document,
+    /// Email item (`email`).
+    Email,
+    /// Encyclopedia article item (`encyclopediaArticle`).
+    EncyclopediaArticle,
+    /// Film item (`film`).
+    Film,
+    /// Forum post item (`forumPost`).
+    ForumPost,
+    /// Hearing item (`hearing`).
+    Hearing,
+    /// Instant message item (`instantMessage`).
+    InstantMessage,
+    /// Interview item (`interview`).
+    Interview,
+    /// Journal article item (`journalArticle`).
+    JournalArticle,
+    /// Letter item (`letter`).
+    Letter,
+    /// Magazine article item (`magazineArticle`).
+    MagazineArticle,
+    /// Manuscript item (`manuscript`).
+    Manuscript,
+    /// Map item (`map`).
+    Map,
+    /// Newspaper article item (`newspaperArticle`).
+    NewspaperArticle,
     /// Note item (`note`).
     Note,
-    /// File or URL attachment item (`attachment`).
-    Attachment,
-    /// PDF annotation item (`annotation`).
-    Annotation,
+    /// Patent item (`patent`).
+    Patent,
+    /// Podcast item (`podcast`).
+    Podcast,
+    /// Preprint item (`preprint`).
+    Preprint,
+    /// Presentation item (`presentation`).
+    Presentation,
+    /// Radio broadcast item (`radioBroadcast`).
+    RadioBroadcast,
+    /// Report item (`report`).
+    Report,
+    /// Statute item (`statute`).
+    Statute,
+    /// Thesis item (`thesis`).
+    Thesis,
+    /// TV broadcast item (`tvBroadcast`).
+    TvBroadcast,
+    /// Video recording item (`videoRecording`).
+    VideoRecording,
+    /// Webpage item (`webpage`).
+    Webpage,
     /// Any Zotero item type not modeled above; carries the original API value.
     Other(String),
 }
 
 impl ItemType {
     /// Borrows the API string representation of this [`ItemType`].
+    #[must_use]
     #[inline]
-    pub(crate) fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
-            Self::JournalArticle => "journalArticle",
-            Self::Book => "book",
-            Self::Preprint => "preprint",
-            Self::Note => "note",
-            Self::Attachment => "attachment",
             Self::Annotation => "annotation",
+            Self::Artwork => "artwork",
+            Self::Attachment => "attachment",
+            Self::AudioRecording => "audioRecording",
+            Self::Bill => "bill",
+            Self::BlogPost => "blogPost",
+            Self::Book => "book",
+            Self::BookSection => "bookSection",
+            Self::Case => "case",
+            Self::ComputerProgram => "computerProgram",
+            Self::ConferencePaper => "conferencePaper",
+            Self::DictionaryEntry => "dictionaryEntry",
+            Self::Document => "document",
+            Self::Email => "email",
+            Self::EncyclopediaArticle => "encyclopediaArticle",
+            Self::Film => "film",
+            Self::ForumPost => "forumPost",
+            Self::Hearing => "hearing",
+            Self::InstantMessage => "instantMessage",
+            Self::Interview => "interview",
+            Self::JournalArticle => "journalArticle",
+            Self::Letter => "letter",
+            Self::MagazineArticle => "magazineArticle",
+            Self::Manuscript => "manuscript",
+            Self::Map => "map",
+            Self::NewspaperArticle => "newspaperArticle",
+            Self::Note => "note",
+            Self::Patent => "patent",
+            Self::Podcast => "podcast",
+            Self::Preprint => "preprint",
+            Self::Presentation => "presentation",
+            Self::RadioBroadcast => "radioBroadcast",
+            Self::Report => "report",
+            Self::Statute => "statute",
+            Self::Thesis => "thesis",
+            Self::TvBroadcast => "tvBroadcast",
+            Self::VideoRecording => "videoRecording",
+            Self::Webpage => "webpage",
             Self::Other(value) => value,
         }
     }
@@ -90,14 +187,53 @@ impl From<String> for ItemType {
     #[inline]
     fn from(value: String) -> Self {
         match value.as_str() {
-            "journalArticle" => Self::JournalArticle,
-            "book" => Self::Book,
-            "preprint" => Self::Preprint,
-            "note" => Self::Note,
-            "attachment" => Self::Attachment,
             "annotation" => Self::Annotation,
+            "artwork" => Self::Artwork,
+            "attachment" => Self::Attachment,
+            "audioRecording" => Self::AudioRecording,
+            "bill" => Self::Bill,
+            "blogPost" => Self::BlogPost,
+            "book" => Self::Book,
+            "bookSection" => Self::BookSection,
+            "case" => Self::Case,
+            "computerProgram" => Self::ComputerProgram,
+            "conferencePaper" => Self::ConferencePaper,
+            "dictionaryEntry" => Self::DictionaryEntry,
+            "document" => Self::Document,
+            "email" => Self::Email,
+            "encyclopediaArticle" => Self::EncyclopediaArticle,
+            "film" => Self::Film,
+            "forumPost" => Self::ForumPost,
+            "hearing" => Self::Hearing,
+            "instantMessage" => Self::InstantMessage,
+            "interview" => Self::Interview,
+            "journalArticle" => Self::JournalArticle,
+            "letter" => Self::Letter,
+            "magazineArticle" => Self::MagazineArticle,
+            "manuscript" => Self::Manuscript,
+            "map" => Self::Map,
+            "newspaperArticle" => Self::NewspaperArticle,
+            "note" => Self::Note,
+            "patent" => Self::Patent,
+            "podcast" => Self::Podcast,
+            "preprint" => Self::Preprint,
+            "presentation" => Self::Presentation,
+            "radioBroadcast" => Self::RadioBroadcast,
+            "report" => Self::Report,
+            "statute" => Self::Statute,
+            "thesis" => Self::Thesis,
+            "tvBroadcast" => Self::TvBroadcast,
+            "videoRecording" => Self::VideoRecording,
+            "webpage" => Self::Webpage,
             _ => Self::Other(value),
         }
+    }
+}
+
+impl From<&str> for ItemType {
+    #[inline]
+    fn from(value: &str) -> Self {
+        Self::from(value.to_owned())
     }
 }
 
@@ -346,6 +482,57 @@ mod tests {
             let custom_str: String = custom.clone().into();
             assert_eq!(custom_str, "customWebpage");
             assert_eq!(custom, ItemType::Other("customWebpage".to_owned()));
+        }
+
+        #[test]
+        fn round_trips_all_35_zotero_item_types() {
+            let types = vec![
+                (ItemType::Annotation, "annotation"),
+                (ItemType::Artwork, "artwork"),
+                (ItemType::Attachment, "attachment"),
+                (ItemType::AudioRecording, "audioRecording"),
+                (ItemType::Bill, "bill"),
+                (ItemType::BlogPost, "blogPost"),
+                (ItemType::Book, "book"),
+                (ItemType::BookSection, "bookSection"),
+                (ItemType::Case, "case"),
+                (ItemType::ComputerProgram, "computerProgram"),
+                (ItemType::ConferencePaper, "conferencePaper"),
+                (ItemType::DictionaryEntry, "dictionaryEntry"),
+                (ItemType::Document, "document"),
+                (ItemType::Email, "email"),
+                (ItemType::EncyclopediaArticle, "encyclopediaArticle"),
+                (ItemType::Film, "film"),
+                (ItemType::ForumPost, "forumPost"),
+                (ItemType::Hearing, "hearing"),
+                (ItemType::InstantMessage, "instantMessage"),
+                (ItemType::Interview, "interview"),
+                (ItemType::JournalArticle, "journalArticle"),
+                (ItemType::Letter, "letter"),
+                (ItemType::MagazineArticle, "magazineArticle"),
+                (ItemType::Manuscript, "manuscript"),
+                (ItemType::Map, "map"),
+                (ItemType::NewspaperArticle, "newspaperArticle"),
+                (ItemType::Note, "note"),
+                (ItemType::Patent, "patent"),
+                (ItemType::Podcast, "podcast"),
+                (ItemType::Preprint, "preprint"),
+                (ItemType::Presentation, "presentation"),
+                (ItemType::RadioBroadcast, "radioBroadcast"),
+                (ItemType::Report, "report"),
+                (ItemType::Statute, "statute"),
+                (ItemType::Thesis, "thesis"),
+                (ItemType::TvBroadcast, "tvBroadcast"),
+                (ItemType::VideoRecording, "videoRecording"),
+                (ItemType::Webpage, "webpage"),
+            ];
+
+            for (variant, expected_str) in types {
+                assert_eq!(variant.as_str(), expected_str);
+                let stringified: String = variant.clone().into();
+                assert_eq!(stringified, expected_str);
+                assert_eq!(ItemType::from(expected_str), variant);
+            }
         }
 
         #[test]

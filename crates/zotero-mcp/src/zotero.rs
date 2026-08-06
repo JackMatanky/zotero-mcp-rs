@@ -65,7 +65,7 @@ mod fixtures {
             .with_write_enabled(true)
     }
 
-    pub(in crate::zotero) use zotero_api::zotero::test_http::{
+    pub(in crate::zotero) use zotero_api::client::test_http::{
         http_response, http_response_with_headers,
     };
 

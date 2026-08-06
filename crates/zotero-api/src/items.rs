@@ -13,7 +13,7 @@
 //!
 //! ```no_run
 //! # use zotero_api::AppState;
-//! # use zotero_api::zotero::{ItemKey, ZoteroClient};
+//! # use zotero_api::{ItemKey, ZoteroClient};
 //! # async fn example(
 //! #     state: AppState,
 //! # ) -> Result<(), Box<dyn std::error::Error>> {
@@ -34,11 +34,12 @@ use serde_json::json;
 use tokio::fs;
 
 use crate::{
+    client::ZoteroClient,
     errors::ZoteroApiError,
-    zotero::{
-        ItemKey, ItemType, LinkMode, ZoteroItem, client::ZoteroClient,
-        metadata::ItemDraft,
-    },
+    keys::{ItemKey, LibraryVersion},
+    metadata::ItemDraft,
+    objects::{BatchWriteResponse, ZoteroItem},
+    types::{ItemType, LinkMode},
 };
 
 /// Requested trash state transition for a library item.
@@ -84,9 +85,10 @@ impl ZoteroClient<'_> {
         limit: usize,
     ) -> Result<Vec<ZoteroItem>, ZoteroApiError> {
         let url = format!(
-            "{}/users/0/items?limit={}&sort=dateModified&direction=desc&\
+            "{}{}/items?limit={}&sort=dateModified&direction=desc&\
              itemType=-note",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             limit
         );
         self.get_json(&url).await
@@ -108,8 +110,9 @@ impl ZoteroClient<'_> {
         &self,
     ) -> Result<Vec<ZoteroItem>, ZoteroApiError> {
         let url = format!(
-            "{}/users/0/items?itemType=-note&sort=dateModified&direction=desc",
-            self.state.zotero_api_url()
+            "{}{}/items?itemType=-note&sort=dateModified&direction=desc",
+            self.state.zotero_api_url(),
+            self.target_prefix()
         );
         self.get_all_json(&url, 100).await
     }
@@ -130,8 +133,9 @@ impl ZoteroClient<'_> {
         item_key: &ItemKey,
     ) -> Result<ZoteroItem, ZoteroApiError> {
         let url = format!(
-            "{}/users/0/items/{}",
+            "{}{}/items/{}",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             item_key
         );
         let resp =
@@ -158,8 +162,9 @@ impl ZoteroClient<'_> {
         limit: usize,
     ) -> Result<Vec<ZoteroItem>, ZoteroApiError> {
         let url = format!(
-            "{}/users/0/items/top?limit={}",
+            "{}{}/items/top?limit={}",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             limit
         );
         let items: Vec<ZoteroItem> = self.get_json(&url).await?;
@@ -184,8 +189,9 @@ impl ZoteroClient<'_> {
         item_key: &ItemKey,
     ) -> Result<Vec<ZoteroItem>, ZoteroApiError> {
         let url = format!(
-            "{}/users/0/items/{}/children",
+            "{}{}/items/{}/children",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             item_key
         );
         self.get_json(&url).await
@@ -210,8 +216,9 @@ impl ZoteroClient<'_> {
     ) -> Result<ZoteroItem, ZoteroApiError> {
         self.state.check_write_permission()?;
         let url = format!(
-            "{}/users/0/items/{}",
+            "{}{}/items/{}",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             item_key
         );
         let resp = self
@@ -244,8 +251,9 @@ impl ZoteroClient<'_> {
         self.state.check_write_permission()?;
         let item = self.get_item(item_key).await?;
         let url = format!(
-            "{}/users/0/items/{}",
+            "{}{}/items/{}",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             item_key
         );
         self.delete(&url, item.version).await
@@ -278,7 +286,7 @@ impl ZoteroClient<'_> {
     }
 
     /// Creates a new item from a resolved metadata `draft` (as returned by
-    /// [`crate::zotero::metadata::resolve_metadata`]).
+    /// [`crate::metadata::resolve_metadata`]).
     ///
     /// # Errors
     ///
@@ -294,9 +302,115 @@ impl ZoteroClient<'_> {
         draft: ItemDraft,
     ) -> Result<ZoteroItem, ZoteroApiError> {
         self.state.check_write_permission()?;
-        let url = format!("{}/users/0/items", self.state.zotero_api_url());
+        let url = format!(
+            "{}{}/items",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
         self.post_json_first(&url, &vec![draft], "Created item array was empty")
             .await
+    }
+
+    /// Creates multiple items in a single batch request via `POST
+    /// <prefix>/items`.
+    ///
+    /// # Errors
+    ///
+    /// - [`PermissionDenied`]: If write operations are disabled.
+    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
+    /// - [`Network`]: Transport errors.
+    ///
+    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
+    /// [`LocalApi`]: ZoteroApiError::LocalApi
+    #[inline]
+    pub async fn create_items(
+        &self,
+        items: &[serde_json::Value],
+    ) -> Result<BatchWriteResponse, ZoteroApiError> {
+        self.state.check_write_permission()?;
+        let url = format!(
+            "{}{}/items",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
+        let req =
+            self.apply_auth_headers(self.state.client().post(&url).json(items));
+        let resp = self.state.send_with_retry(req).await?;
+        Ok(self.ensure_success(resp).await?.json().await?)
+    }
+
+    /// Updates multiple items in a single batch request via `POST
+    /// <prefix>/items` with patch payloads.
+    ///
+    /// # Errors
+    ///
+    /// - [`PermissionDenied`]: If write operations are disabled.
+    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
+    /// - [`Network`]: Transport errors.
+    ///
+    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
+    /// [`LocalApi`]: ZoteroApiError::LocalApi
+    /// [`Network`]: ZoteroApiError::Network
+    #[inline]
+    pub async fn update_items(
+        &self,
+        items: &[serde_json::Value],
+    ) -> Result<BatchWriteResponse, ZoteroApiError> {
+        self.create_items(items).await
+    }
+
+    /// Deletes multiple items by key in a single request via `DELETE
+    /// <prefix>/items?itemKey=K1,K2,...`.
+    ///
+    /// # Errors
+    ///
+    /// - [`PermissionDenied`]: If write operations are disabled.
+    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
+    /// - [`Network`]: Transport errors.
+    ///
+    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
+    /// [`LocalApi`]: ZoteroApiError::LocalApi
+    #[inline]
+    pub async fn delete_items(
+        &self,
+        keys: &[ItemKey],
+        version: LibraryVersion,
+    ) -> Result<(), ZoteroApiError> {
+        self.state.check_write_permission()?;
+        let keys_str =
+            keys.iter().map(ItemKey::as_str).collect::<Vec<_>>().join(",");
+        let url = format!(
+            "{}{}/items?itemKey={keys_str}",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
+        self.delete(&url, version).await
+    }
+
+    /// Retrieves the local file view URL for an attachment item via `GET
+    /// <prefix>/items/<key>/file/view/url`.
+    ///
+    /// # Errors
+    ///
+    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
+    /// - [`Network`]: Transport errors.
+    ///
+    /// [`LocalApi`]: ZoteroApiError::LocalApi
+    #[inline]
+    pub async fn get_item_file_view_url(
+        &self,
+        key: &ItemKey,
+    ) -> Result<String, ZoteroApiError> {
+        let url = format!(
+            "{}{}/items/{}/file/view/url",
+            self.state.zotero_api_url(),
+            self.target_prefix(),
+            key
+        );
+        let req = self.apply_auth_headers(self.state.client().get(&url));
+        let resp = self.state.send_with_retry(req).await?;
+        let resp = self.ensure_success(resp).await?;
+        Ok(resp.text().await?)
     }
 
     /// Fetches Zotero's indexed full-text content for `item_key`, returning an
@@ -315,8 +429,9 @@ impl ZoteroClient<'_> {
         item_key: &ItemKey,
     ) -> Result<String, ZoteroApiError> {
         let url = format!(
-            "{}/users/0/items/{}/fulltext",
+            "{}{}/items/{}/fulltext",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             item_key
         );
         let val: serde_json::Value = self.get_json(&url).await?;
@@ -355,7 +470,11 @@ impl ZoteroClient<'_> {
         content_type: Option<&str>,
     ) -> Result<ZoteroItem, ZoteroApiError> {
         self.state.check_write_permission()?;
-        let url = format!("{}/users/0/items", self.state.zotero_api_url());
+        let url = format!(
+            "{}{}/items",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
         let payload = serde_json::json!([{
             "itemType": ItemType::Attachment,
             "parentItem": parent_item_key,
@@ -445,8 +564,11 @@ impl ZoteroClient<'_> {
         if let Some(parent) = parent_item_key {
             attachment.insert("parentItem".into(), json!(parent));
         }
-        let create_url =
-            format!("{}/users/0/items", self.state.zotero_api_url());
+        let create_url = format!(
+            "{}{}/items",
+            self.state.zotero_api_url(),
+            self.target_prefix()
+        );
         let item: ZoteroItem = self
             .post_json_first(
                 &create_url,
@@ -456,8 +578,9 @@ impl ZoteroClient<'_> {
             .await?;
 
         let file_url = format!(
-            "{}/users/0/items/{}/file",
+            "{}{}/items/{}/file",
             self.state.zotero_api_url(),
+            self.target_prefix(),
             item.data.key
         );
         let filesize_text = bytes.len().to_string();
@@ -511,11 +634,11 @@ mod tests {
 
     use super::*;
     use crate::{
-        state::AppState,
-        zotero::{
-            client::ZoteroClient,
+        client::{
+            ZoteroClient,
             test_http::{MockServer, http_response, request_body},
         },
+        state::AppState,
     };
 
     fn state(zotero_api_url: impl AsRef<str>, write_enabled: bool) -> AppState {
@@ -766,11 +889,11 @@ mod tests {
 
         use super::*;
         use crate::{
-            state::AppState,
-            zotero::{
-                client::ZoteroClient,
+            client::{
+                ZoteroClient,
                 test_http::{MockServer, http_response, request_body},
             },
+            state::AppState,
         };
 
         fn state(
@@ -1002,6 +1125,92 @@ mod tests {
                     "write-disabled import should fail before HTTP: {result:?}"
                 );
             }
+        }
+    }
+    mod batch {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn creates_items_in_batch() {
+            let json_resp = serde_json::json!({
+                "successful": {"0": "KEY00001"},
+                "unchanged": {},
+                "failed": {}
+            })
+            .to_string();
+
+            let (server, recorded) =
+                MockServer::recording(vec![http_response(
+                    "200 OK", &json_resp,
+                )]);
+            let app = state(server.url(), true);
+            let client = ZoteroClient::new(&app);
+
+            let res = client
+                .create_items(&[serde_json::json!({"itemType": "book"})])
+                .await;
+            assert!(res.is_ok());
+            let batch_res = res.unwrap();
+            assert_eq!(
+                batch_res.successful.get("0"),
+                Some(&serde_json::json!("KEY00001"))
+            );
+
+            let requests = recorded.lock().expect("request log lock");
+            assert_eq!(requests.len(), 1);
+            assert!(
+                requests.first().unwrap().starts_with("POST /users/0/items")
+            );
+        }
+
+        #[tokio::test]
+        async fn deletes_items_in_batch() {
+            let (server, recorded) =
+                MockServer::recording(vec![http_response(
+                    "204 No Content",
+                    "",
+                )]);
+            let app = state(server.url(), true);
+            let client = ZoteroClient::new(&app);
+
+            let keys =
+                vec![ItemKey::from("K1000001"), ItemKey::from("K2000002")];
+            let res = client.delete_items(&keys, LibraryVersion(5)).await;
+            assert!(res.is_ok());
+
+            let requests = recorded.lock().expect("request log lock");
+            assert_eq!(requests.len(), 1);
+            assert!(requests.first().unwrap().starts_with(
+                "DELETE /users/0/items?itemKey=K1000001,K2000002"
+            ));
+        }
+
+        #[tokio::test]
+        async fn fetches_item_file_view_url() {
+            let (server, recorded) =
+                MockServer::recording(vec![http_response(
+                    "200 OK",
+                    "http://zotero.org/view/pdf",
+                )]);
+            let app = state(server.url(), false);
+            let client = ZoteroClient::new(&app);
+
+            let url = client
+                .get_item_file_view_url(&ItemKey::from("ITEM0001"))
+                .await
+                .unwrap();
+            assert_eq!(url, "http://zotero.org/view/pdf");
+
+            let requests = recorded.lock().expect("request log lock");
+            assert_eq!(requests.len(), 1);
+            assert!(
+                requests
+                    .first()
+                    .unwrap()
+                    .starts_with("GET /users/0/items/ITEM0001/file/view/url")
+            );
         }
     }
 }

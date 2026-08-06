@@ -130,7 +130,7 @@ fn resolve_linked_attachment_path(
 /// Extracts the local filepath from an imported attachment `item`'s enclosure
 /// link.
 fn enclosure_file_path(item: &ZoteroItem) -> Option<PathBuf> {
-    let href = item.links.get("enclosure")?.get("href")?.as_str()?;
+    let href = item.links.as_ref()?.get("enclosure")?.get("href")?.as_str()?;
     file_url_to_path(href)
 }
 

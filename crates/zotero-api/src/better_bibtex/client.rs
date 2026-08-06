@@ -36,8 +36,8 @@ use crate::{
         SearchQuery, TranslatorName,
     },
     errors::ZoteroApiError,
+    keys::{CitationKey, ItemKey},
     state::AppState,
-    zotero::{CitationKey, ItemKey},
 };
 
 /// Client for issuing JSON-RPC 2.0 requests to the Better `BibTeX` plugin,

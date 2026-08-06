@@ -34,7 +34,7 @@ use sqlx::{
 };
 
 use crate::{
-    errors::ZoteroApiError, semantic_search::Embedding, zotero::ItemKey,
+    errors::ZoteroApiError, keys::ItemKey, semantic_search::Embedding,
 };
 
 /// One stored chunk, decoded and ready for a cosine similarity scan.
