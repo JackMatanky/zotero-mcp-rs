@@ -21,7 +21,7 @@
 //!
 //! # Examples
 //!
-//! ```no_run
+//! ```
 //! use zotero_api::better_bibtex::{
 //!     BibliographyContentType, BibliographyFormat,
 //! };

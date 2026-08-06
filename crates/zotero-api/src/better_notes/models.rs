@@ -22,7 +22,7 @@
 //!
 //! # Examples
 //!
-//! ```no_run
+//! ```
 //! use zotero_api::better_notes::{NoteExportFormat, TemplateName};
 //!
 //! let template = TemplateName::from("default");

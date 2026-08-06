@@ -8,7 +8,7 @@
 //!
 //! # Examples
 //!
-//! ```no_run
+//! ```
 //! use zotero_api::AppState;
 //! let state = AppState::from_env();
 //! assert!(!state.is_write_enabled());
