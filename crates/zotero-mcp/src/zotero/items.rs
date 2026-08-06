@@ -41,7 +41,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use zotero_api::{
     BetterBibtexClient, ItemKey, JoinMode, SearchCondition, SearchField,
-    SearchOperator, SortDirection, TranslatorName, TrashAction, ZoteroApiError,
+    SearchOperator, SortOrder, TranslatorName, TrashAction, ZoteroApiError,
     ZoteroClient,
 };
 
@@ -665,7 +665,7 @@ impl ZoteroMcpServer {
                     vec![cond],
                     JoinMode::All,
                     None,
-                    SortDirection::Asc,
+                    SortOrder::Asc,
                     0,
                     1,
                 )

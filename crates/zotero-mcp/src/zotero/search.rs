@@ -174,7 +174,7 @@ impl From<SortFieldArg> for zotero_api::SortField {
     }
 }
 
-/// Mirrors `zotero_api::SortDirection` for MCP argument schemas.
+/// Mirrors `zotero_api::SortOrder` for MCP argument schemas.
 #[derive(Copy, Clone, Debug, Default, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum SortDirectionArg {
@@ -182,7 +182,7 @@ pub(crate) enum SortDirectionArg {
     Asc,
     Desc,
 }
-impl From<SortDirectionArg> for zotero_api::SortDirection {
+impl From<SortDirectionArg> for zotero_api::SortOrder {
     #[inline]
     fn from(value: SortDirectionArg) -> Self {
         match value {
@@ -247,7 +247,7 @@ pub(crate) struct AdvancedSearchArgs {
     /// `"dateModified"`, `"title"`, `"date"`, or `"creator"`.
     sort_by: Option<SortFieldArg>,
     /// Sort direction: `"asc"` or `"desc"`
-    /// ([`SortDirection`](zotero_api::SortDirection), default: `"asc"`).
+    /// ([`SortOrder`](zotero_api::SortOrder), default: `"asc"`).
     sort_direction: Option<SortDirectionArg>,
     /// Zero-based offset into the full result set (default: 0).
     start: Option<usize>,
@@ -681,10 +681,10 @@ mod tests {
 
         #[test]
         fn sort_direction_arg_covers_every_sort_direction_variant() {
-            fn to_arg(dir: zotero_api::SortDirection) -> SortDirectionArg {
+            fn to_arg(dir: zotero_api::SortOrder) -> SortDirectionArg {
                 match dir {
-                    zotero_api::SortDirection::Asc => SortDirectionArg::Asc,
-                    zotero_api::SortDirection::Desc => SortDirectionArg::Desc,
+                    zotero_api::SortOrder::Asc => SortDirectionArg::Asc,
+                    zotero_api::SortOrder::Desc => SortDirectionArg::Desc,
                 }
             }
             let _ = to_arg;

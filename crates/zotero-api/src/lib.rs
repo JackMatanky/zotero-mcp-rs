@@ -80,7 +80,7 @@ pub use pdf::*;
 pub use relations::RelatedItem;
 pub use search::{
     JoinMode, PaginationInfo, SearchCondition, SearchField, SearchOperator,
-    SearchPage, SortDirection, SortField,
+    SearchPage, SortField, SortOrder,
 };
 pub use searches::SavedSearch;
 pub use security::{SecurityConfig, SecurityProfile};

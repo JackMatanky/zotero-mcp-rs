@@ -157,7 +157,7 @@ pub enum SortField {
     Copy, Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize,
 )]
 #[serde(rename_all = "camelCase")]
-pub enum SortDirection {
+pub enum SortOrder {
     /// Ascending order (A to Z, oldest to newest).
     #[default]
     Asc,
@@ -335,7 +335,7 @@ impl ZoteroClient<'_> {
     ///   value).
     /// * `join_mode` - [`JoinMode::All`] (AND) or [`JoinMode::Any`] (OR).
     /// * `sort` - Optional field to sort results by.
-    /// * `sort_direction` - [`SortDirection::Asc`] or [`SortDirection::Desc`].
+    /// * `sort_direction` - [`SortOrder::Asc`] or [`SortOrder::Desc`].
     /// * `offset` - 0-based result offset for pagination.
     /// * `limit` - Maximum number of items to return.
     ///
@@ -355,7 +355,7 @@ impl ZoteroClient<'_> {
         conditions: Vec<SearchCondition>,
         join_mode: JoinMode,
         sort: Option<SortField>,
-        sort_direction: SortDirection,
+        sort_direction: SortOrder,
         offset: usize,
         limit: usize,
     ) -> Result<SearchPage<ZoteroItem>, ZoteroApiError> {
@@ -726,7 +726,7 @@ fn next_date_part<'a>(parts: &mut impl Iterator<Item = &'a str>) -> u32 {
 fn sort_items(
     items: Vec<ZoteroItem>,
     field: SortField,
-    direction: SortDirection,
+    direction: SortOrder,
 ) -> Vec<ZoteroItem> {
     let mut keyed: Vec<(String, ZoteroItem)> = items
         .into_iter()
@@ -736,8 +736,8 @@ fn sort_items(
         })
         .collect();
     match direction {
-        SortDirection::Asc => keyed.sort_by(|a, b| a.0.cmp(&b.0)),
-        SortDirection::Desc => keyed.sort_by(|a, b| b.0.cmp(&a.0)),
+        SortOrder::Asc => keyed.sort_by(|a, b| a.0.cmp(&b.0)),
+        SortOrder::Desc => keyed.sort_by(|a, b| b.0.cmp(&a.0)),
     }
     keyed.into_iter().map(|(_, item)| item).collect()
 }
@@ -1435,8 +1435,7 @@ mod tests {
                 item("K1", "Alpha", "2024"),
                 item("K2", "Beta", "2024"),
             ];
-            let sorted =
-                sort_items(items, SortField::Title, SortDirection::Asc);
+            let sorted = sort_items(items, SortField::Title, SortOrder::Asc);
             let titles: Vec<&str> = sorted
                 .iter()
                 .map(|i| i.data.title.as_deref().unwrap_or_default())
@@ -1451,8 +1450,7 @@ mod tests {
                 item("K2", "B", "2025"),
                 item("K3", "C", "2023"),
             ];
-            let sorted =
-                sort_items(items, SortField::Date, SortDirection::Desc);
+            let sorted = sort_items(items, SortField::Date, SortOrder::Desc);
             let keys: Vec<&str> =
                 sorted.iter().map(|i| i.key.as_str()).collect();
             assert_eq!(keys, vec!["K2", "K3", "K1"]);
@@ -1586,7 +1584,7 @@ mod tests {
                     vec![title_contains("Rust"), cond_extra],
                     JoinMode::Any,
                     None,
-                    SortDirection::Asc,
+                    SortOrder::Asc,
                     0,
                     10,
                 )
@@ -1614,7 +1612,7 @@ mod tests {
                     vec![title_contains("Rust")],
                     JoinMode::All,
                     Some(SortField::Title),
-                    SortDirection::Asc,
+                    SortOrder::Asc,
                     0,
                     10,
                 )
@@ -1677,7 +1675,7 @@ mod tests {
                     vec![title_contains("Rust"), cond_extra],
                     JoinMode::All,
                     Some(SortField::Title),
-                    SortDirection::Asc,
+                    SortOrder::Asc,
                     0,
                     1,
                 )
@@ -1715,7 +1713,7 @@ mod tests {
                     vec![title_contains("Rust")],
                     JoinMode::All,
                     Some(SortField::Title),
-                    SortDirection::Desc,
+                    SortOrder::Desc,
                     0,
                     10,
                 )
@@ -1754,7 +1752,7 @@ mod tests {
                     vec![title_contains("Rust")],
                     JoinMode::All,
                     None,
-                    SortDirection::Asc,
+                    SortOrder::Asc,
                     0,
                     10,
                 )
@@ -1784,7 +1782,7 @@ mod tests {
                     vec![creator_contains("Ferris")],
                     JoinMode::All,
                     None,
-                    SortDirection::Asc,
+                    SortOrder::Asc,
                     0,
                     10,
                 )
@@ -1817,7 +1815,7 @@ mod tests {
                     vec![cond_type],
                     JoinMode::All,
                     None,
-                    SortDirection::Asc,
+                    SortOrder::Asc,
                     0,
                     1,
                 )
@@ -1848,7 +1846,7 @@ mod tests {
                     vec![cond_type],
                     JoinMode::All,
                     None,
-                    SortDirection::Asc,
+                    SortOrder::Asc,
                     0,
                     2,
                 )
@@ -1876,7 +1874,7 @@ mod tests {
                     vec![creator_contains("Ferris")],
                     JoinMode::All,
                     None,
-                    SortDirection::Asc,
+                    SortOrder::Asc,
                     0,
                     10,
                 )
@@ -1922,7 +1920,7 @@ mod tests {
                     vec![cond_type],
                     JoinMode::All,
                     None,
-                    SortDirection::Asc,
+                    SortOrder::Asc,
                     0,
                     10,
                 )
