@@ -1,5 +1,27 @@
-//! Settings management API wrapper (`<prefix>/settings`).
-
+//! Settings management API wrapper.
+//!
+//! Provides types and client methods for querying and updating configuration
+//! settings in a Zotero library.
+//!
+//! # Key Types
+//!
+//! - [`SettingEntry`]: Key-value pair for a Zotero setting.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use zotero_api::{AppState, ZoteroClient};
+//!
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let state = AppState::from_env();
+//! let client = ZoteroClient::new(&state);
+//! let settings = client.get_settings().await?;
+//! for (k, v) in settings {
+//!     println!("Setting: {k}");
+//! }
+//! # Ok(())
+//! # }
+//! ```
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
@@ -16,17 +38,17 @@ pub struct SettingEntry {
 }
 
 impl ZoteroClient<'_> {
-    /// Fetches all settings for the target library.
+    /// Fetches all configuration settings for the target library.
     ///
-    /// Issues `GET <prefix>/settings`.
+    /// Queries `GET <prefix>/settings`. Handles both map and array response
+    /// shapes returned by different Zotero client versions, returning a
+    /// [`HashMap<String, SettingEntry>`].
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx HTTP status.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if setting entries cannot be decoded.
     #[inline]
     #[expect(clippy::else_if_without_else, reason = "fallback list handling")]
     pub async fn get_settings(
@@ -56,17 +78,20 @@ impl ZoteroClient<'_> {
         Ok(result)
     }
 
-    /// Fetches a single setting entry by key.
+    /// Fetches a single setting entry by setting key name.
     ///
-    /// Issues `GET <prefix>/settings/<key>`.
+    /// Queries `GET <prefix>/settings/<key>`. Returns a [`SettingEntry`]
+    /// carrying the setting value.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - Setting key string (e.g. `export.quickCopy.setting`).
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx HTTP status.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if the setting value cannot be decoded.
     #[inline]
     pub async fn get_setting(
         &self,
@@ -88,17 +113,22 @@ impl ZoteroClient<'_> {
         }
     }
 
-    /// Updates a setting value by key via `PUT <prefix>/settings/<key>`.
+    /// Updates a setting value by key name.
+    ///
+    /// Verifies write permissions and issues a `PUT` request to
+    /// `<prefix>/settings/<key>` with the new setting payload.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - Setting key string to update.
+    /// * `value` - JSON value payload to store.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`]: If write operations are disabled.
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled
+    ///   in [`AppState`](crate::state::AppState).
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the setting update.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn update_setting(
         &self,

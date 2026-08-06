@@ -1,21 +1,19 @@
 //! Zotero Local API JSON objects and payload data structures.
 //!
 //! Defines serde deserialization shapes for Zotero items, collections,
-//! creators, tags, annotations, and local API availability status returned by
-//! `/users/0` HTTP endpoints. These types form the core data layer used across
-//! client methods and higher-level [`crate::mcp`] tool
-//! handlers.
+//! creators, tags, annotations, and local API availability status. These types
+//! form the core data model returned by Zotero HTTP endpoints.
 //!
 //! # Main Types
 //!
-//! - [`ZoteroItem`] - A single library item with metadata envelope
-//! - [`ZoteroItemData`] - Bibliographic, attachment, note, and annotation
-//!   fields
-//! - [`ZoteroCreator`] - Author or editor credited on an item
-//! - [`ZoteroTag`] - Tag attached to an item
-//! - [`ZoteroCollection`] - A collection hierarchy node
-//! - [`ZoteroCollectionData`] - Collection metadata payload
-//! - [`LocalApiStatus`] - Local API availability probe result
+//! - [`ZoteroItem`]: A single library item with metadata envelope.
+//! - [`ZoteroItemData`]: Bibliographic, attachment, note, and annotation
+//!   fields.
+//! - [`ZoteroCreator`]: Author or editor credited on an item.
+//! - [`ZoteroTag`]: Tag attached to an item.
+//! - [`ZoteroCollection`]: A collection hierarchy node.
+//! - [`ZoteroCollectionData`]: Collection metadata payload.
+//! - [`LocalApiStatus`]: Local API availability probe result.
 
 use serde::{Deserialize, Serialize};
 

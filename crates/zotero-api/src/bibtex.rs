@@ -1,5 +1,33 @@
-//! Fast, zero-dependency native `BibTeX` and `BibLaTeX` serializer for
-//! [`ZoteroItem`].
+//! Fast, zero-dependency native `BibTeX` and `BibLaTeX` serializer for Zotero
+//! items.
+//!
+//! Provides formatting functions to convert [`ZoteroItem`] structures directly
+//! into `BibTeX` or `BibLaTeX` syntax strings without requiring external tools.
+//!
+//! # Examples
+//!
+//! ```
+//! use zotero_api::{ZoteroItem, item_to_bibtex};
+//!
+//! let json_data = serde_json::json!({
+//!     "key": "ITEM01",
+//!     "version": 1,
+//!     "library": { "type": "user", "id": 0 },
+//!     "data": {
+//!         "key": "ITEM01",
+//!         "version": 1,
+//!         "itemType": "journalArticle",
+//!         "title": "Quantum Computation",
+//!         "creators": [],
+//!         "tags": [],
+//!         "collections": [],
+//!         "relations": {}
+//!     }
+//! });
+//! let item: ZoteroItem = serde_json::from_value(json_data).unwrap();
+//! let bib = item_to_bibtex(&item, "Smith2024", "bibtex");
+//! assert!(bib.starts_with("@article{Smith2024,"));
+//! ```
 
 use std::fmt::Write;
 
@@ -77,9 +105,12 @@ fn escape_bibtex(val: &str) -> String {
 /// Serializes a single [`ZoteroItem`] into a formatted `BibTeX` or `BibLaTeX`
 /// string entry.
 ///
-/// `style` accepts `"bibtex"` or `"biblatex"`.
-/// If `citekey` is empty, falls back to `item.data.citation_key` or
-/// `item.data.key`.
+/// # Arguments
+///
+/// * `item` - Zotero item structure to serialize
+/// * `citekey` - Custom citation key; if empty, falls back to item citation key
+///   or key ID
+/// * `style` - Serialization format: `"bibtex"` or `"biblatex"`
 #[must_use]
 #[inline]
 #[expect(
@@ -224,8 +255,14 @@ pub fn item_to_bibtex(item: &ZoteroItem, citekey: &str, style: &str) -> String {
     entry.push('}');
     entry
 }
-/// Serializes multiple items with custom citation keys into a single
-/// `BibTeX`/`BibLaTeX` string block.
+/// Serializes multiple items with custom citation keys into a single `BibTeX`
+/// or `BibLaTeX` string block.
+///
+/// # Arguments
+///
+/// * `items` - Slice of tuples containing each item and its assigned citation
+///   key
+/// * `style` - Serialization format: `"bibtex"` or `"biblatex"`
 #[must_use]
 #[inline]
 pub fn items_to_bibtex(items: &[(ZoteroItem, String)], style: &str) -> String {

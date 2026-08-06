@@ -1,25 +1,19 @@
 //! Read-only access to Zotero's local `zotero.sqlite` database.
 //!
-//! Locates the database using the standard Zotero desktop configuration
-//! search order: the `ZOTERO_DB_PATH` environment variable, the `prefs.js`
-//! `dataDir` preference, or the per-user default Zotero data directory.
+//! Locates the database using the standard Zotero desktop configuration search
+//! order: the `ZOTERO_DB_PATH` environment variable, the `prefs.js` `dataDir`
+//! preference, or the per-user default Zotero data directory.
 //!
 //! The database is opened with `SQLite` `immutable=1` and read-only flags so a
 //! running Zotero instance does not block reads. Queries inspect Zotero's
 //! `itemData`, `fulltextWords`, `itemNotes`, and `itemAnnotations` tables
 //! directly.
 //!
-//! Every method is gated at the MCP tool layer by
-//! [`AppState::check_sqlite_access`](crate::state::AppState::check_sqlite_access).
-//!
 //! # Main Types
 //!
 //! - [`LocalZoteroDb`]: Immutable read-only database handle.
 //! - [`FulltextHit`]: Full-text search hit across items.
 //! - [`NoteAnnotationHit`]: Note or annotation search hit.
-//! - [`HitKind`]: Search hit discriminator (`Note` or `Annotation`).
-//!
-//! # Examples
 //!
 //! Opening the local Zotero `SQLite` database and searching full-text:
 //!

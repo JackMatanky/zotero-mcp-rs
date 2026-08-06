@@ -1,13 +1,13 @@
-//! Crate-wide error type unifying failures from every backend.
+//! Crate-wide error type unifying failures across all backends.
 //!
-//! [`ZoteroApiError`] is the single error type returned by every fallible
-//! operation in the crate, built with `thiserror` so each variant's `Display`
-//! message doubles as the text surfaced back to MCP clients.
+//! [`ZoteroApiError`] is the unified error type returned by fallible operations
+//! in this crate, wrapping network transport failures, protocol errors,
+//! database access failures, permission denials, and serialization errors.
 //!
 //! # Examples
 //!
-//! ```no_run
-//! use zotero_api::errors::ZoteroApiError;
+//! ```
+//! use zotero_api::ZoteroApiError;
 //!
 //! fn check_found(found: bool) -> Result<(), ZoteroApiError> {
 //!     if !found {
@@ -19,8 +19,7 @@
 
 use thiserror::Error;
 
-/// Unifies failures from the Zotero Local API, Better `BibTeX`, Better Notes,
-/// or local filesystem.
+/// Unified error type for all Zotero API and backend operations.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum ZoteroApiError {
@@ -50,8 +49,7 @@ pub enum ZoteroApiError {
     #[error("PDF extraction error: {0}")]
     PdfExtract(String),
 
-    /// Local embedding generation failed (model load, inference, or a
-    /// poisoned model mutex).
+    /// Local embedding generation failed.
     #[error("Embedding error: {0}")]
     Embedding(String),
 
@@ -59,14 +57,11 @@ pub enum ZoteroApiError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    /// A local Zotero `SQLite` database could not be read.
-    ///
-    /// Occurs when the discovery step fails (no Zotero profile found), the
-    /// database cannot be opened read-only, or it is not a Zotero database.
+    /// Local Zotero `SQLite` database could not be located or read.
     #[error("Local database error: {0}")]
     LocalDb(String),
 
-    /// A `SQLite` query or connection against the local Zotero database failed.
+    /// `SQLite` query or connection against the local Zotero database failed.
     #[error("SQLite error: {0}")]
     Sqlite(#[from] sqlx::Error),
 

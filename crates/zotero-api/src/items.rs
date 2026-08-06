@@ -69,16 +69,25 @@ struct UploadTicket {
 }
 
 impl ZoteroClient<'_> {
-    /// Fetches the `limit` most recently modified library items, excluding
-    /// notes.
+    /// Fetches the `limit` most recently modified items in the target library,
+    /// excluding notes.
+    ///
+    /// Issues a `GET` request against `<prefix>/items` with
+    /// `sort=dateModified&direction=desc` and `itemType=-note`. Results are
+    /// returned as a [`Vec<ZoteroItem>`] sorted by modification
+    /// timestamp in descending order.
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - Maximum number of recent items to fetch.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code.
-    /// - [`ZoteroApiError::Network`] if the request fails at the HTTP transport
-    ///   level.
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded.
+    /// - [`ZoteroApiError::LocalApi`] if the Zotero Local API returns a non-2xx
+    ///   HTTP status.
+    /// - [`ZoteroApiError::Network`] if a network transport error occurs.
+    /// - [`ZoteroApiError::Json`] if the HTTP response payload cannot be
+    ///   decoded.
     #[inline]
     pub async fn get_recent_items(
         &self,
@@ -94,17 +103,22 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Fetches every top-level library item (notes excluded), paginating
-    /// through the whole library with a stable date-modified ordering so page
-    /// boundaries are deterministic.
+    /// Fetches every top-level item across the entire library (excluding
+    /// notes), automatically paginating.
+    ///
+    /// Queries `<prefix>/items` in pages of 100 items using a stable
+    /// `dateModified` descending sort. Continues issuing page requests
+    /// until a page returns fewer items than requested or an empty list,
+    /// ensuring deterministic, loss-free library iteration.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code.
-    /// - [`ZoteroApiError::Network`] if the request fails at the HTTP transport
-    ///   level.
-    /// - [`ZoteroApiError::Json`] if a response body cannot be decoded.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status on any
+    ///   page request.
+    /// - [`ZoteroApiError::Network`] if transport failures occur during
+    ///   pagination.
+    /// - [`ZoteroApiError::Json`] if any page payload fails JSON
+    ///   deserialization.
     #[inline]
     pub async fn get_all_items(
         &self,
@@ -117,16 +131,26 @@ impl ZoteroClient<'_> {
         self.get_all_json(&url, 100).await
     }
 
-    /// Fetches the item identified by `item_key`.
+    /// Fetches a single library item by its unique [`ItemKey`].
+    ///
+    /// Issues a `GET` request against `<prefix>/items/<item_key>`. If Zotero
+    /// returns a 404 status, this method maps it directly to
+    /// [`ZoteroApiError::NotFound`].
+    ///
+    /// # Arguments
+    ///
+    /// * `item_key` - Eight-character alphanumeric identifier of the target
+    ///   item.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::NotFound`] if the item does not exist.
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code.
-    /// - [`ZoteroApiError::Network`] if the request fails at the HTTP transport
-    ///   level.
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded.
+    /// - [`ZoteroApiError::NotFound`] if no item with `item_key` exists in the
+    ///   library target.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx HTTP status
+    ///   code other than 404.
+    /// - [`ZoteroApiError::Network`] if a transport-level error occurs.
+    /// - [`ZoteroApiError::Json`] if the returned item representation cannot be
+    ///   parsed.
     #[inline]
     pub async fn get_item(
         &self,
@@ -146,16 +170,22 @@ impl ZoteroClient<'_> {
         Ok(self.ensure_success(resp).await?.json().await?)
     }
 
-    /// Lists top-level items not belonging to any collection, up to `limit`
-    /// items.
+    /// Retrieves top-level items that do not belong to any collection.
+    ///
+    /// Queries `<prefix>/items/top` for top-level library items up to `limit`,
+    /// filtering out items whose `collections` key array is non-empty.
+    /// Useful for locating unorganized references.
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - Maximum number of top-level items to retrieve before unfiled
+    ///   filtering.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code.
-    /// - [`ZoteroApiError::Network`] if the request fails at the HTTP transport
-    ///   level.
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status.
+    /// - [`ZoteroApiError::Network`] if a network transport failure occurs.
+    /// - [`ZoteroApiError::Json`] if response decoding fails.
     #[inline]
     pub async fn get_unfiled_items(
         &self,
@@ -174,15 +204,23 @@ impl ZoteroClient<'_> {
             .collect())
     }
 
-    /// Fetches the child items (notes and attachments) of `item_key`.
+    /// Lists all child items (such as HTML notes and file attachments)
+    /// belonging to `item_key`.
+    ///
+    /// Issues a `GET` request to `<prefix>/items/<item_key>/children`. Returns
+    /// a list of [`ZoteroItem`] objects whose `parent_item` metadata
+    /// matches `item_key`.
+    ///
+    /// # Arguments
+    ///
+    /// * `item_key` - Key of the parent item whose children to fetch.
     ///
     /// # Errors
     ///
     /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
     ///   code.
-    /// - [`ZoteroApiError::Network`] if the request fails at the HTTP transport
-    ///   level.
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded.
+    /// - [`ZoteroApiError::Network`] if the transport request fails.
+    /// - [`ZoteroApiError::Json`] if the children array cannot be decoded.
     #[inline]
     pub async fn get_item_children(
         &self,
@@ -197,17 +235,31 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Updates fields of an existing item identified by `item_key` with JSON
-    /// `fields`.
+    /// Updates specific metadata fields of an existing library item via JSON
+    /// patch fields.
+    ///
+    /// Checks write permissions via
+    /// [`AppState::check_write_permission`](crate::state::AppState::check_write_permission)
+    /// before sending a `PATCH` request to `<prefix>/items/<item_key>` with
+    /// the supplied JSON object. If Zotero returns an empty response body
+    /// (common in local write sync), this method refetches the item via
+    /// [`get_item`](Self::get_item).
+    ///
+    /// # Arguments
+    ///
+    /// * `item_key` - Key of the item to modify.
+    /// * `fields` - JSON payload containing the fields to update (e.g.
+    ///   `{"title": "New Title", "version": 1}`).
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::PermissionDenied`] if write access is disabled.
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code.
-    /// - [`ZoteroApiError::Network`] if the request fails at the HTTP transport
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::NotFound`] if the item key does not exist.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the patch payload with
+    ///   a non-2xx status.
+    /// - [`ZoteroApiError::Network`] if the HTTP request fails at the transport
     ///   level.
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded.
+    /// - [`ZoteroApiError::Json`] if response payload decoding fails.
     #[inline]
     pub async fn update_item(
         &self,
@@ -232,17 +284,24 @@ impl ZoteroClient<'_> {
         }
     }
 
-    /// Permanently deletes the item identified by `item_key`.
+    /// Permanently deletes an item from the library using optimistic
+    /// concurrency checks.
+    ///
+    /// Verifies write permissions, fetches the current item version to populate
+    /// the `If-Unmodified-Since-Version` header, and issues a `DELETE`
+    /// request to `<prefix>/items/<item_key>`.
+    ///
+    /// # Arguments
+    ///
+    /// * `item_key` - Key of the item to permanently delete.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::PermissionDenied`] if write access is disabled.
-    /// - [`ZoteroApiError::NotFound`] if the item does not exist.
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code.
-    /// - [`ZoteroApiError::Network`] if the request fails at the HTTP transport
-    ///   level.
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded.
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::NotFound`] if no item exists with `item_key`.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the deletion request
+    ///   (e.g. version conflict 412).
+    /// - [`ZoteroApiError::Network`] if a transport-level error occurs.
     #[inline]
     pub async fn delete_item(
         &self,
@@ -259,17 +318,25 @@ impl ZoteroClient<'_> {
         self.delete(&url, item.version).await
     }
 
-    /// Sets the item's trash state for `item_key` according to `action`.
+    /// Moves an item to the Zotero trash or restores it back to the library.
+    ///
+    /// Fetches the target item's version, updates its `deleted` property
+    /// according to `action` ([`TrashAction::MoveToTrash`] set `deleted:
+    /// true`; [`TrashAction::Restore`] set `deleted: false`), and patches
+    /// the item in Zotero.
+    ///
+    /// # Arguments
+    ///
+    /// * `item_key` - Key of the target item.
+    /// * `action` - Target trash state transition ([`TrashAction::MoveToTrash`]
+    ///   or [`TrashAction::Restore`]).
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::PermissionDenied`] if write access is disabled.
-    /// - [`ZoteroApiError::NotFound`] if the item does not exist.
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code.
-    /// - [`ZoteroApiError::Network`] if the request fails at the HTTP transport
-    ///   level.
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded.
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::NotFound`] if no item exists with `item_key`.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the patch payload.
+    /// - [`ZoteroApiError::Network`] if the transport request fails.
     #[inline]
     pub async fn set_item_deleted(
         &self,
@@ -280,22 +347,32 @@ impl ZoteroClient<'_> {
         let item = self.get_item(item_key).await?;
         self.update_item(
             item_key,
-            serde_json::json!({"deleted": action.is_deleted(), "version": item.version}),
+            serde_json::json!({
+                "deleted": action.is_deleted(),
+                "version": item.version
+            }),
         )
         .await
     }
 
-    /// Creates a new item from a resolved metadata `draft` (as returned by
-    /// [`crate::metadata::resolve_metadata`]).
+    /// Creates a new library item from a resolved metadata draft.
+    ///
+    /// Verifies write permissions and issues a `POST` request to
+    /// `<prefix>/items` with a single-element array containing the
+    /// [`ItemDraft`]. Returns the newly created [`ZoteroItem`].
+    ///
+    /// # Arguments
+    ///
+    /// * `draft` - Typed metadata draft returned by metadata resolution or
+    ///   manually constructed.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::PermissionDenied`] if write access is disabled.
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code.
-    /// - [`ZoteroApiError::Network`] if the request fails at the HTTP transport
-    ///   level.
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded.
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if the created item response payload cannot
+    ///   be parsed.
     #[inline]
     pub async fn create_item_from_metadata(
         &self,
@@ -311,17 +388,24 @@ impl ZoteroClient<'_> {
             .await
     }
 
-    /// Creates multiple items in a single batch request via `POST
+    /// Batch-creates multiple items in a single request via `POST
     /// <prefix>/items`.
+    ///
+    /// Sends an array of item JSON payloads to Zotero's batch creation
+    /// endpoint. Returns a [`BatchWriteResponse`] mapping created item keys
+    /// and index positions.
+    ///
+    /// # Arguments
+    ///
+    /// * `items` - Slice of raw JSON item objects to create in Zotero.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`]: If write operations are disabled.
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the batch payload.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if the batch response payload cannot be
+    ///   decoded.
     #[inline]
     pub async fn create_items(
         &self,
@@ -339,18 +423,25 @@ impl ZoteroClient<'_> {
         Ok(self.ensure_success(resp).await?.json().await?)
     }
 
-    /// Updates multiple items in a single batch request via `POST
-    /// <prefix>/items` with patch payloads.
+    /// Batch-updates multiple items in a single request via `POST
+    /// <prefix>/items`.
+    ///
+    /// Submits patch payloads containing item keys and updated fields to
+    /// Zotero's batch endpoint.
+    ///
+    /// # Arguments
+    ///
+    /// * `items` - Slice of JSON patch objects containing item keys and fields
+    ///   to modify.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`]: If write operations are disabled.
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the batch update
+    ///   payload.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if the batch response payload cannot be
+    ///   decoded.
     #[inline]
     pub async fn update_items(
         &self,
@@ -359,17 +450,25 @@ impl ZoteroClient<'_> {
         self.create_items(items).await
     }
 
-    /// Deletes multiple items by key in a single request via `DELETE
+    /// Batch-deletes multiple items by key in a single request via `DELETE
     /// <prefix>/items?itemKey=K1,K2,...`.
+    ///
+    /// Verifies write permissions and issues a comma-separated key deletion
+    /// query with optimistic version header validation
+    /// (`If-Unmodified-Since-Version`).
+    ///
+    /// # Arguments
+    ///
+    /// * `keys` - Slice of item keys to delete.
+    /// * `version` - Current library version required for concurrency
+    ///   protection.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`]: If write operations are disabled.
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code
+    ///   (e.g. 412 version conflict).
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn delete_items(
         &self,
@@ -387,15 +486,19 @@ impl ZoteroClient<'_> {
         self.delete(&url, version).await
     }
 
-    /// Retrieves the local file view URL for an attachment item via `GET
-    /// <prefix>/items/<key>/file/view/url`.
+    /// Retrieves the local file view URL for an attachment item.
+    /// Queries `GET <prefix>/items/<key>/file/view/url`. Returns the local
+    /// web/protocol URL string used by Zotero desktop or local clients to
+    /// view attachment content.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - Key of the target attachment item.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn get_item_file_view_url(
         &self,
@@ -413,16 +516,22 @@ impl ZoteroClient<'_> {
         Ok(resp.text().await?)
     }
 
-    /// Fetches Zotero's indexed full-text content for `item_key`, returning an
-    /// empty string if the item is unindexed or missing text.
+    /// Fetches Zotero's indexed full-text content for an item, returning an
+    /// empty string if unindexed.
+    ///
+    /// Queries `GET <prefix>/items/<item_key>/fulltext`. Extracts the `content`
+    /// field string if present, or defaults to an empty string.
+    ///
+    /// # Arguments
+    ///
+    /// * `item_key` - Key of the item whose full-text index content to
+    ///   retrieve.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code
-    /// - [`ZoteroApiError::Network`] if the HTTP request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if the full-text payload cannot be decoded.
     #[inline]
     pub async fn get_item_fulltext(
         &self,
@@ -455,12 +564,7 @@ impl ZoteroClient<'_> {
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::PermissionDenied`] if write access is disabled.
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code.
-    /// - [`ZoteroApiError::Network`] if the request fails at the HTTP transport
-    ///   level.
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded.
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
     #[inline]
     pub async fn attach_file_link(
         &self,

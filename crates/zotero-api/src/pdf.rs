@@ -1,16 +1,13 @@
-//! Local PDF extraction backing the `zotero_read_pdf_pages` and
-//! `zotero_get_pdf_outline` tools.
+//! Local PDF extraction module.
 //!
-//! Wraps the [`pdf_extract`] crate to pull plain text out of a PDF file on disk
-//! (with optional page-range filtering) and [`lopdf`] to read its bookmark
-//! outline (table of contents).
+//! Extracts plain text (with optional page filtering) and bookmark outlines
+//! (tables of contents) from local PDF files.
 //!
-//! # Main Functions:
+//! # Main Functions
 //!
-//! - [`extract_pdf_pages`] - Extract text from PDF pages
-//! - [`extract_pdf_outline`] - Read bookmark/table-of-contents outline
-//!
-//! # Examples
+//! - [`extract_pdf_pages`]: Extract plain text from PDF pages.
+//! - [`extract_pdf_outline`]: Read bookmark outline and table of contents
+//!   entries.
 //!
 //! ```no_run
 //! use std::path::Path;
@@ -42,13 +39,10 @@ use crate::errors::ZoteroApiError;
 /// * `max_pdf_bytes` - Maximum allowed PDF size in bytes.
 /// # Errors
 ///
-/// - [`NotFound`] if `file_path` does not exist
-/// - [`InputRejected`] if `file_path` is larger than `max_pdf_bytes`
-/// - [`PdfExtract`] if `pdf-extract` fails to parse the file
-///
-/// [`InputRejected`]: ZoteroApiError::InputRejected
-/// [`NotFound`]: ZoteroApiError::NotFound
-/// [`PdfExtract`]: ZoteroApiError::PdfExtract
+/// - [`ZoteroApiError::NotFound`]: If `file_path` does not exist.
+/// - [`ZoteroApiError::InputRejected`]: If `file_path` is larger than
+///   `max_pdf_bytes`.
+/// - [`ZoteroApiError::PdfExtract`]: If text extraction fails.
 #[inline]
 pub fn extract_pdf_pages(
     file_path: &Path,
@@ -109,13 +103,10 @@ fn filter_pages(full_text: &str, page_numbers: Option<&[usize]>) -> String {
 ///
 /// # Errors
 ///
-/// - [`NotFound`] if `file_path` does not exist
-/// - [`InputRejected`] if `file_path` is larger than `max_pdf_bytes`
-/// - [`PdfExtract`] if the file cannot be parsed as a PDF
-///
-/// [`InputRejected`]: ZoteroApiError::InputRejected
-/// [`NotFound`]: ZoteroApiError::NotFound
-/// [`PdfExtract`]: ZoteroApiError::PdfExtract
+/// - [`ZoteroApiError::NotFound`]: If `file_path` does not exist.
+/// - [`ZoteroApiError::InputRejected`]: If `file_path` is larger than
+///   `max_pdf_bytes`.
+/// - [`ZoteroApiError::PdfExtract`]: If outline extraction fails.
 #[inline]
 pub fn extract_pdf_outline(
     file_path: &Path,

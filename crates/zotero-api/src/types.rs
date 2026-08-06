@@ -1,31 +1,26 @@
-//! Zotero controlled-vocabulary value types.
+//! Controlled vocabulary value types for Zotero entities.
 //!
-//! Models controlled string and integer enumerations returned by the Zotero
-//! Local API, including item types, annotation kinds, creator roles, attachment
-//! link modes, collection parent relationships, and tag origins. Unknown API
-//! values are preserved in `Other` variants to ensure lossless round-tripping.
+//! Provides enumerations for item types, annotation kinds, attachment storage
+//! modes, and collection parent relationships. Unknown API values are preserved
+//! in `Other` variants to ensure lossless round-tripping.
 //!
 //! # Main Types
 //!
-//! - [`ItemType`]: Item kind (`journalArticle`, `book`, `note`, etc.).
+//! - [`ItemType`]: Item classification (`journalArticle`, `book`, etc.).
 //! - [`AnnotationType`]: PDF annotation kind (`highlight`, `underline`, etc.).
-//! - [`CreatorType`]: Creator role (`author`, `editor`, etc.).
-//! - [`LinkMode`]: Attachment storage mode.
-//! - [`CollectionParent`]: Parent collection state (`TopLevel` or child
-//!   `Parent`).
-//! - [`TagOrigin`]: Tag origin source (`User`, `Automatic`, or `Other`).
+//! - [`LinkMode`]: Attachment storage mode (`imported_file`, `linked_file`,
+//!   etc.).
+//! - [`CollectionParent`]: Parent collection state
+//!   ([`CollectionParent::TopLevel`] or [`CollectionParent::Parent`]).
 //!
 //! # Examples
 //!
-//! ```ignore
-//! # use zotero_api::types::{ItemType, TagOrigin};
-//! let item_type = ItemType::from("journalArticle".to_string());
+//! ```
+//! use zotero_api::ItemType;
+//!
+//! let item_type = ItemType::from("journalArticle");
 //! assert_eq!(item_type, ItemType::JournalArticle);
 //! assert_eq!(item_type.as_str(), "journalArticle");
-//! assert!(item_type.is_indexable());
-//!
-//! let origin = TagOrigin::from(0);
-//! assert_eq!(origin, TagOrigin::User);
 //! ```
 
 use serde::{Deserialize, Serialize};

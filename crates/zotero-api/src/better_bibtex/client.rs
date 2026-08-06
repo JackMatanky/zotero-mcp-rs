@@ -2,11 +2,9 @@
 //!
 //! Wraps JSON-RPC method dispatch, request/response serialization, error
 //! mapping, and security permission checks for all Better `BibTeX` operations.
-//! Used by MCP tool handlers in `crate::mcp::better_bibtex`.
+//! # Main Types
 //!
-//! # Main types:
-//!
-//! - [`BetterBibtexClient`] - JSON-RPC client borrowing [`AppState`]
+//! - [`BetterBibtexClient`]: JSON-RPC client borrowing [`AppState`].
 //!
 //! [`AppState`]: crate::state::AppState
 //!
@@ -161,20 +159,24 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("item.pandoc_filter", params).await
     }
 
-    /// Regenerates citation keys for `citekeys`.
+    /// Regenerates citation keys for `citekeys` in the Zotero library.
     ///
-    /// Mutates keys in the Zotero library. Checks write permission via
-    /// [`AppState::check_write_permission`] before issuing the
-    /// `item.regenerate_key` RPC call.
+    /// Verifies write permissions and issues the `item.regenerate_key` JSON-RPC
+    /// method call to the Better `BibTeX` plugin extension running inside
+    /// Zotero. Returns a map of old-to-new citation keys.
+    ///
+    /// # Arguments
+    ///
+    /// * `citekeys` - Slice of citation keys to recalculate using configured
+    ///   pattern rules.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`]: if write operations are disabled in security
-    ///   settings
-    /// - [`BetterBibTeX`]: if the JSON-RPC call fails
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`BetterBibTeX`]: ZoteroApiError::BetterBibTeX
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled
+    ///   in [`AppState`](crate::state::AppState).
+    /// - [`ZoteroApiError::BetterBibTeX`] if the JSON-RPC call fails or returns
+    ///   an RPC error.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn regenerate_keys(
         &self,
@@ -185,24 +187,25 @@ impl<'a> BetterBibtexClient<'a> {
         self.call_rpc("item.regenerate_key", params).await
     }
 
-    /// Registers an auto-export job for a collection.
+    /// Registers an auto-export job for a collection using specified translator
+    /// options.
     ///
-    /// Mutates Better `BibTeX` export settings. Checks write permission via
-    /// [`AppState::check_write_permission`], ensures filepath features are
-    /// enabled, and validates output path permissions before issuing the
-    /// `autoexport.add` RPC call.
+    /// Verifies write permissions, checks that target path `request.path` is
+    /// allowed under configured path security allowlists, and issues the
+    /// `autoexport.add` JSON-RPC call.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - [`AutoExportAddRequest`] specifying collection path,
+    ///   translator name, and output file path.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`]: if write operations are disabled in security
-    ///   settings
-    /// - [`InputRejected`]: if filepath features are disabled or the export
-    ///   directory is disallowed
-    /// - [`BetterBibTeX`]: if the JSON-RPC call fails
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`InputRejected`]: ZoteroApiError::InputRejected
-    /// [`BetterBibTeX`]: ZoteroApiError::BetterBibTeX
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::InputRejected`] if filepath features are disabled or
+    ///   `request.path` is outside allowed directories.
+    /// - [`ZoteroApiError::BetterBibTeX`] if the JSON-RPC call fails.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn autoexport_add(
         &self,
@@ -231,22 +234,22 @@ impl<'a> BetterBibtexClient<'a> {
     /// Scans a `LaTeX` `.aux` file at `aux_path` and imports cited references
     /// into `collection`.
     ///
-    /// Mutates the Zotero library by importing missing items. Checks write
-    /// permission via [`AppState::check_write_permission`], ensures
-    /// filepath features are enabled, and validates the AUX filepath before
-    /// issuing the `collection.scanAUX` RPC call.
+    /// Verifies write permissions, checks `aux_path` against security
+    /// allowlists, and issues the `collection.scanAUX` JSON-RPC call to
+    /// parse citations and import missing references.
+    ///
+    /// # Arguments
+    ///
+    /// * `collection` - Target collection path to receive imported items.
+    /// * `aux_path` - Path to the `.aux` file to scan.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`]: if write operations are disabled in security
-    ///   settings
-    /// - [`InputRejected`]: if filepath features are disabled or the AUX
-    ///   filepath is disallowed
-    /// - [`BetterBibTeX`]: if the JSON-RPC call fails
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`InputRejected`]: ZoteroApiError::InputRejected
-    /// [`BetterBibTeX`]: ZoteroApiError::BetterBibTeX
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::InputRejected`] if filepath features are disabled or
+    ///   `aux_path` is disallowed.
+    /// - [`ZoteroApiError::BetterBibTeX`] if the JSON-RPC call fails.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn scan_aux(
         &self,

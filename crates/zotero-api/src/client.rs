@@ -1,22 +1,20 @@
-//! Async client for the Zotero Local HTTP API.
+//! Async HTTP client for the Zotero Local API.
 //!
-//! Defines [`ZoteroClient`], the request wrapper shared by Zotero domain
-//! modules. The client centralizes authentication, retries, HTTP error
-//! conversion, pagination helpers, and JSON decoding.
+//! Defines [`ZoteroClient`], the primary HTTP request builder and dispatcher
+//! for Zotero Local API operations. The client handles target library scoping,
+//! authentication headers, error conversion, and response decoding.
 //!
 //! # Key Types
 //!
 //! - [`ZoteroClient`]: API client borrowing shared application state.
-//! - [`LocalApiStatus`]: Health check payload returned by status probes.
+//! - [`LibraryTarget`]: Enum selecting User or Group library target.
+//! - [`LocalAuthResponse`]: Authentication token response payload.
 //!
 //! # Examples
 //!
-//! Constructing a [`ZoteroClient`] from shared [`AppState`] and checking Local
-//! API availability:
-//!
 //! ```no_run
-//! # use zotero_api::AppState;
-//! # use zotero_api::ZoteroClient;
+//! use zotero_api::{AppState, ZoteroClient};
+//!
 //! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 //! let state = AppState::from_env();
 //! let client = ZoteroClient::new(&state);
@@ -88,9 +86,8 @@ pub struct LocalAuthResponse {
 
 /// Client for the Zotero Local HTTP API, scoped to a single tool call.
 ///
-/// Wraps shared application state ([`AppState`]) to issue HTTP requests
-/// against Zotero's local REST API with automatic retries and error
-/// mapping.
+/// Wraps shared application state ([`AppState`]) to issue HTTP requests against
+/// Zotero's local REST API with automatic retries and error mapping.
 pub struct ZoteroClient<'a> {
     /// Borrowed shared application state containing HTTP client and API
     /// configuration.
@@ -146,9 +143,9 @@ impl<'a> ZoteroClient<'a> {
 
     /// Probes the Zotero Local API for availability.
     ///
-    /// Issues a lightweight `items?limit=1` request. Connection and HTTP status
-    /// failures are captured in the returned [`LocalApiStatus::error`] field
-    /// rather than being propagated as an error.
+    /// Issues a lightweight request against the items endpoint. Connection and
+    /// HTTP status failures are captured in the returned
+    /// [`LocalApiStatus::error`] field rather than being returned as an error.
     #[inline]
     pub async fn check_status(&self) -> LocalApiStatus {
         let url = format!(
@@ -201,10 +198,8 @@ impl<'a> ZoteroClient<'a> {
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`]: If `resp` status is not a successful HTTP status
-    ///   (non-2xx).
-    ///
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
+    /// - [`ZoteroApiError::LocalApi`]: If `resp` status is not a successful
+    ///   HTTP status.
     pub(super) async fn ensure_success(
         &self,
         resp: Response,
@@ -241,8 +236,8 @@ impl<'a> ZoteroClient<'a> {
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`]: If Zotero rejects the request.
-    /// - [`Network`]: Transport errors.
+    /// - [`ZoteroApiError::LocalApi`]: If Zotero rejects the request.
+    /// - [`ZoteroApiError::Network`]: Transport errors.
     #[inline]
     pub async fn request_local_authorization(
         &self,
@@ -269,9 +264,10 @@ impl<'a> ZoteroClient<'a> {
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx HTTP status.
-    /// - [`Network`]: If the request fails at the transport level.
-    /// - [`Json`]: If the response body cannot be decoded.
+    /// - [`ZoteroApiError::LocalApi`]: If Zotero responds with a non-2xx HTTP
+    ///   status.
+    /// - [`ZoteroApiError::Network`]: If the request fails at the transport
+    ///   level.
     ///
     /// [`LocalApi`]: ZoteroApiError::LocalApi
     /// [`Network`]: ZoteroApiError::Network

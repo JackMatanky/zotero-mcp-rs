@@ -1,14 +1,19 @@
 //! Security profiles, path allowlists, and input size constraints.
 //!
-//! # Main Types:
+//! Defines configuration parameters for path sandboxing, file reading
+//! restrictions, and payload size limits.
 //!
-//! - [`SecurityProfile`] - Supported security profiles (Default, Workspace,
-//!   `TrustedLocal`, `Hardened`)
-//! - [`SecurityConfig`] - Path allowlists and size limits
+//! # Main Types
+//!
+//! - [`SecurityProfile`]: Supported security profiles
+//!   ([`SecurityProfile::Default`], [`SecurityProfile::Workspace`],
+//!   [`SecurityProfile::TrustedLocal`], [`SecurityProfile::Hardened`]).
+//! - [`SecurityConfig`]: Path allowlists and size limits configuration
+//!   container.
 //!
 //! # Examples
 //!
-//! ```no_run
+//! ```
 //! use zotero_api::security::{SecurityConfig, SecurityProfile};
 //!
 //! let config = SecurityConfig::default();

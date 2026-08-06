@@ -1,25 +1,21 @@
 //! Search and query operations for the Zotero Local HTTP API.
 //!
 //! Provides [`ZoteroClient`] methods for free-text item search, tag searching,
-//! citation key resolution, and multi-condition structured queries. Used by
-//! MCP tool handlers in `crate::mcp::zotero::search` to execute library
-//! searches against Zotero's local HTTP API endpoints or via client-side
-//! fallback filtering.
+//! citation key resolution, and multi-condition structured queries against
+//! Zotero's local HTTP API endpoints.
 //!
-//! # Key types and operations
+//! # Key Types and Operations
 //!
 //! - [`ZoteroClient::search_items`]: Free-text search over title, creator,
 //!   year, or fulltext.
 //! - [`ZoteroClient::search_by_tag`]: Filter library items matching a specific
 //!   [`TagName`].
-//! - [`ZoteroClient::search_by_citation_key`]: Look up an item by native Zotero
-//!   citation key or legacy Better `BibTeX` metadata.
+//! - [`ZoteroClient::search_by_citation_key`]: Look up an item by citation key.
 //! - [`ZoteroClient::advanced_search`]: Multi-condition search using
 //!   [`SearchCondition`], [`SearchField`], [`SearchOperator`], and
 //!   [`JoinMode`].
 //! - [`SearchPage`]: Paginated container holding returned items and
 //!   [`PaginationInfo`].
-//!
 //! # Examples
 //!
 //! Performing a free-text item search using [`ZoteroClient`]:
@@ -201,24 +197,26 @@ impl ZoteroClient<'_> {
     /// Searches library items matching `query`, excluding notes, and returns a
     /// paginated page.
     ///
-    /// Executes a quick search over item title, creator, year, and fulltext
-    /// content. When `collection_key` is provided, restricts the search to
-    /// items within that collection. Returns a [`SearchPage`] containing
-    /// matching [`ZoteroItem`] entries and pagination info.
+    /// Executes a free-text search across item title, creator, year, and
+    /// fulltext content.
+    ///
+    /// Issues `GET <prefix>/items?q=<query>&start=<offset>&limit=<limit>` (or
+    /// `<prefix>/collections/<key>/items` if `collection_key` is provided).
+    /// Returns a [`SearchPage`] containing matched items and total hit counts.
     ///
     /// # Arguments
     ///
-    /// * `query` - Free-text query matching title, creator, year, or fulltext
-    /// * `collection_key` - Optional collection key to scope the search
-    /// * `offset` - 0-based offset into the full result set
-    /// * `limit` - Maximum number of items to return
+    /// * `query` - Free-text search string.
+    /// * `collection_key` - Optional collection key to scope the search.
+    /// * `offset` - 0-based result offset for pagination.
+    /// * `limit` - Maximum number of items to return.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroApiError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if the response cannot be decoded
+    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx HTTP
+    ///   status.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if response payload decoding fails.
     #[inline]
     pub async fn search_items(
         &self,
@@ -248,18 +246,21 @@ impl ZoteroClient<'_> {
         Ok(finish_page(page.items, page.total, offset, limit))
     }
 
-    /// Searches items matching a `tag` name, returning up to `limit` items
-    /// excluding notes.
+    /// Searches items tagged with `tag`, returning up to `limit` items
+    /// (excluding notes).
     ///
-    /// Queries Zotero for items tagged with `tag`. Note items are excluded from
-    /// the results. Returns a vector of matching [`ZoteroItem`] instances.
+    /// Queries `GET <prefix>/items?tag=<tag>&limit=<limit>&itemType=-note`.
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - Tag name to match.
+    /// * `limit` - Maximum number of items to return.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroApiError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if the response cannot be decoded
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if JSON decoding fails.
     #[inline]
     pub async fn search_by_tag(
         &self,
@@ -277,19 +278,23 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Searches items by native or legacy citation key `citekey`.
+    /// Searches items by native `citationKey` or legacy `extra` field citation
+    /// key.
     ///
-    /// Checks returned items for a matching `citekey` in either the native
-    /// `citationKey` field or legacy Better `BibTeX` metadata in the
-    /// `extra` field. Returns `Some(ZoteroItem)` if found, or `None` if no
-    /// matching item exists.
+    /// Performs a initial quick-search for `citekey`, then inspects candidate
+    /// items for a matching native `citationKey` property or a legacy
+    /// `Citation Key: ...` string in the `extra` field.
+    /// Returns `Some(ZoteroItem)` if found, or `None` if no item matches.
+    ///
+    /// # Arguments
+    ///
+    /// * `citekey` - Citation key identifier (e.g. `Smith2024`).
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroApiError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if the response cannot be decoded
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if response decoding fails.
     #[inline]
     pub async fn search_by_citation_key(
         &self,
@@ -319,26 +324,27 @@ impl ZoteroClient<'_> {
 
     /// Executes an advanced multi-condition structured search over item fields.
     ///
-    /// Returns a paginated page. When `join_mode` is [`JoinMode::All`] and
-    /// every condition is expressible as a Zotero quick-search parameter,
-    /// the search is pushed down to the server; otherwise the whole library
-    /// is scanned and filtered client-side.
+    /// If `join_mode` is [`JoinMode::All`] and all conditions can be converted
+    /// into Zotero server query parameters, the search is pushed down
+    /// directly to Zotero's Local API server. Otherwise, the library
+    /// is fetched and filtered client-side with evaluation of all conditions.
     ///
     /// # Arguments
     ///
-    /// * `conditions` - List of conditions to match against item fields
-    /// * `join_mode` - [`JoinMode::All`] (AND) or [`JoinMode::Any`] (OR)
-    /// * `sort` - Optional field to sort results by
-    /// * `sort_direction` - Sort order for `sort`
-    /// * `offset` - 0-based offset into the full result set
-    /// * `limit` - Maximum number of items to return
+    /// * `conditions` - Vector of [`SearchCondition`] filters (field, operator,
+    ///   value).
+    /// * `join_mode` - [`JoinMode::All`] (AND) or [`JoinMode::Any`] (OR).
+    /// * `sort` - Optional field to sort results by.
+    /// * `sort_direction` - [`SortDirection::Ascending`] or
+    ///   [`SortDirection::Descending`].
+    /// * `offset` - 0-based result offset for pagination.
+    /// * `limit` - Maximum number of items to return.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroApiError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if the response cannot be decoded
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if response decoding fails.
     #[expect(
         clippy::too_many_arguments,
         reason = "six orthogonal search parameters; a params struct adds \
@@ -392,8 +398,8 @@ impl ZoteroClient<'_> {
     }
 
     /// Builds a server-search URL for `conditions` when they are fully
-    /// expressible as Zotero quick-search parameters, or `None` to fall back
-    /// to a client-side scan.
+    /// expressible as Zotero quick-search parameters, or `None` to fall back to
+    /// a client-side scan.
     ///
     /// The emitted URL always carries a single merged `itemType` parameter
     /// excluding notes, attachments, and annotations (mirroring
@@ -985,16 +991,22 @@ pub struct DuplicateGroup {
 }
 
 impl ZoteroClient<'_> {
-    /// Finds potential duplicate items in the entire library or optional
-    /// `collection_key` by matching title or DOI.
+    /// Scans the library target or optional `collection_key` for potential
+    /// duplicate items matching by title or DOI.
+    ///
+    /// Grouping is performed by normalizing titles (case-insensitively, with
+    /// title length greater than 5 characters) and DOIs. Returns a list of
+    /// [`DuplicateGroup`] structures listing matched keys.
+    ///
+    /// # Arguments
+    /// * `collection_key` - Optional collection key to scope duplicate
+    ///   detection; [`None`] scans the whole library.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code
-    /// - [`ZoteroApiError::Network`] if the HTTP request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded
+    /// - [`ZoteroApiError::LocalApi`] if fetching library items fails.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if response decoding fails.
     #[inline]
     pub async fn find_duplicates(
         &self,

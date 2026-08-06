@@ -1,5 +1,35 @@
-//! Protocol-agnostic domain library for the Zotero Local API, Better `BibTeX`,
-//! Better Notes, and local semantic search.
+//! Domain library for the Zotero Local API, Better `BibTeX`, Better Notes, and
+//! semantic search.
+//!
+//! `zotero-api` provides strongly-typed, async Rust abstractions for inspecting
+//! and mutating local Zotero reference management libraries. It supports the
+//! HTTP Local API, Better `BibTeX` export engine, Better Notes companion
+//! plugin, local `SQLite` database access, and vector semantic search.
+//!
+//! # Main Components
+//!
+//! - [`ZoteroClient`]: Core HTTP client for the Zotero Local API (items,
+//!   collections, tags, searches, keys).
+//! - [`BetterBibtexClient`]: Client for the Better `BibTeX` extension (citation
+//!   keys, JSON-RPC auto-export, Aux scanning).
+//! - [`BetterNotesClient`]: Client for the Better Notes plugin (Markdown
+//!   conversion, note exporting).
+//! - [`LocalZoteroDb`]: Direct read-only `SQLite` database query interface.
+//! - [`SemanticIndex`]: Local vector embedding index for note and annotation
+//!   similarity search.
+//! # Examples
+//!
+//! ```no_run
+//! use zotero_api::{AppState, ZoteroClient};
+//!
+//! # async fn run() -> Result<(), zotero_api::ZoteroApiError> {
+//! let state = AppState::from_env();
+//! let client = ZoteroClient::new(&state);
+//! let status = client.check_status().await;
+//! println!("Status online: {}", status.online);
+//! # Ok(())
+//! # }
+//! ```
 
 #[macro_use]
 mod macros;
@@ -43,13 +73,14 @@ pub use keys::{CitationKey, CollectionKey, ItemKey, LibraryVersion, TagName};
 pub use metadata::{IdentifierKind, ItemDraft, resolve_metadata};
 pub use notes::{AnnotationDraft, AnnotationPosition};
 pub use objects::{
-    BatchWriteResponse, ItemLinks, ItemMeta, LibraryInfo, ZoteroCollection,
-    ZoteroItem,
+    BatchWriteResponse, ItemLinks, ItemMeta, LibraryInfo, LocalApiStatus,
+    ZoteroCollection, ZoteroItem,
 };
 pub use pdf::*;
+pub use relations::RelatedItem;
 pub use search::{
-    JoinMode, SearchCondition, SearchField, SearchOperator, SortDirection,
-    SortField,
+    JoinMode, PaginationInfo, SearchCondition, SearchField, SearchOperator,
+    SearchPage, SortDirection, SortField,
 };
 pub use searches::SavedSearch;
 pub use security::{SecurityConfig, SecurityProfile};
@@ -57,6 +88,8 @@ pub use semantic_search::{
     Embedding, EmbeddingProvider, FastEmbedProvider, SemanticIndex,
 };
 pub use settings::SettingEntry;
-pub use sqlite::{LocalZoteroDb, find_zotero_db};
+pub use sqlite::{
+    FulltextHit, LocalZoteroDb, NoteAnnotationHit, find_zotero_db,
+};
 pub use state::AppState;
 pub use types::{AnnotationType, CollectionParent, ItemType, LinkMode};

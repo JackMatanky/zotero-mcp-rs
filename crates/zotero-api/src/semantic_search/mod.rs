@@ -1,28 +1,24 @@
-//! Local semantic search: embedding generation, chunk storage, and
-//! brute-force cosine similarity search over a side-car `SQLite` database this
-//! server owns.
+//! Local semantic search: embedding generation, chunk storage, and vector
+//! similarity search.
 //!
-//! This module operates independently of Zotero's primary `zotero.sqlite`
-//! database, consuming [`ZoteroClient`](crate::client::ZoteroClient) to scan
-//! the library for items and storing generated text chunks and vector
-//! embeddings in a dedicated `SQLite` database.
-//!
+//! database, consuming [`crate::client::ZoteroClient`] to scan the library for
+//! items and storing generated text chunks and vector embeddings in a dedicated
+//! `SQLite` database.
 //! # Main Types
 //!
-//! - [`Embedding`] - L2-normalized `f32` vector representation.
-//! - [`FastEmbedProvider`] - Local ONNX embedding provider via `fastembed`.
-//! - [`SemanticIndex`] - Read/write semantic index database handle.
-//! - [`EmbeddingProvider`] - Trait for embedding generator backends.
+//! - [`Embedding`]: L2-normalized `f32` vector representation.
+//! - [`FastEmbedProvider`]: Local ONNX embedding provider via `fastembed`.
+//! - [`SemanticIndex`]: Read/write semantic index database handle.
+//! - [`EmbeddingProvider`]: Trait for embedding generator backends.
 //!
-//! # Submodules
+//! # Architecture Components
 //!
-//! - [`chunking`] - Paragraph-aware text splitting algorithm.
-//! - [`embedding`] - Vector representation, dot products, BLOB encoding, and
-//!   ONNX models.
-//! - [`index`] - Whole-library indexing and synchronization routines.
-//! - [`search`] - Query embedding and cosine similarity ranking.
-//! - [`store`] - `SQLite` persistence for chunks and embeddings.
-//!
+//! - Chunking: Paragraph-aware text splitting algorithm.
+//! - Embedding: Vector representation, dot products, BLOB encoding, and ONNX
+//!   models.
+//! - Indexing: Whole-library indexing and synchronization routines.
+//! - Searching: Query embedding and cosine similarity ranking.
+//! - Storage: `SQLite` persistence for chunks and embeddings.
 //! # Examples
 //!
 //! Resolving the semantic index database path and model cache directory:

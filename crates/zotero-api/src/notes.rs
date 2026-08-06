@@ -74,18 +74,24 @@ pub struct AnnotationDraft {
 }
 
 impl ZoteroClient<'_> {
-    /// Creates a note item attached to `parent_item_key` with body
+    /// Creates an HTML note item attached to `parent_item_key` with body
     /// `note_content`.
+    ///
+    /// Verifies write permissions and issues `POST <prefix>/items` with
+    /// `itemType: "note"`.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent_item_key` - Key of the parent item to attach the note to.
+    /// * `note_content` - HTML or text body content for the note.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::PermissionDenied`] if write operations are disabled
-    ///   in application state
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    ///   code
-    /// - [`ZoteroApiError::Network`] if the HTTP request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled
+    ///   in [`AppState`](crate::state::AppState).
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the creation request.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if response payload decoding fails.
     #[inline]
     pub async fn create_note(
         &self,
@@ -108,15 +114,24 @@ impl ZoteroClient<'_> {
             .await
     }
 
-    /// Creates a PDF annotation attached to a parent attachment item.
+    /// Creates a PDF annotation item attached to a parent PDF attachment item.
+    ///
+    /// Verifies write permissions and posts an `annotation` item containing
+    /// type, text, comment, CSS color, page label, and position payload
+    /// parameters.
+    ///
+    /// # Arguments
+    ///
+    /// * `draft` - Detailed annotation properties including parent attachment
+    ///   key and coordinates.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroApiError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if response decoding fails
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the annotation creation
+    ///   request.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if response decoding fails.
     #[inline]
     pub async fn create_annotation(
         &self,
@@ -147,15 +162,23 @@ impl ZoteroClient<'_> {
         .await
     }
 
-    /// Extracts and synthesizes annotations and notes for `item_key` into
-    /// structured Markdown.
+    /// Extracts and synthesizes all annotations and notes attached to
+    /// `item_key` into a Markdown document.
+    ///
+    /// Fetches the parent item and its child items via
+    /// [`get_item_children`](Self::get_item_children). Formats highlights,
+    /// comments, tags, and standalone child notes into structured Markdown
+    /// headings.
+    ///
+    /// # Arguments
+    ///
+    /// * `item_key` - Key of the target item.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroApiError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if the response cannot be decoded
+    /// - [`ZoteroApiError::NotFound`] if `item_key` does not exist.
+    /// - [`ZoteroApiError::LocalApi`] if fetching parent or child items fails.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn synthesize_annotations(
         &self,
@@ -272,7 +295,16 @@ mod tests {
 
     #[tokio::test]
     async fn posts_note_payload_for_parent_item() {
-        let response = json!([{"key":"NOTE0001","version":1,"data":{"key":"NOTE0001","version":1,"itemType":"note"}}]).to_string();
+        let response = json!([{
+            "key":"NOTE0001",
+            "version":1,
+            "data":{
+                "key":"NOTE0001",
+                "version":1,
+                "itemType":"note"
+            }
+        }])
+        .to_string();
         let (server, recorded) =
             MockServer::recording(vec![http_response("200 OK", &response)]);
         let app = state(server.url(), true);

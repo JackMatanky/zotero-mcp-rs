@@ -1,33 +1,27 @@
-//! Zotero object keys, relation URIs, and library versions.
+//! Zotero object keys and library version identifiers.
 //!
 //! Provides strongly-typed identifier newtypes ([`ItemKey`], [`CollectionKey`],
-//! [`TagName`], [`CitationKey`], [`RelationUri`]) and library version counters
-//! ([`LibraryVersion`]) used across the Zotero domain layer to prevent string
-//! transposition errors.
+//! [`TagName`], [`CitationKey`]) and library version counters
+//! ([`LibraryVersion`]) to ensure type safety across the Zotero domain layer.
 //!
 //! # Main Types
 //!
-//! - [`ItemKey`] - 8-character alphanumeric item identifier
-//! - [`CollectionKey`] - 8-character alphanumeric collection identifier
-//! - [`TagName`] - Tag name wrapper
-//! - [`CitationKey`] - Citation key wrapper
-//! - [`RelationUri`] - Item relation URI (`http://zotero.org/...`)
-//! - [`LibraryVersion`] - Library version counter
+//! - [`ItemKey`]: 8-character alphanumeric item identifier.
+//! - [`CollectionKey`]: 8-character alphanumeric collection identifier.
+//! - [`TagName`]: Tag name wrapper.
+//! - [`CitationKey`]: Citation key wrapper.
+//! - [`LibraryVersion`]: Library version counter.
 //!
 //! # Examples
 //!
-//! ```ignore
-//! use zotero_api::{ItemKey, relations::RelationUri};
+//! ```
+//! use zotero_api::{CollectionKey, ItemKey};
 //!
 //! let item_key = ItemKey::from("ABC12345");
-//! let relation_uri = RelationUri::from(&item_key);
-//! assert_eq!(
-//!     relation_uri.as_str(),
-//!     "http://zotero.org/users/0/items/ABC12345"
-//! );
+//! assert_eq!(item_key.as_str(), "ABC12345");
 //!
-//! let parsed_key = ItemKey::try_from(&relation_uri).unwrap();
-//! assert_eq!(parsed_key, item_key);
+//! let collection_key = CollectionKey::from("COL12345");
+//! assert_eq!(collection_key.as_str(), "COL12345");
 //! ```
 
 use serde::{Deserialize, Serialize};

@@ -56,23 +56,23 @@ pub struct RelatedItem {
 
 impl ZoteroClient<'_> {
     /// Fetches the items linked to `item_key` via `dc:relation`.
+    /// Fetches all related items linked to `item_key` via Dublin Core
+    /// `dc:relation` URIs.
     ///
-    /// Returns a vector of [`RelatedItem`] structures for all resolved relation
-    /// URIs. Relation values that do not carry a Zotero item key are
-    /// skipped, as are keys the Local API 404s on (e.g. group library items
-    /// invisible to the `/users/0` client).
+    /// Inspects `item_key`'s relation map, extracts valid Zotero item URIs, and
+    /// resolves each target item. Target items that return 404 (e.g. group
+    /// library items inaccessible in current target) are skipped.
+    ///
+    /// # Arguments
+    ///
+    /// * `item_key` - Key of the item whose related links to inspect.
     ///
     /// # Errors
     ///
-    /// - [`NotFound`] if `item_key` does not exist
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response cannot be decoded
-    ///
-    /// [`NotFound`]: ZoteroApiError::NotFound
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
-    /// [`Json`]: ZoteroApiError::Json
+    /// - [`ZoteroApiError::NotFound`] if `item_key` does not exist.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if response decoding fails.
     #[inline]
     pub async fn get_related_items(
         &self,
@@ -97,28 +97,28 @@ impl ZoteroClient<'_> {
         Ok(related)
     }
 
-    /// Links `a` and `b` bidirectionally by adding each other's URI to their
-    /// `dc:relation` maps.
+    /// Links item `a` and item `b` bidirectionally by updating each item's
+    /// `dc:relation` map.
     ///
-    /// The two `PATCH` requests are not transactional: if the second fails,
-    /// the first has already landed. Both operations are set-based and
-    /// idempotent, so a retry is safe.
+    /// Checks write permissions and ensures `a != b`. Fetches both items and
+    /// patches item `a` to include item `b`'s URI, and patches item `b` to
+    /// include item `a`'s URI. Note that the two `PATCH` requests are
+    /// non-transactional but idempotent, making retries safe.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - Key of the first item to link.
+    /// * `b` - Key of the second item to link.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`] if write permission is disabled in configuration
-    /// - [`InputRejected`] if `a` and `b` are the same item key
-    /// - [`NotFound`] if either item does not exist
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response cannot be decoded
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`InputRejected`]: ZoteroApiError::InputRejected
-    /// [`NotFound`]: ZoteroApiError::NotFound
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
-    /// [`Json`]: ZoteroApiError::Json
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::InputRejected`] if `a` and `b` are the same item
+    ///   key.
+    /// - [`ZoteroApiError::NotFound`] if either item `a` or item `b` does not
+    ///   exist.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects either item update.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn add_item_relation(
         &self,
@@ -162,26 +162,24 @@ impl ZoteroClient<'_> {
         Ok(())
     }
 
-    /// Unlinks `a` and `b` bidirectionally by removing each other's URI from
-    /// their `dc:relation` maps.
+    /// Unlinks item `a` and item `b` bidirectionally by removing each item's
+    /// URI from the other's `dc:relation` map.
     ///
-    /// The two `PATCH` requests are not transactional: if the second fails,
-    /// the first has already landed. Both operations are set-based and
-    /// idempotent, so a retry is safe.
+    /// Checks write permissions, fetches both items, and patches each item to
+    /// remove the other item's URI link. Operations are idempotent.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - Key of the first item to unlink.
+    /// * `b` - Key of the second item to unlink.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`] if write permission is disabled in configuration
-    /// - [`NotFound`] if either item does not exist
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response cannot be decoded
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`NotFound`]: ZoteroApiError::NotFound
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
-    /// [`Json`]: ZoteroApiError::Json
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::NotFound`] if either item `a` or item `b` does not
+    ///   exist.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects either item update.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn remove_item_relation(
         &self,
@@ -219,10 +217,9 @@ impl ZoteroClient<'_> {
     }
 }
 
-/// Reads the `dc:relation` URI values from an item's `relations` map,
-/// accepting either a single URI string or an array of URI strings (Zotero
-/// switches forms by value count). Missing, empty, and non-string entries are
-/// ignored.
+/// Reads the `dc:relation` URI values from an item's `relations` map, accepting
+/// either a single URI string or an array of URI strings (Zotero switches forms
+/// by value count). Missing, empty, and non-string entries are ignored.
 pub(crate) fn parse_relation_keys(
     relations: &serde_json::Value,
 ) -> Vec<RelationUri> {

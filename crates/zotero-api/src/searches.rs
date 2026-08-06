@@ -1,5 +1,27 @@
-//! Saved searches management and local execution endpoint wrapper
-//! (`<prefix>/searches`).
+//! Saved search management and execution.
+//!
+//! Provides types and client methods for retrieving, executing, creating, and
+//! deleting saved searches in a Zotero library.
+//!
+//! # Key Types
+//!
+//! - [`SavedSearch`]: Saved search query representation.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use zotero_api::{AppState, ZoteroClient};
+//!
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let state = AppState::from_env();
+//! let client = ZoteroClient::new(&state);
+//! let searches = client.list_searches().await?;
+//! for s in searches {
+//!     println!("Saved search: {} ({})", s.name, s.key);
+//! }
+//! # Ok(())
+//! # }
+//! ```
 
 use serde::{Deserialize, Serialize};
 
@@ -25,15 +47,16 @@ pub struct SavedSearch {
 }
 
 impl ZoteroClient<'_> {
-    /// Lists all saved searches in the target library.
+    /// Lists all saved search filters configured in the target library.
+    ///
+    /// Queries `GET <prefix>/searches`. Returns a list of [`SavedSearch`]
+    /// objects containing search keys, display names, and condition arrays.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
+    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if saved search payload decoding fails.
     #[inline]
     pub async fn list_searches(
         &self,
@@ -46,15 +69,20 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Fetches a single saved search definition by key.
+    /// Fetches a single saved search definition by its unique search key.
+    ///
+    /// Queries `GET <prefix>/searches/<key>`.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - Eight-character saved search key identifier.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
+    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
+    ///   code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if the saved search object cannot be decoded.
     #[inline]
     pub async fn get_search(
         &self,
@@ -68,18 +96,20 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Executes a saved search and returns matching items.
+    /// Executes a saved search on the Zotero server and returns matching items.
     ///
-    /// Special Local API capability hitting `GET
-    /// <prefix>/searches/<key>/items`.
+    /// Queries `GET <prefix>/searches/<key>/items`, leveraging Zotero desktop's
+    /// server-side search engine.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - Eight-character key of the saved search to execute.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if response item payload decoding fails.
     #[inline]
     pub async fn execute_saved_search(
         &self,
@@ -93,17 +123,22 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Creates saved searches in a batch via `POST <prefix>/searches`.
+    /// Batch-creates new saved search definitions in the library.
+    ///
+    /// Verifies write permissions and issues a `POST` request to
+    /// `<prefix>/searches` with an array of search definition payloads.
+    ///
+    /// # Arguments
+    ///
+    /// * `searches` - Slice of raw JSON search objects (name and conditions).
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`]: If write operations are disabled.
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled
+    ///   in [`AppState`](crate::state::AppState).
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the creation request.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if response decoding fails.
     #[inline]
     pub async fn create_searches(
         &self,
@@ -121,18 +156,22 @@ impl ZoteroClient<'_> {
         Ok(self.ensure_success(resp).await?.json().await?)
     }
 
-    /// Deletes saved searches by key via `DELETE
-    /// <prefix>/searches?searchKey=K1,K2,...`.
+    /// Batch-deletes saved searches by key in a single request.
+    ///
+    /// Verifies write permissions and issues `DELETE
+    /// <prefix>/searches?searchKey=K1,K2,...` with optimistic version
+    /// concurrency validation.
+    ///
+    /// # Arguments
+    ///
+    /// * `keys` - Slice of saved search key strings to delete.
+    /// * `version` - Current library version required for concurrency checks.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`]: If write operations are disabled.
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn delete_searches(
         &self,

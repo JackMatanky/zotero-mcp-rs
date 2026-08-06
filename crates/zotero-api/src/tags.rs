@@ -1,18 +1,15 @@
 //! Tag operations for the Zotero Local HTTP API.
 //!
-//! Provides methods on [`ZoteroClient`] for listing library tags, updating tags
-//! across items, renaming tags library-wide, and deleting tags from
-//! `/users/0/tags`. This module is called by tag MCP tool handlers in
-//! `crate::mcp::zotero`.
+//! Provides methods on [`ZoteroClient`] for listing library tags, batch
+//! updating tags across items, renaming tags library-wide, and deleting tags.
 //!
 //! # Key Operations
 //!
-//! - [`ZoteroClient::list_tags`]: list library-wide tag names.
-//! - [`ZoteroClient::batch_update_tags`]: add or remove tags across items.
-//! - [`ZoteroClient::rename_tag`] and [`ZoteroClient::delete_tags`]: bulk tag
-//!   mutation and cleanup.
-//!
-//! # Examples
+//! - [`ZoteroClient::list_tags`]: List library-wide tag names.
+//! - [`ZoteroClient::batch_update_tags`]: Add or remove tags across items.
+//! - [`ZoteroClient::rename_tag`]: Rename a tag across all items in the
+//!   library.
+//! - [`ZoteroClient::delete_tags`]: Delete tags library-wide.
 //!
 //! ```no_run
 //! # use zotero_api::errors::ZoteroApiError;
@@ -26,6 +23,7 @@
 //! # Ok(())
 //! # }
 //! ```
+
 use std::collections::BTreeSet;
 
 use crate::{
@@ -36,14 +34,22 @@ use crate::{
 };
 
 impl ZoteroClient<'_> {
-    /// Lists all tag names in the library, returning up to `limit` tags.
+    /// Lists all tag names present in the library, returning up to `limit` tag
+    /// strings.
+    ///
+    /// Queries `GET <prefix>/tags?limit=<limit>`. Extracts and deduplicates the
+    /// `tag` property string array returned by Zotero.
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - Maximum number of tag names to fetch.
     ///
     /// # Errors
     ///
     /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroApiError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if the response cannot be decoded
+    ///   code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if tag array decoding fails.
     #[inline]
     pub async fn list_tags(
         &self,
@@ -64,21 +70,25 @@ impl ZoteroClient<'_> {
             .collect())
     }
 
-    /// Batch updates tags across multiple items by adding and removing tags.
+    /// Batch-updates tags across multiple items by adding and removing tag
+    /// lists.
+    ///
+    /// Iterates over `item_keys`, fetches each item's current tag list,
+    /// computes set differences (`current + add_tags - remove_tags`), and
+    /// patches each item in Zotero.
     ///
     /// # Arguments
     ///
-    /// * `item_keys` - Target item keys to update
-    /// * `add_tags` - Tag names to attach to each item
-    /// * `remove_tags` - Tag names to strip from each item
+    /// * `item_keys` - Slice of item keys to modify.
+    /// * `add_tags` - Tag names to attach to each item.
+    /// * `remove_tags` - Tag names to strip from each item.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroApiError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if the response cannot be decoded
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::NotFound`] if any item key does not exist.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects any item tag update.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn batch_update_tags(
         &self,
@@ -101,15 +111,24 @@ impl ZoteroClient<'_> {
         Ok(count)
     }
 
-    /// Renames tag `old_tag` to `new_tag` across every item in the library.
+    /// Renames a tag from `old_tag` to `new_tag` across all matching items in
+    /// the library target.
+    ///
+    /// Queries items matching `old_tag` via
+    /// [`search_by_tag`](Self::search_by_tag) and patches each
+    /// matching item to add `new_tag` and remove `old_tag`. Returns the number
+    /// of updated items.
+    ///
+    /// # Arguments
+    ///
+    /// * `old_tag` - Existing tag name to replace.
+    /// * `new_tag` - Replacement tag name to assign.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroApiError::Network`] if the request fails at the transport
-    ///   level
-    /// - [`ZoteroApiError::Json`] if the response cannot be decoded
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects tag update requests.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn rename_tag(
         &self,
@@ -133,14 +152,22 @@ impl ZoteroClient<'_> {
         Ok(count)
     }
 
-    /// Deletes up to 50 `tags` from the entire library in a single request.
+    /// Deletes up to 50 tag names from the entire library in a single request.
+    ///
+    /// Issues `DELETE <prefix>/tags?tag=<joined_tags>` with URL-encoded tag
+    /// names separated by ` || `, passing the current library version
+    /// header for optimistic concurrency check.
+    ///
+    /// # Arguments
+    ///
+    /// * `tags` - Slice of tag names to delete from the library.
     ///
     /// # Errors
     ///
-    /// - [`ZoteroApiError::PermissionDenied`] if writes are disabled
-    /// - [`ZoteroApiError::LocalApi`] if Zotero responds with a non-2xx status
-    /// - [`ZoteroApiError::Network`] if the request fails at the transport
-    ///   level
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx HTTP status
+    ///   code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn delete_tags(
         &self,

@@ -7,8 +7,8 @@
 /// `From<String>`, `From<&str>`, `AsRef<str>`, `PartialEq<str>`,
 /// `PartialEq<&str>`, `PartialEq<$name> for str`.
 ///
-/// Accepts a leading visibility (e.g. `pub`, `pub(crate)`) applied to both
-/// the generated struct and its `as_str()` accessor.
+/// Accepts a leading visibility (e.g. `pub`, `pub(crate)`) applied to both the
+/// generated struct and its `as_str()` accessor.
 macro_rules! string_newtype {
     ($vis:vis $name:ident, $doc:expr) => {
         string_newtype!($vis $name, $doc,);

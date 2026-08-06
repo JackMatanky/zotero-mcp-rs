@@ -1,5 +1,25 @@
-//! Incremental deletion sync endpoint API wrapper (`GET <prefix>/deleted`).
-
+//! Deleted library object synchronization.
+//!
+//! Provides response structures and client methods for querying deleted items,
+//! collections, searches, and tags since a given library version.
+//!
+//! # Key Types
+//!
+//! - [`DeletedObjectsResponse`]: Container of deleted keys grouped by type.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use zotero_api::{AppState, LibraryVersion, ZoteroClient};
+//!
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let state = AppState::from_env();
+//! let client = ZoteroClient::new(&state);
+//! let deleted = client.get_deleted(LibraryVersion::from(100)).await?;
+//! println!("Deleted items: {:?}", deleted.items);
+//! # Ok(())
+//! # }
+//! ```
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -24,19 +44,12 @@ pub struct DeletedObjectsResponse {
 }
 
 impl ZoteroClient<'_> {
-    /// Retrieves deleted library objects since a specific [`LibraryVersion`].
-    ///
-    /// Issues `GET <prefix>/deleted?since=<version>`.
+    /// Retrieves deleted library objects (items, collections, searches, tags)
+    /// since `since`.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    /// - [`Json`]: If decoding fails.
-    ///
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
-    /// [`Json`]: ZoteroApiError::Json
+    /// Returns [`ZoteroApiError`] if fetching deleted objects fails.
     #[inline]
     pub async fn get_deleted(
         &self,

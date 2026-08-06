@@ -47,20 +47,18 @@ pub enum CollectionItemAction {
 }
 
 impl ZoteroClient<'_> {
-    /// Fetches every collection in the library.
+    /// Fetches all collections defined in the library scope, returning the full
+    /// collection tree.
     ///
-    /// Returns a vector of [`ZoteroCollection`] records representing the full
-    /// collection hierarchy.
+    /// Queries `GET <prefix>/collections`. Returns a list of
+    /// [`ZoteroCollection`] records containing collection metadata (keys,
+    /// names, and parent collection relationships).
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body cannot be decoded
-    ///
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
-    /// [`Json`]: ZoteroApiError::Json
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code.
+    /// - [`ZoteroApiError::Network`] if a transport-level error occurs.
+    /// - [`ZoteroApiError::Json`] if the collection list fails JSON decoding.
     #[inline]
     pub async fn get_collections(
         &self,
@@ -76,17 +74,19 @@ impl ZoteroClient<'_> {
     /// Searches collections by matching `query` against collection names
     /// case-insensitively.
     ///
-    /// Returns matching [`ZoteroCollection`] records from across the library.
+    /// Fetches all collections via [`get_collections`](Self::get_collections)
+    /// and filters the list in memory, returning collections whose name
+    /// contains `query`.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - Substring to match against collection names.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body cannot be decoded
-    ///
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
-    /// [`Json`]: ZoteroApiError::Json
+    /// - [`ZoteroApiError::LocalApi`] if fetching collections fails.
+    /// - [`ZoteroApiError::Network`] if transport errors occur.
+    /// - [`ZoteroApiError::Json`] if JSON decoding fails.
     #[inline]
     pub async fn search_collections(
         &self,
@@ -101,20 +101,23 @@ impl ZoteroClient<'_> {
         Ok(filtered)
     }
 
-    /// Fetches every item inside the collection identified by `collection_key`.
+    /// Fetches every item contained within the collection identified by
+    /// `collection_key`.
     ///
-    /// Returns a vector of [`ZoteroItem`] records contained within the
+    /// Queries `GET <prefix>/collections/<collection_key>/items`. Returns a
+    /// list of [`ZoteroItem`] structures stored inside the target
     /// collection.
+    ///
+    /// # Arguments
+    ///
+    /// * `collection_key` - Eight-character key of the target collection.
     ///
     /// # Errors
     ///
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body cannot be decoded
-    ///
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
-    /// [`Json`]: ZoteroApiError::Json
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx HTTP status.
+    /// - [`ZoteroApiError::Network`] if a network transport failure occurs.
+    /// - [`ZoteroApiError::Json`] if the response body cannot be decoded into
+    ///   items.
     #[inline]
     pub async fn get_collection_items(
         &self,
@@ -129,22 +132,29 @@ impl ZoteroClient<'_> {
         self.get_json(&url).await
     }
 
-    /// Creates a new collection with `name` and optional `parent_key`.
+    /// Creates a new collection with the given `name` and optional
+    /// `parent_key`.
     ///
-    /// Returns the newly created [`ZoteroCollection`] returned by the Local
-    /// API.
+    /// Checks write permissions via
+    /// [`AppState::check_write_permission`](crate::state::AppState::check_write_permission)
+    /// and posts a single-element creation array to `POST
+    /// <prefix>/collections`.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Display name for the new collection.
+    /// * `parent_key` - Optional parent collection key; [`None`] creates a
+    ///   top-level collection.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`] if write permission is disabled in configuration
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body cannot be decoded
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
-    /// [`Json`]: ZoteroApiError::Json
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled
+    ///   in [`AppState`](crate::state::AppState).
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the collection creation
+    ///   request.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
+    /// - [`ZoteroApiError::Json`] if the created collection payload fails
+    ///   deserialization.
     #[inline]
     pub async fn create_collection(
         &self,
@@ -173,26 +183,26 @@ impl ZoteroClient<'_> {
         .await
     }
 
-    /// Adds or removes items to or from a collection.
+    /// Adds items to or removes items from a collection without modifying item
+    /// metadata.
+    ///
+    /// Verifies write permissions and formats `item_keys` as a space-separated
+    /// string body. Sends `POST
+    /// <prefix>/collections/<collection_key>/items` to add items, or
+    /// `DELETE <prefix>/collections/<collection_key>/items` to remove items.
     ///
     /// # Arguments
     ///
-    /// * `collection_key` - Key of the target collection
-    /// * `item_keys` - Slice of item keys to add or remove
-    /// * `action` - Action to perform ([`CollectionItemAction::Add`] or
-    ///   [`CollectionItemAction::Remove`])
+    /// * `collection_key` - Target collection key.
+    /// * `item_keys` - Slice of item keys to add or remove.
+    /// * `action` - [`CollectionItemAction::Add`] to add items, or
+    ///   [`CollectionItemAction::Remove`] to remove items.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`] if write permission is disabled in configuration
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body cannot be decoded
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
-    /// [`Json`]: ZoteroApiError::Json
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn manage_collection_items(
         &self,
@@ -225,19 +235,21 @@ impl ZoteroClient<'_> {
 
     /// Permanently deletes the collection identified by `collection_key`.
     ///
-    /// Items inside the collection are not deleted.
+    /// Fetches the collection to determine its current version, then issues a
+    /// `DELETE` request with an `If-Unmodified-Since-Version` header. Items
+    /// inside the deleted collection are retained in the library (unfiled).
+    ///
+    /// # Arguments
+    ///
+    /// * `collection_key` - Key of the collection to delete.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`] if write permission is disabled in configuration
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body cannot be decoded
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
-    /// [`Json`]: ZoteroApiError::Json
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::NotFound`] if the collection does not exist.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the deletion request
+    ///   (e.g. 412 version conflict).
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn delete_collection(
         &self,
@@ -261,27 +273,27 @@ impl ZoteroClient<'_> {
         self.delete(&url, collection.version).await
     }
 
-    /// Renames and/or moves a collection identified by `collection_key`.
+    /// Renames a collection and/or moves it to a new parent collection
+    /// location.
     ///
-    /// Returns the updated [`ZoteroCollection`] record.
+    /// Fetches current collection data, applies updated `name` and/or `parent`
+    /// fields, and submits a `PUT` request to
+    /// `<prefix>/collections/<collection_key>`. If Zotero returns an empty
+    /// body, refetches the updated collection.
     ///
     /// # Arguments
     ///
-    /// * `collection_key` - Key of the collection to update
-    /// * `name` - Optional new collection name
+    /// * `collection_key` - Key of the collection to update.
+    /// * `name` - Optional new display name for the collection.
     /// * `parent` - Optional new parent collection location
+    ///   ([`CollectionParent::TopLevel`] or [`CollectionParent::Parent`]).
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`] if write permission is disabled in configuration
-    /// - [`LocalApi`] if Zotero responds with a non-2xx status code
-    /// - [`Network`] if the request fails at the transport level
-    /// - [`Json`] if the response body cannot be decoded
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
-    /// [`Network`]: ZoteroApiError::Network
-    /// [`Json`]: ZoteroApiError::Json
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::NotFound`] if the collection does not exist.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero rejects the update.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn update_collection(
         &self,
@@ -332,17 +344,25 @@ impl ZoteroClient<'_> {
         }
     }
 
-    /// Deletes multiple collections by key in a single request via `DELETE
-    /// <prefix>/collections?collectionKey=K1,K2,...`.
+    /// Batch-deletes multiple collections by key in a single request via
+    /// `DELETE <prefix>/collections?collectionKey=K1,K2,...`.
+    ///
+    /// Verifies write permissions and issues a comma-separated key deletion
+    /// query with optimistic version header validation
+    /// (`If-Unmodified-Since-Version`).
+    ///
+    /// # Arguments
+    ///
+    /// * `keys` - Slice of collection keys to delete.
+    /// * `version` - Current library version required for concurrency
+    ///   validation.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`]: If write operations are disabled.
-    /// - [`LocalApi`]: If Zotero responds with a non-2xx status.
-    /// - [`Network`]: Transport errors.
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`LocalApi`]: ZoteroApiError::LocalApi
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::LocalApi`] if Zotero returns a non-2xx status code
+    ///   (e.g. 412 version conflict).
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn delete_collections(
         &self,

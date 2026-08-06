@@ -101,17 +101,8 @@ pub enum IdentifierKind {
 ///
 /// # Errors
 ///
-/// - [`NotFound`] if the identifier cannot be resolved (404 status from the
-///   source API)
-/// - [`LocalApi`] if the source API responds with a non-2xx status other than
-///   404
-/// - [`Network`] if the request fails at the transport level
-/// - [`Json`] if the metadata response cannot be decoded
-///
-/// [`NotFound`]: ZoteroApiError::NotFound
-/// [`LocalApi`]: ZoteroApiError::LocalApi
-/// [`Network`]: ZoteroApiError::Network
-/// [`Json`]: ZoteroApiError::Json
+/// - [`ZoteroApiError::NotFound`] if the identifier cannot be resolved by
+///   external services.
 #[inline]
 pub async fn resolve_metadata(
     state: &AppState,

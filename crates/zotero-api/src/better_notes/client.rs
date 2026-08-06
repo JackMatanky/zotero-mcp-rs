@@ -1,15 +1,11 @@
-//! Async client for the Better Notes plugin's HTTP companion API.
+//! Async client for the Better Notes plugin HTTP companion API.
 //!
-//! This module implements [`BetterNotesClient`], an HTTP client wrapper used by
-//! the `better_notes_*` MCP tool handlers in `crate::mcp::better_notes` and
-//! note-rendering paths in `crate::mcp::zotero`. It communicates with the
-//! Better Notes plugin endpoints running inside Zotero, enforcing configured
-//! size constraints and write permissions via [`AppState`].
+//! Defines [`BetterNotesClient`], an HTTP client wrapper communicating with the
+//! Better Notes plugin endpoints running inside Zotero.
 //!
 //! # Main Types
 //!
-//! - [`BetterNotesClient`] - Async HTTP client scoped to a single tool call
-//!
+//! - [`BetterNotesClient`]: Async HTTP client scoped to a single tool call.
 //! # Examples
 //!
 //! ```no_run
@@ -92,23 +88,28 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.content)
     }
 
-    /// Creates a note attached to `parent_key` from `markdown` content.
+    /// Converts a `markdown` string into a Zotero HTML note attached to
+    /// `parent_key`.
     ///
-    /// Accepts an optional parent note [`ItemKey`] and source `markdown` string
-    /// slice. Mutates library state; enforces
-    /// [`AppState::check_write_permission`] and size limits before issuing the
-    /// request.
+    /// Checks write permissions via
+    /// [`AppState::check_write_permission`](crate::state::AppState::check_write_permission),
+    /// validates `markdown` string length against security size caps, and
+    /// posts the note conversion payload to the Better Notes bridge server.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent_key` - Optional parent item key to attach the newly created
+    ///   note to.
+    /// * `markdown` - Raw Markdown content to convert into HTML and store.
     ///
     /// # Errors
     ///
-    /// - [`PermissionDenied`]: Write operations are disabled in [`AppState`]
-    /// - [`InputRejected`]: `markdown` text exceeds configured size limits
-    /// - [`BetterNotes`]: HTTP status is non-2xx or bridge endpoint returned an
-    ///   error
-    ///
-    /// [`PermissionDenied`]: ZoteroApiError::PermissionDenied
-    /// [`InputRejected`]: ZoteroApiError::InputRejected
-    /// [`BetterNotes`]: ZoteroApiError::BetterNotes
+    /// - [`ZoteroApiError::PermissionDenied`] if write permission is disabled.
+    /// - [`ZoteroApiError::InputRejected`] if `markdown` text exceeds
+    ///   configured size caps.
+    /// - [`ZoteroApiError::BetterNotes`] if the HTTP status is non-2xx or the
+    ///   bridge endpoint returns an error.
+    /// - [`ZoteroApiError::Network`] if transport failures occur.
     #[inline]
     pub async fn convert_from_markdown(
         &self,
@@ -134,18 +135,23 @@ impl<'a> BetterNotesClient<'a> {
         Ok(res.item_key)
     }
 
-    /// Runs the named Better Notes template `name` against `item_key`.
+    /// Executes a named Better Notes template against `item_key`.
     ///
-    /// Accepts a [`TemplateName`] and target note [`ItemKey`].
+    /// Validates `name` length against security limits and posts `{"name":
+    /// name, "itemKey": item_key}` to `/templates/run`. Returns the
+    /// rendered template text string.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Template name identifier.
+    /// * `item_key` - Target note item key.
     ///
     /// # Errors
     ///
-    /// - [`InputRejected`]: `name` length exceeds configured limits
-    /// - [`BetterNotes`]: HTTP status is non-2xx or bridge endpoint returned an
-    ///   error
-    ///
-    /// [`InputRejected`]: ZoteroApiError::InputRejected
-    /// [`BetterNotes`]: ZoteroApiError::BetterNotes
+    /// - [`ZoteroApiError::InputRejected`] if `name` string length exceeds
+    ///   configured limits.
+    /// - [`ZoteroApiError::BetterNotes`] if the HTTP status is non-2xx or the
+    ///   bridge endpoint returns an error.
     #[inline]
     pub async fn run_template(
         &self,
